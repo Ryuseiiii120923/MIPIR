@@ -11,6 +11,11 @@ new class extends Component
     public int $ppf = 0;
     public string $action = '';
     public string $dateOfJudgement = '';
+    public int $selectedMachineNo;
+
+    public function mount(int $selectedMachineNo){
+        $this->selectedMachineNo = $selectedMachineNo;
+    }
 
     #[On('action-changed')]
     public function onActionChanged(string $action): void
@@ -27,7 +32,7 @@ new class extends Component
     {
         $this->ppf = $ppf;
         if ($this->action != 'add') {
-            $result = app(PpfLookUpRepository::class)->getMainData($ppf);
+            $result = app(PpfLookUpRepository::class)->getMainData($ppf, $this->selectedMachineNo);
             $this->judgement = $result['judgement'];
             $this->dateOfJudgement = $result['dateJudge'];
             $this->syncDraft();

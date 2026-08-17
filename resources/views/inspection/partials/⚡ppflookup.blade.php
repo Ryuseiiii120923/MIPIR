@@ -18,95 +18,97 @@ new class extends Component
     public string $moldingDieNo = '';
     public ?int $noOfCavity = null;
     public string $nqrIssuanceCriteria = '';
-
+    public int $selectedMachineNo;
     public bool $found = false;
     public bool $searching = false;
     public string $action = '';
 
-
+    public function mount(int $selectedMachineNo){
+        $this->selectedMachineNo = $selectedMachineNo;
+    }
 
     #[On('lookup_ppf')]
-public function lookup(string $ppf = ''): void
-{
-    if ($this->ppfno === '') {
-        $this->ppfno = $ppf;
-    }
+    public function lookup(string $ppf = ''): void
+    {
+        if ($this->ppfno === '') {
+            $this->ppfno = $ppf;
+        }
 
-    if ($this->action === '') {
-        $this->addError(
-            'ppfno',
-            'Please select an action before searching.'
+        if ($this->action === '') {
+            $this->addError(
+                'ppfno',
+                'Please select an action before searching.'
+            );
+
+            $this->stopLoading();
+
+            return;
+        }
+
+        if (blank($this->ppfno)) {
+            $this->addError(
+                'ppfno',
+                'Please enter a PPF No.'
+            );
+
+            $this->stopLoading();
+
+            return;
+        }
+
+        $this->resetErrorBag();
+
+        $this->reset([
+            'partNumber',
+            'moldingDieNo',
+            'noOfCavity',
+            'nqrIssuanceCriteria',
+            'found',
+        ]);
+
+        $this->searching = true;
+
+        $result = app(PpfLookUpService::class)
+            ->findByPpfNo($this->ppfno);
+
+        if (is_null($result)) {
+            $this->addError(
+                'ppfno',
+                'No record found for this PPF No.'
+            );
+
+            $this->searching = false;
+
+            $this->stopLoading();
+
+            return;
+        }
+
+        $this->partNumber = $result['partNo'];
+        $this->moldingDieNo = $result['moldNo'];
+        $this->noOfCavity = $result['noOfCavity'];
+        $this->nqrIssuanceCriteria = $result['nqr'];
+        $this->found = true;
+
+        // Notify other components only after PPF was found.
+        $this->dispatch('ppf-checked', ppf: (int) $this->ppfno);
+
+        $this->dispatch(
+            'fetchPartNo',
+            partNo: $this->partNumber
         );
 
-        $this->stopLoading();
+        $this->dispatch('fromMaster', [
+            'noOfCavity' => $this->noOfCavity,
+            'nqr' => $this->nqrIssuanceCriteria
+        ]);
 
-        return;
-    }
-
-    if (blank($this->ppfno)) {
-        $this->addError(
-            'ppfno',
-            'Please enter a PPF No.'
-        );
-
-        $this->stopLoading();
-
-        return;
-    }
-
-    $this->resetErrorBag();
-
-    $this->reset([
-        'partNumber',
-        'moldingDieNo',
-        'noOfCavity',
-        'nqrIssuanceCriteria',
-        'found',
-    ]);
-
-    $this->searching = true;
-
-    $result = app(PpfLookUpService::class)
-        ->findByPpfNo($this->ppfno);
-
-    if (is_null($result)) {
-        $this->addError(
-            'ppfno',
-            'No record found for this PPF No.'
-        );
+        $this->syncDraft();
 
         $this->searching = false;
 
         $this->stopLoading();
-
-        return;
     }
-
-    $this->partNumber = $result['partNo'];
-    $this->moldingDieNo = $result['moldNo'];
-    $this->noOfCavity = $result['noOfCavity'];
-    $this->nqrIssuanceCriteria = $result['nqr'];
-    $this->found = true;
-
-    // Notify other components only after PPF was found.
-    $this->dispatch('ppf-checked', ppf: (int) $this->ppfno);
-
-    $this->dispatch(
-        'fetchPartNo',
-        partNo: $this->partNumber
-    );
-
-    $this->dispatch('fromMaster',[
-        'noOfCavity' => $this->noOfCavity,
-        'nqr' => $this->nqrIssuanceCriteria
-    ]);
-
-    $this->syncDraft();
-
-    $this->searching = false;
-
-    $this->stopLoading();
-}
 
     public function syncDraft()
     {

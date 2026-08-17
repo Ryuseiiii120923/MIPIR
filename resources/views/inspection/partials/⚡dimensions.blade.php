@@ -15,9 +15,17 @@ new class extends Component
     public bool $readonly = false;
     public string $action = '';
 
-    public function mount(?string $selectedCheckTime = null, array $loadedRows = [], string $action): void
+    // Modal state
+    public ?int $activeModalIndex = null;
+    public string $modalStep = 'choose'; // 'choose' | 'sets'
+    public int $pendingSets = 1;
+
+    public function mount(?string $selectedCheckTime = null, array $loadedRows = [], 
+    string $action, int $ppfno, string $partNo): void
     {
         $this->selectedCheckTime = $selectedCheckTime;
+        $this->ppfNumber = $ppfno;
+        $this->partNo = $partNo;
         $this->rows = !empty($loadedRows) ? $loadedRows : [
             [
                 'item' => '',
@@ -25,7 +33,10 @@ new class extends Component
                 'specification' => '',
                 'CL' => '',
                 'judge' => '',
-                'measurements' => array_fill(0, 5, ''),
+                'measurements' => [],
+                'mode' => null,
+                'sets' => null,
+                'revealed' => false,
             ],
             [
                 'item' => 'Flash Thickness',
@@ -33,7 +44,10 @@ new class extends Component
                 'specification' => '',
                 'CL' => '',
                 'judge' => '',
-                'measurements' => array_fill(0, 5, ''),
+                'measurements' => [],
+                'mode' => null,
+                'sets' => null,
+                'revealed' => false,
             ],
             [
                 'item' => 'Gap-Offset',
@@ -41,10 +55,24 @@ new class extends Component
                 'specification' => '',
                 'CL' => '',
                 'judge' => '',
-                'measurements' => array_fill(0, 5, ''),
-                'measurements_y' => array_fill(0, 5, ''),
+                'measurements' => [],
+                'measurements_y' => [],
+                'mode' => null,
+                'sets' => null,
+                'revealed' => false,
             ],
         ];
+
+        // Back-compat: if rows were loaded from a draft that already has measurements
+        // but no 'mode'/'revealed' keys, infer them so existing drafts still render.
+        foreach ($this->rows as $i => $row) {
+            if (!array_key_exists('revealed', $row)) {
+                $count = count($row['measurements'] ?? []);
+                $this->rows[$i]['revealed'] = $count > 0;
+                $this->rows[$i]['mode'] = $count > 5 ? 'tightened' : ($count > 0 ? 'normal' : null);
+                $this->rows[$i]['sets'] = $count > 0 ? (int) ceil($count / 5) : null;
+            }
+        }
 
         $this->resolveFixedSpecifications();
         $this->action = $action;
@@ -60,14 +88,7 @@ new class extends Component
             $this->dispatch('dimensions-synced', selectedCheckTime: $this->selectedCheckTime, rows: $this->rows);
         }
     }
-
-    #[On('fetchPartNo')]
-    public function fetchPartNo(string $partNo)
-    {
-        $this->partNo = $partNo;
-        $this->initItem();
-    }
-
+    
     public function updated(string $property, mixed $value): void
     {
         if ($property === 'partNo') {
@@ -141,7 +162,6 @@ new class extends Component
             return;
         }
 
-        // Editable row: only judge once every measurement slot for this card is filled.
         $measurements = $row['measurements'] ?? [];
         $filled = array_filter($measurements, fn($v) => $v !== null && trim((string) $v) !== '');
 
@@ -149,7 +169,6 @@ new class extends Component
             $this->rows[$i]['judge'] = '-';
             return;
         }
-
 
         $overall = 'O';
         foreach ($filled as $val) {
@@ -185,6 +204,88 @@ new class extends Component
         $this->rows[0]['specification'] = $result['specification'] ?? '';
         $this->syncToParent();
     }
+
+    // ------------------------------------------------------------------
+    // Dimension config modal
+    // ------------------------------------------------------------------
+
+    public function openDimensionModal(int $index): void
+    {
+        if ($this->readonly) {
+            return;
+        }
+
+        $this->activeModalIndex = $index;
+        $this->modalStep = 'choose';
+        $this->pendingSets = 1;
+    }
+
+    public function closeDimensionModal(): void
+    {
+        $this->activeModalIndex = null;
+        $this->modalStep = 'choose';
+        $this->pendingSets = 1;
+    }
+
+    public function chooseNormal(): void
+    {
+        if ($this->activeModalIndex === null) {
+            return;
+        }
+
+        $this->applyMeasurementCount($this->activeModalIndex, 5);
+        $this->rows[$this->activeModalIndex]['mode'] = 'normal';
+        $this->rows[$this->activeModalIndex]['sets'] = 1;
+        $this->rows[$this->activeModalIndex]['revealed'] = true;
+
+        $this->syncToParent();
+        $this->closeDimensionModal();
+    }
+
+    public function chooseTightened(): void
+    {
+        $this->modalStep = 'sets';
+    }
+
+    public function confirmTightenedSets(): void
+    {
+        if ($this->activeModalIndex === null) {
+            return;
+        }
+
+        $sets = max(1, (int) $this->pendingSets);
+        $count = $sets * 5;
+
+        $this->applyMeasurementCount($this->activeModalIndex, $count);
+        $this->rows[$this->activeModalIndex]['mode'] = 'tightened';
+        $this->rows[$this->activeModalIndex]['sets'] = $sets;
+        $this->rows[$this->activeModalIndex]['revealed'] = true;
+
+        $this->syncToParent();
+        $this->closeDimensionModal();
+    }
+
+    /**
+     * Resize a row's measurement slot(s) to the given count, preserving
+     * any values already entered (extra slots trimmed, new slots blank).
+     */
+    private function applyMeasurementCount(int $index, int $count): void
+    {
+        $row = $this->rows[$index];
+
+        $existing = $row['measurements'] ?? [];
+        $this->rows[$index]['measurements'] = array_pad(array_slice($existing, 0, $count), $count, '');
+
+        if (array_key_exists('measurements_y', $row)) {
+            $existingY = $row['measurements_y'] ?? [];
+            $this->rows[$index]['measurements_y'] = array_pad(array_slice($existingY, 0, $count), $count, '');
+        }
+    }
+
+    public function reconfigureRow(int $index): void
+    {
+        $this->openDimensionModal($index);
+    }
 }
 ?>
 
@@ -200,8 +301,8 @@ new class extends Component
     focusX(cardIndex, slotIndex) {
         const x = document.querySelector(`[data-card-index='${cardIndex}'] input[data-x-index='${slotIndex}']`);
         if (x) x.focus();
-    }
-         focusMeasurement(cardIndex, slotIndex) {
+    },
+    focusMeasurement(cardIndex, slotIndex) {
         const el = document.querySelector(`[data-card-index='${cardIndex}'] input[data-measurement-index='${slotIndex}']`);
         if (el) el.focus();
     }
@@ -209,116 +310,244 @@ new class extends Component
     <div class="bg-gray-700 w-full">
         <p class="text-4xl font-extrabold text-center text-white p-4 mt-4">Dimensions</p>
     </div>
-    <div class="flex flex-col md:flex-row gap-4 sm:gap-2 mx-auto justify-center items-center mt-3 @if($readonly) opacity-50 cursor-not-allowed @endif">
+
+    <div class="w-full mx-auto mt-3 @if($readonly) opacity-50 cursor-not-allowed @endif">
         @foreach ($rows as $i => $row)
-        <div wire:key="dim-row-{{ $i }}" data-card-index="{{ $i }}" class="bg-white border border-gray-200 rounded-2xl p-6 mb-4 max-w-md">
+        <div wire:key="dim-row-{{ $i }}" data-card-index="{{ $i }}" class="w-full mb-4">
 
-            <div class="flex items-center gap-3 mb-5">
-                <div class="w-11 h-11 rounded-xl bg-green-100 flex items-center justify-center">
-                    <i class="ti ti-ruler-2 text-xl text-green-700"></i>
-                </div>
-                <div>
-                    <p class="font-medium text-base">Dimension entry</p>
-                    <p class="text-sm text-gray-500">{{ $row['item'] ?: 'Enter item' }}</p>
-                </div>
-            </div>
-
-            <div class="mb-4">
-                <label class="text-sm font-medium block mb-1.5">Item</label>
-                @if ($row['editable'])
-                <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.item"
-                    wire:blur="initItem"
-                    list="item-suggestions"
-                    class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2"
-                    placeholder="Enter item"
-                    @if($readonly) disabled @endif>
-
-                <datalist id="item-suggestions">
-                    @foreach ($itemSuggestions as $suggestion)
-                    <option value="{{ $suggestion }}"></option>
-                    @endforeach
-                </datalist>
-                @else
-                <div class="w-full bg-gray-50 rounded-lg px-3 py-2 font-medium">{{ $row['item'] }}</div>
-                @endif
-            </div>
-
-            <div class="mb-4">
-                <label class="text-sm font-medium block mb-1.5">Specification</label>
-                <input type="text" wire:model="rows.{{ $i }}.specification"
-                    class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2"
-                    placeholder="Enter specification" @if($readonly) disabled @endif>
-            </div>
-
-            <hr class="border-gray-200 my-4">
-
-            <div class="mb-4">
-                <label class="text-sm font-medium block mb-1.5">Note</label>
-                <input type="text" wire:model="rows.{{ $i }}.CL"
-                    class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2 text-gray-500"
-                    placeholder="Refer to parts WI" @if($readonly) disabled @endif>
-            </div>
-
-            <div class="mb-1">
-                <label class="text-sm font-medium block mb-1.5">Measurements</label>
-                @if($row['item'] === 'Gap-Offset')
-                <div class="class flex flex-col">
-                    <div class="flex gap-2">
-                        @for ($j = 0; $j < 5; $j++)
-                            <input @if($readonly) disabled @endif type="text" wire:model.live.debounce.150ms="rows.{{ $i }}.measurements.{{ $j }}"
-                            wire:key="dim-{{ $i }}-x-{{ $j }}"
-                            data-x-index="{{ $j }}"
-                            @if($j===0) data-first-measurement @endif
-                            @keyup="if($event.target.value.trim() !== '') focusY({{ $i }}, {{ $j }})"
-                            class="w-full bg-gray-50 border-0 rounded-lg text-center py-2"
-                            placeholder="x{{ $j + 1 }}">
-                            @endfor
+            @if (!$row['revealed'])
+            {{-- Collapsed: just a button to configure this dimension --}}
+            <button
+                type="button"
+                wire:click="openDimensionModal({{ $i }})"
+                @if($readonly) disabled @endif
+                class="w-full flex items-center justify-between bg-white border border-gray-200 rounded-2xl p-5 hover:border-blue-300 hover:bg-blue-50/40 transition-all text-left">
+                <div class="flex items-center gap-3">
+                    <div class="w-11 h-11 rounded-xl bg-green-100 flex items-center justify-center">
+                        <i class="ti ti-ruler-2 text-xl text-green-700"></i>
                     </div>
-                    <div class="flex gap-2">
-                        @for ($j = 0; $j < 5; $j++)
-                            <input @if($readonly) disabled @endif type="text" wire:model.live.debounce.150ms="rows.{{ $i }}.measurements_y.{{ $j }}"
-                            wire:key="dim-{{ $i }}-y-{{ $j }}"
-                            data-y-index="{{ $j }}"
-                            @if($j < 4)
-                            @keyup="if($event.target.value.trim() !== '') focusX({{ $i }}, {{ $j + 1 }})"
-                            @else
-                            @keyup="if($event.target.value.trim() !== '') focusNextCard({{ $i }})"
-                            @endif
-                            class="w-full bg-gray-50 border-0 rounded-lg text-center py-2"
-                            placeholder="y{{ $j + 1 }}">
-                            @endfor
+                    <div>
+                        <p class="font-medium text-base">Dimension entry</p>
+                        <p class="text-sm text-gray-500">{{ $row['item'] ?: 'Enter item' }}</p>
                     </div>
                 </div>
-                @else
-                <div class="flex gap-2">
-                    @for ($j = 0; $j < 5; $j++)
-                        <input @if($readonly) disabled @endif type="text" wire:model.live.debounce="rows.{{ $i }}.measurements.{{ $j }}"
-                        @if($j===0) data-first-measurement @endif
-                        @if($j < 4)
-                        @keyup="if($event.target.value.trim() !== '') focusMeasurement({{ $i }}, {{ $j + 1 }})"
+                <span class="text-sm text-blue-600 font-medium flex items-center gap-1">
+                    Set up <i class="ti ti-chevron-right"></i>
+                </span>
+            </button>
+            @else
+            {{-- Revealed: full-width entry card --}}
+            <div class="bg-white border border-gray-200 rounded-2xl p-6 w-full">
+
+                <div class="flex items-center justify-between mb-5">
+                    <div class="flex items-center gap-3">
+                        <div class="w-11 h-11 rounded-xl bg-green-100 flex items-center justify-center">
+                            <i class="ti ti-ruler-2 text-xl text-green-700"></i>
+                        </div>
+                        <div>
+                            <p class="font-medium text-base">Dimension entry</p>
+                            <p class="text-sm text-gray-500">
+                                {{ $row['item'] ?: 'Enter item' }}
+                                <span class="ml-1 text-xs font-medium px-2 py-0.5 rounded-full {{ $row['mode'] === 'tightened' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700' }}">
+                                    {{ $row['mode'] === 'tightened' ? 'Tightened · ' . $row['sets'] . ' set' . ($row['sets'] > 1 ? 's' : '') : 'Normal' }}
+                                </span>
+                            </p>
+                        </div>
+                    </div>
+                    <button type="button" wire:click="reconfigureRow({{ $i }})" @if($readonly) disabled @endif
+                        class="text-sm text-gray-500 hover:text-blue-600 flex items-center gap-1">
+                        <i class="ti ti-settings text-base"></i> Reconfigure
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="text-sm font-medium block mb-1.5">Item</label>
+                        @if ($row['editable'])
+                        <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.item"
+                            wire:blur="initItem"
+                            list="item-suggestions"
+                            class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2"
+                            placeholder="Enter item"
+                            @if($readonly) disabled @endif>
+
+                        <datalist id="item-suggestions">
+                            @foreach ($itemSuggestions as $suggestion)
+                            <option value="{{ $suggestion }}"></option>
+                            @endforeach
+                        </datalist>
                         @else
-                        @keyup="if($event.target.value.trim() !== '') focusNextCard({{ $i }})"
+                        <div class="w-full bg-gray-50 rounded-lg px-3 py-2 font-medium">{{ $row['item'] }}</div>
                         @endif
-                        class="w-full bg-gray-50 border-0 rounded-lg text-center py-2"
-                        placeholder="{{ $j + 1 }}">
-                        @endfor
+                    </div>
+
+                    <div>
+                        <label class="text-sm font-medium block mb-1.5">Specification</label>
+                        <input type="text" wire:model="rows.{{ $i }}.specification"
+                            class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2"
+                            placeholder="Enter specification" @if($readonly) disabled @endif>
+                    </div>
                 </div>
-                @endif
 
+                <div class="mb-4">
+                    <label class="text-sm font-medium block mb-1.5">Note</label>
+                    <input type="text" wire:model="rows.{{ $i }}.CL"
+                        class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2 text-gray-500"
+                        placeholder="Refer to parts WI" @if($readonly) disabled @endif>
+                </div>
+
+                <hr class="border-gray-200 my-4">
+
+                <div class="mb-1">
+                    <label class="text-sm font-medium block mb-1.5">
+                        Measurements
+                        <span class="text-gray-400 font-normal">({{ count($row['measurements']) }} total)</span>
+                    </label>
+
+                    @if($row['item'] === 'Gap-Offset')
+                    @php $setsCount = (int) ceil(count($row['measurements']) / 5); @endphp
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
+                        @for ($s = 0; $s < $setsCount; $s++)
+                            <div wire:key="dim-{{ $i }}-set-{{ $s }}" class="flex flex-col gap-1.5">
+                            <p class="text-xs text-gray-400">Set {{ $s + 1 }}</p>
+                            <div class="flex flex-wrap gap-2">
+                                @for ($k = 0; $k < 5; $k++)
+                                    @php $j=$s * 5 + $k; @endphp
+                                    @if($j < count($row['measurements']))
+                                    <input @if($readonly) disabled @endif type="text"
+                                    wire:model.live.debounce.150ms="rows.{{ $i }}.measurements.{{ $j }}"
+                                    wire:key="dim-{{ $i }}-x-{{ $j }}"
+                                    data-x-index="{{ $j }}"
+                                    @if($j===0) data-first-measurement @endif
+                                    @keyup="if($event.target.value.trim() !== '') focusY({{ $i }}, {{ $j }})"
+                                    class="w-16 bg-gray-50 border-0 rounded-lg text-center py-2"
+                                    placeholder="x{{ $j + 1 }}">
+                                    @endif
+                                    @endfor
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                @for ($k = 0; $k < 5; $k++)
+                                    @php
+                                    $j=$s * 5 + $k;
+                                    $isLastOverall=$j===count($row['measurements_y'] ?? []) - 1;
+                                    @endphp
+                                    @if($j < count($row['measurements_y'] ?? []))
+                                    <input @if($readonly) disabled @endif type="text"
+                                    wire:model.live.debounce.150ms="rows.{{ $i }}.measurements_y.{{ $j }}"
+                                    wire:key="dim-{{ $i }}-y-{{ $j }}"
+                                    data-y-index="{{ $j }}"
+                                    @if(!$isLastOverall)
+                                    @keyup="if($event.target.value.trim() !== '') focusX({{ $i }}, {{ $j + 1 }})"
+                                    @else
+                                    @keyup="if($event.target.value.trim() !== '') focusNextCard({{ $i }})"
+                                    @endif
+                                    class="w-16 bg-gray-50 border-0 rounded-lg text-center py-2"
+                                    placeholder="y{{ $j + 1 }}">
+                                    @endif
+                                    @endfor
+                            </div>
+                    </div>
+                    @endfor
+                </div>
+                @else
+                @php $setsCount = (int) ceil(count($row['measurements']) / 5); @endphp
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
+                    @for ($s = 0; $s < $setsCount; $s++)
+                        <div wire:key="dim-{{ $i }}-mset-{{ $s }}" class="flex flex-col gap-1.5">
+                        @if($setsCount > 1)
+                        <p class="text-xs text-gray-400">Set {{ $s + 1 }}</p>
+                        @endif
+                        <div class="flex flex-wrap gap-2">
+                            @for ($k = 0; $k < 5; $k++)
+                                @php
+                                $j=$s * 5 + $k;
+                                $isLastOverall=$j===count($row['measurements']) - 1;
+                                @endphp
+                                @if($j < count($row['measurements']))
+                                <input @if($readonly) disabled @endif type="text"
+                                wire:model.live.debounce="rows.{{ $i }}.measurements.{{ $j }}"
+                                wire:key="dim-{{ $i }}-m-{{ $j }}"
+                                data-measurement-index="{{ $j }}"
+                                @if($j===0) data-first-measurement @endif
+                                @if(!$isLastOverall)
+                                @keyup="if($event.target.value.trim() !== '') focusMeasurement({{ $i }}, {{ $j + 1 }})"
+                                @else
+                                @keyup="if($event.target.value.trim() !== '') focusNextCard({{ $i }})"
+                                @endif
+                                class="w-16 bg-gray-50 border-0 rounded-lg text-center py-2"
+                                placeholder="{{ $j + 1 }}">
+                                @endif
+                                @endfor
+                        </div>
+                </div>
+                @endfor
             </div>
+            @endif
+        </div>
 
-            <hr class="border-gray-200 my-4">
+        <hr class="border-gray-200 my-4">
 
-            <div class="flex justify-end">
-                <button @if($readonly) disabled @endif type="button" class="text-sm text-gray-500 hover:text-gray-700">Clear</button>
-            </div>
-            <div class="mb-4">
+        <div class="flex items-center justify-between">
+            <div class="w-40">
                 <label class="text-sm font-medium block mb-1.5">Judgement</label>
                 <input type="text" wire:model="rows.{{ $i }}.judge"
                     class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2 text-gray-500 text-center"
                     readonly>
             </div>
+            <button @if($readonly) disabled @endif type="button" class="text-sm text-gray-500 hover:text-gray-700">Clear</button>
         </div>
-        @endforeach
     </div>
+    @endif
+</div>
+@endforeach
+</div>
+
+{{-- Config modal --}}
+@if($activeModalIndex !== null)
+<div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-lg">
+
+        @if($modalStep === 'choose')
+        <h3 class="text-lg font-semibold mb-1">
+            Configure {{ $rows[$activeModalIndex]['item'] ?: 'this dimension' }}
+        </h3>
+        <p class="text-sm text-gray-500 mb-5">Is this a normal or tightened inspection?</p>
+
+        <div class="flex gap-3">
+            <button type="button" wire:click="chooseNormal"
+                class="flex-1 border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50 rounded-xl py-4 text-sm font-medium text-gray-700 hover:text-blue-700 transition-all">
+                <i class="ti ti-target text-2xl block mx-auto mb-1"></i>
+                Normal
+                <span class="block text-xs text-gray-400 font-normal mt-0.5">5 measurements</span>
+            </button>
+            <button type="button" wire:click="chooseTightened"
+                class="flex-1 border-2 border-gray-200 hover:border-amber-500 hover:bg-amber-50 rounded-xl py-4 text-sm font-medium text-gray-700 hover:text-amber-700 transition-all">
+                <i class="ti ti-adjustments text-2xl block mx-auto mb-1"></i>
+                Tightened
+                <span class="block text-xs text-gray-400 font-normal mt-0.5">Multiple sets</span>
+            </button>
+        </div>
+
+        <div class="flex justify-end mt-5">
+            <button wire:click="closeDimensionModal" type="button" class="px-4 py-2 text-sm text-gray-500">Cancel</button>
+        </div>
+        @else
+        <h3 class="text-lg font-semibold mb-1">Tightened inspection</h3>
+        <p class="text-sm text-gray-500 mb-4">How many sets of 5 measurements?</p>
+
+        <input type="number" min="1" wire:model="pendingSets"
+            class="w-full border rounded-lg px-3 py-2 text-sm text-center" />
+        <p class="text-xs text-gray-400 mt-1.5 text-center">
+            = {{ max(1, (int) $pendingSets) * 5 }} total measurements
+        </p>
+
+        <div class="flex justify-end gap-2 mt-5">
+            <button wire:click="$set('modalStep', 'choose')" type="button" class="px-4 py-2 text-sm text-gray-500">Back</button>
+            <button wire:click="confirmTightenedSets" type="button"
+                class="px-4 py-2 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-lg">Confirm</button>
+        </div>
+        @endif
+    </div>
+</div>
+@endif
 </div>

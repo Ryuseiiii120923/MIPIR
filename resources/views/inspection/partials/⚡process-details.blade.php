@@ -12,12 +12,15 @@ new class extends \Livewire\Component
     #[Validate('required|string|max:50')]
     public string $productionLotNo = '';
 
-    #[Validate('required|string|max:50')]
-    public string $machineNo = '';
-
+    public int $machineNo = 0;
     public int $ppf = 0;
     public bool $saved = false;
     public string $action = '';
+    public int $selectedMachineNo;
+
+    public function mount(int $selectedMachineNo){
+        $this->selectedMachineNo = $selectedMachineNo;
+    }
 
     public function syncDraft()
     {
@@ -29,7 +32,7 @@ new class extends \Livewire\Component
 
     public function clear(): void
     {
-        $this->reset(['productionLotNo', 'machineNo']);
+        $this->reset('productionLotNo');
         $this->saved = false;
         $this->resetErrorBag();
     }
@@ -49,11 +52,16 @@ new class extends \Livewire\Component
     {
         $this->ppf = $ppf;
         if ($this->action != 'add') {
-            $result = app(PpfLookUpRepository::class)->getMainData($ppf);
+            $result = app(PpfLookUpRepository::class)->getMainData($ppf, $this->selectedMachineNo);
 
             $this->productionLotNo = $result['productionLotNo'];
             $this->machineNo = $result['machineNo'];
         }
+    }
+
+    #[On('machine-selected')]
+    public function machineSelected(int $machine){
+        $this->machineNo = $machine;
     }
 } ?>
 
@@ -107,6 +115,7 @@ new class extends \Livewire\Component
             wire:blur="syncDraft"
             placeholder="Enter machine no."
             :disabled="$this->action === 'view'"
-            :class="$this->action === 'view' ? 'cursor-not-allowed bg-gray-50' : ''" />
+            :class="$this->action === 'view' ? 'cursor-not-allowed bg-gray-50' : ''" 
+            readonly/>
     </div>
 </div>

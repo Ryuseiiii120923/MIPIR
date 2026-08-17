@@ -2,6 +2,8 @@
 
 namespace App\Inspection\Repositories;
 
+use App\Inspection\Models\ChckTRemarks;
+use App\Inspection\Models\CheckTime;
 use App\Inspection\Models\MIPIRInspectionRecord;
 use App\Inspection\Models\MIPIRDimensionMeasure;
 use App\Inspection\Models\Defect;
@@ -37,6 +39,8 @@ class MIPIRInspectionReporsitory
             'ProdLotNo' => $data['ProdLotNo'],
             'MachineNo' => $data['MachineNo'],
             'Checktime' => $data['Checktime'],
+            'Mode' => $data['Mode'],
+            'Set' => $data['Set'],
             'Specs' => $data['Specs'],
             'DimItem' => $data['DimItem'],
             'Judge' => $data['Judge'] ?? null,
@@ -61,4 +65,26 @@ class MIPIRInspectionReporsitory
             'Qty' => $data['Qty']
         ]);
     }
+
+    public function saveCheckTime(array $data): CheckTime
+    {
+        return CheckTime::create([
+            'PPFNo' => $data['PPFNo'],
+            'check-time' => $data['check-time'],
+            'date-encode' => $data['date-encode'],
+            'machine-no' => $data['machine-no']
+        ]);
+    }
+
+    public function saveRemarksTime(array $data): ChckTRemarks{
+        return ChckTRemarks::create([
+            'PPFNo' => $data['PPFNo'],
+            'PartNo' => $data['PartNo'],
+            'MachineNo' => $data['MachineNo'],
+            'CheckTime' => $data['CheckTime'],
+            'ProdLotNo' => $data['ProdLotNo'],
+            'Remarks' => $data['Remarks']
+        ]);
+    }
+
 }

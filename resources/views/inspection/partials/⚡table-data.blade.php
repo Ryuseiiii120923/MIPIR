@@ -18,11 +18,14 @@ new class extends Component
     public string $search = '';
     public string $action = '';
     public int $encoder = 0;
+    public int $selectedMachineNo= 0;
 
-    public function mount()
+    public function mount(int $selectedMachineNo)
     {
         $this->encoder = Auth::user()->EmployeeID;
+        $this->selectedMachineNo = $selectedMachineNo;
     }
+
 
     #[On('action-changed')]
     public function onActionChanged($action)
@@ -44,7 +47,7 @@ new class extends Component
             return;
         }
 
-        return app(PpfLookUpRepository::class)->getDataforSearch($this->search, $this->encoder);
+        return app(PpfLookUpRepository::class)->getDataforSearch($this->search, $this->encoder, $this->selectedMachineNo);
     }
 
     public function confirm_ppf(int $ppf){

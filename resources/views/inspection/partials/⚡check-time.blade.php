@@ -19,35 +19,67 @@ new class extends \Livewire\Component
     public array $judgementByTime = [];
     public array $dimensionsByTime = [];
     public array $remarksByTime = [];
+    public array $dateEncodeByTime = [];
     public int $ppf = 0;
     public string $action = '';
     //Computation
     public array $dataFromMaster = [];
+    public int $selectedMachineNo;
+    public string $partNo = ''; 
+
+    public function mount(int $selectedMachineNo)
+    {
+        $this->selectedMachineNo = $selectedMachineNo;
+    }
+
     public function addCheckTime(): void
     {
-
         $this->validate();
 
-        if (in_array($this->checkTime, $this->checkTimes, true)) {
-            $this->addError('checkTime', 'This check time has already been added.');
-            return;
-        }
+        $newCheckTime = $this->resolveCheckTimeLabel($this->checkTime);
 
+        $this->checkTimes[] = $newCheckTime;
+        $this->dateEncodeByTime[$newCheckTime] = now()->toDateTimeString();
 
+        $this->sortCheckTimesByDateEncode();
 
-        $this->checkTimes[] = $this->checkTime;
-        sort($this->checkTimes);
-
-        $this->selectedCheckTime = $this->checkTime;
+        $this->selectedCheckTime = $newCheckTime;
 
         $this->reset('checkTime');
         $this->resetErrorBag();
+
+        $this->syncDraft();
     }
+
+    private function sortCheckTimesByDateEncode(): void
+    {
+        usort($this->checkTimes, function (string $a, string $b) {
+            $dateA = $this->dateEncodeByTime[$a] ?? '';
+            $dateB = $this->dateEncodeByTime[$b] ?? '';
+            return $dateA <=> $dateB;
+        });
+    }
+
+    private function resolveCheckTimeLabel(string $base): string
+    {
+        if (!in_array($base, $this->checkTimes, true)) {
+            return $base;
+        }
+
+        $suffix = 1;
+        while (in_array($base . $suffix, $this->checkTimes, true)) {
+            $suffix++;
+        }
+
+        return $base . $suffix;
+    }
+
 
     public function syncDraft()
     {
         app(DraftAction::class)->put($this->ppf, 'check-time', [
-            'check-time' => $this->checkTimes
+            'check-time' => $this->checkTimes,
+            'date-encode'  => $this->dateEncodeByTime,
         ]);
 
         app(DraftAction::class)->put($this->ppf, 'defects', [
@@ -57,6 +89,8 @@ new class extends \Livewire\Component
         ]);
 
         app(DraftAction::class)->put($this->ppf, 'dimensions', $this->dimensionsByTime);
+
+        app(DraftAction::class)->put($this->ppf, 'remarks', $this->remarksByTime);
     }
 
     public function selectCheckTime(string $time): void
@@ -64,18 +98,20 @@ new class extends \Livewire\Component
         $this->selectedCheckTime = $this->selectedCheckTime === $time ? null : $time;
     }
 
-    public function removeCheckTime(string $time): void
-    {
-        $this->checkTimes = array_values(array_diff($this->checkTimes, [$time]));
-        unset($this->defectsByTime[$time]);
-        unset($this->dimensionsByTime[$time]);
-        unset($this->ngpercentByTime[$time]);
-        unset($this->judgementByTime[$time]);
-        if ($this->selectedCheckTime === $time) {
-            $this->selectedCheckTime = null;
-        }
-        $this->syncDraft();
+   public function removeCheckTime(string $time): void
+{
+    $this->checkTimes = array_values(array_diff($this->checkTimes, [$time]));
+    unset($this->defectsByTime[$time]);
+    unset($this->dimensionsByTime[$time]);
+    unset($this->ngpercentByTime[$time]);
+    unset($this->judgementByTime[$time]);
+    unset($this->dateEncodeByTime[$time]);
+    unset($this->remarksByTime[$time]);
+    if ($this->selectedCheckTime === $time) {
+        $this->selectedCheckTime = null;
     }
+    $this->syncDraft();
+}
 
     #[On('defects-synced')]
     public function onDefectsSynced(string $selectedCheckTime, array $defects, float $ngpercent, string $judgement): void
@@ -104,6 +140,8 @@ new class extends \Livewire\Component
             'dimensionsByTime',
             'ngpercentByTime',
             'judgementByTime',
+            'dateEncodeByTime',
+            'remarksByTime'
         ]);
         $this->resetErrorBag();
     }
@@ -123,15 +161,19 @@ new class extends \Livewire\Component
     {
         $this->ppf = $ppf;
         if ($this->action != 'add') {
-            $result = app(PpfLookUpRepository::class)->getMainData($ppf);
+            $result = app(PpfLookUpRepository::class)->getMainData($ppf, $this->selectedMachineNo);
             $this->checkTimes = $result['checkTime'];
+            $this->dateEncodeByTime = $result['dateEncode'] ?? [];
+
+
 
             foreach ($this->checkTimes as $time) {
-                $this->defectsByTime[$time] = app(PpfLookUpRepository::class)->getDefectbyCheckTime($ppf, $time);
+                $this->defectsByTime[$time] = app(PpfLookUpRepository::class)->getDefectbyCheckTime($ppf, $time, $this->selectedMachineNo);
                 $this->dimensionsByTime[$time] = app(PpfLookUpRepository::class)
-                    ->getDimensionbyCheckTime($ppf, $time);
-                $this->remarksByTime[$time] = app(PpfLookUpRepository::class)->getRemarks($ppf, $time);
+                    ->getDimensionbyCheckTime($ppf, $time, $this->selectedMachineNo);
+                $this->remarksByTime[$time] = app(PpfLookUpRepository::class)->getRemarks($ppf, $time, $this->selectedMachineNo);
             }
+            $this->sortCheckTimesByDateEncode();
         }
     }
 
@@ -148,6 +190,11 @@ new class extends \Livewire\Component
             'cavity' => $data['noOfCavity'],
             'nqr' => $data['nqr']
         ];
+    }
+
+    #[On('fetchPartNo')]
+    public function fetchPartNo(string $partNo){
+        $this->partNo = $partNo;
     }
 } ?>
 
@@ -249,6 +296,8 @@ new class extends \Livewire\Component
         :key="'dimensions-' . $selectedCheckTime"
         :selectedCheckTime="$selectedCheckTime"
         :loaded-rows="$dimensionsByTime[$selectedCheckTime] ?? []"
+        :ppfno="$ppf"
+        :partNo="$partNo"
         :action="$action" />
     <livewire:inspection::partials.remarks
         :key="'remarks-' . $selectedCheckTime"

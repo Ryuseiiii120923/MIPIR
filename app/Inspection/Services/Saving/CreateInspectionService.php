@@ -27,4 +27,12 @@ class CreateInspectionService
     {
         return $this->inspectionRepository->createDefect($data);
     }
+
+    public function saveCheckTime(array $data){
+         return $this->inspectionRepository->saveCheckTime($data);
+    }
+
+    public function saveRemarksByTime(array $data){
+        return $this->inspectionRepository->saveRemarksTime($data);
+    }
 }

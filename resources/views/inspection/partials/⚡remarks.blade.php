@@ -41,6 +41,6 @@ new class extends Component
         <label class="text-sm font-medium block mb-1.5">Remarks</label>
         <input type="text" wire:model.live.debounce.400ms="remarks"
             class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2"
-            placeholder="Enter REmarks(Corrective Action Done)" @if($readonly) disabled @endif>
+            placeholder="Enter Remarks(Corrective Action Done)" @if($readonly) disabled @endif>
     </div>
 </div>

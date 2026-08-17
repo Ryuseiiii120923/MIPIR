@@ -12,5 +12,5 @@ interface PpfLookUpRepositoryInterface
     public function getNQR(string $partNo, string $moldNo) : ?NQR;
     public function isExist(int $ppf): bool;
 
-    public function getMainData(int $ppf): ?array;
+    public function getMainData(int $ppf, int $machineNo): ?array;
 }

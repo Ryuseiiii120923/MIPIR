@@ -32,5 +32,7 @@ class MIPIRDimensionMeasure extends Model
         'Value3',
         'Value4',
         'Value5',
+        'Mode',
+        'Set'
     ];
 }

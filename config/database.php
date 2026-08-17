@@ -113,12 +113,13 @@ return [
             'encrypt' => env('DB_ENCRYPT', 'no'),
             'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'true'),
         ],
+        
         'mipirDB' => [
             'driver' => 'sqlsrv',
             'url' => env('MIP_URL'),
             'host' => env('MIP_HOST', 'localhost'),
             'port' => env('MIP_PORT', '1433'),
-            'database' => env('MIP_DATABASE', 'laravel'),
+            'database' => env('MIP_DATABASE', 'DB_MIPIR'),
             'username' => env('MIP_USERNAME', 'root'),
             'password' => env('MIP_PASSWORD', ''),
             'charset' => env('MIP_CHARSET', 'utf8'),

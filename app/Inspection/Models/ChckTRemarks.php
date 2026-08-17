@@ -20,7 +20,8 @@ class ChckTRemarks extends Model
         'PPFNo',
         'PartNo',
         'ProdLotNo',
-        'Checktime',
-        'Remarks'
+        'CheckTime',
+        'Remarks',
+        'MachineNo'
     ];
 }
