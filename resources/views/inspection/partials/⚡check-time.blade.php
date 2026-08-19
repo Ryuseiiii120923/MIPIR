@@ -25,7 +25,7 @@ new class extends \Livewire\Component
     //Computation
     public array $dataFromMaster = [];
     public int $selectedMachineNo;
-    public string $partNo = ''; 
+    public string $partNo = '';
 
     public function mount(int $selectedMachineNo)
     {
@@ -98,20 +98,22 @@ new class extends \Livewire\Component
         $this->selectedCheckTime = $this->selectedCheckTime === $time ? null : $time;
     }
 
-   public function removeCheckTime(string $time): void
-{
-    $this->checkTimes = array_values(array_diff($this->checkTimes, [$time]));
-    unset($this->defectsByTime[$time]);
-    unset($this->dimensionsByTime[$time]);
-    unset($this->ngpercentByTime[$time]);
-    unset($this->judgementByTime[$time]);
-    unset($this->dateEncodeByTime[$time]);
-    unset($this->remarksByTime[$time]);
-    if ($this->selectedCheckTime === $time) {
-        $this->selectedCheckTime = null;
+    public function removeCheckTime(string $time): void
+    {
+        $this->checkTimes = array_values(array_diff($this->checkTimes, [$time]));
+        unset($this->defectsByTime[$time]);
+        unset($this->dimensionsByTime[$time]);
+        unset($this->ngpercentByTime[$time]);
+        unset($this->judgementByTime[$time]);
+        unset($this->dateEncodeByTime[$time]);
+        unset($this->remarksByTime[$time]);
+        if ($this->selectedCheckTime === $time) {
+            $this->selectedCheckTime = null;
+        }
+        $this->syncDraft();
     }
-    $this->syncDraft();
-}
+
+    
 
     #[On('defects-synced')]
     public function onDefectsSynced(string $selectedCheckTime, array $defects, float $ngpercent, string $judgement): void
@@ -175,6 +177,7 @@ new class extends \Livewire\Component
             }
             $this->sortCheckTimesByDateEncode();
         }
+        $this->syncDraft();
     }
 
     #[On('remarks-synced')]
@@ -193,7 +196,8 @@ new class extends \Livewire\Component
     }
 
     #[On('fetchPartNo')]
-    public function fetchPartNo(string $partNo){
+    public function fetchPartNo(string $partNo)
+    {
         $this->partNo = $partNo;
     }
 } ?>
@@ -223,6 +227,8 @@ new class extends \Livewire\Component
                     <option value="F">F</option>
                     <option value="MI">MI</option>
                     <option value="E">E</option>
+                    <option value="CS">CS</option>
+                    <option value="CA">CA</option>
                 </select>
             </div>
             <div class="flex flex-col justify-center items-center mt-2">

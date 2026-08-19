@@ -62,7 +62,9 @@ class MIPIRInspectionReporsitory
             'MachineNo' => $data['MachineNo'],
             'Checktime' => $data['Checktime'],
             'Defect' => $data['Defect'],
-            'Qty' => $data['Qty']
+            'Qty' => $data['Qty'],
+            'NGPercent' => $data['NGPercent'],
+            'Judgement' => $data['Judgement']
         ]);
     }
 

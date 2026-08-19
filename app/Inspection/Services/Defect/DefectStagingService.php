@@ -73,6 +73,7 @@ class DefectStagingService
             ->reject(fn($e) => $e['type'] === $type)
             ->values()
             ->toArray();
+        
     }
 
     public function largeDefectExists(string $type, Collection $largeDefects): bool
@@ -127,12 +128,10 @@ class DefectStagingService
         return ['defects' => $defects, 'smallDefects' => $smallDefects];
     }
 
-    public function removeDefect(array $defects, array $smallDefects, string $type): array
+    public function removeDefect(array $defects, string $type): array
     {
         $defects = collect($defects)->reject(fn($d) => $d['type'] === $type)->values()->toArray();
-        unset($smallDefects[$type]);
-
-        return ['defects' => $defects, 'smallDefects' => $smallDefects];
+        return ['defects' => $defects];
     }
 
     public function removeSmallDefect(array $smallDefects, string $largeDefect, string $type): array

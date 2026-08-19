@@ -25,5 +25,7 @@ class Defect extends Model
         'Checktime',
         'Defect',
         'Qty',
+        'NGPercent',
+        'Judgement'
     ];
 }

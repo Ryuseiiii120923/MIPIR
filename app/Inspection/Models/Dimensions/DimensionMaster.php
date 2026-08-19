@@ -10,4 +10,13 @@ class DimensionMaster extends Model
     public $incrementing = true;
     public $timestamps = false;
     protected $primaryKey = 'RecNo';
+
+    protected $fillable = [
+        'PartNo',
+        'DimensionName',
+        'Specification',
+        'UpperLimit',
+        'LowerLimit',
+        'Device'
+    ];
 }

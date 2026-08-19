@@ -15,14 +15,17 @@ new class extends Component
     public bool $readonly = false;
     public string $action = '';
 
-    // Modal state
     public ?int $activeModalIndex = null;
-    public string $modalStep = 'choose'; // 'choose' | 'sets'
+    public string $modalStep = 'choose';
     public int $pendingSets = 1;
 
-    public function mount(?string $selectedCheckTime = null, array $loadedRows = [], 
-    string $action, int $ppfno, string $partNo): void
-    {
+    public function mount(
+        ?string $selectedCheckTime = null,
+        array $loadedRows = [],
+        string $action,
+        int $ppfno,
+        string $partNo
+    ): void {
         $this->selectedCheckTime = $selectedCheckTime;
         $this->ppfNumber = $ppfno;
         $this->partNo = $partNo;
@@ -37,6 +40,11 @@ new class extends Component
                 'mode' => null,
                 'sets' => null,
                 'revealed' => false,
+                'specType' => null,        
+                'specNominal' => '',      
+                'specTolerance' => '',
+                'specUpper' => '',
+                'specLower' => ''
             ],
             [
                 'item' => 'Flash Thickness',
@@ -48,6 +56,11 @@ new class extends Component
                 'mode' => null,
                 'sets' => null,
                 'revealed' => false,
+                'specType' => null,
+                'specNominal' => '',
+                'specTolerance' => '',
+                'specUpper' => '',
+                'specLower' => ''
             ],
             [
                 'item' => 'Gap-Offset',
@@ -60,11 +73,14 @@ new class extends Component
                 'mode' => null,
                 'sets' => null,
                 'revealed' => false,
+                'specType' => null,
+                'specNominal' => '',
+                'specTolerance' => '',
+                'specUpper' => '',
+                'specLower' => ''
             ],
         ];
 
-        // Back-compat: if rows were loaded from a draft that already has measurements
-        // but no 'mode'/'revealed' keys, infer them so existing drafts still render.
         foreach ($this->rows as $i => $row) {
             if (!array_key_exists('revealed', $row)) {
                 $count = count($row['measurements'] ?? []);
@@ -82,103 +98,64 @@ new class extends Component
         }
     }
 
+    private function service(): DimensionsService
+    {
+        return app(DimensionsService::class);
+    }
+
     private function syncToParent(): void
     {
         if ($this->selectedCheckTime !== null) {
             $this->dispatch('dimensions-synced', selectedCheckTime: $this->selectedCheckTime, rows: $this->rows);
         }
     }
-    
-    public function updated(string $property, mixed $value): void
-    {
-        if ($property === 'partNo') {
-            $this->resolveFixedSpecifications();
-        }
 
-        if ($property === 'rows.0.item') {
-            $this->itemSuggestions = app(DimensionMasterRepositoryInterface::class)->search($value, $this->partNo);
-        }
-
-        if (preg_match('/^rows\.(\d+)\.measurements(_y)?\.\d+$/', $property, $matches)) {
-            $this->evaluateRow((int) $matches[1]);
-        }
-        if (str_starts_with($property, 'rows.')) {
-            $this->syncToParent();
-        }
+   public function updated(string $property, mixed $value): void
+{
+    if ($property === 'partNo') {
+        $this->resolveFixedSpecifications();
     }
+
+    if ($property === 'rows.0.item') {
+        $this->itemSuggestions = app(DimensionMasterRepositoryInterface::class)->search($value, $this->partNo);
+    }
+
+    if (preg_match('/^rows\.(\d+)\.(specType|specNominal|specTolerance|specUpper|specLower|measurements|measurements_y)(\..+)?$/', $property, $matches)) {
+        $this->evaluateRow((int) $matches[1]);
+    }
+    if (str_starts_with($property, 'rows.')) {
+        $this->syncToParent();
+    }
+}
 
     private function resolveFixedSpecifications(): void
     {
-        $service = app(DimensionsService::class);
+        $repo = app(DimensionMasterRepositoryInterface::class);
 
         foreach ($this->rows as $i => $row) {
             if (!$row['editable']) {
-                $result = $service->displaySpecification($this->partNo, $row['item']);
-                $this->rows[$i]['specification'] = $result['specification'] ?? '';
+                $this->applyMasterSpecification($i, $repo->getMasterSpecification($this->partNo, $row['item']));
             }
         }
     }
 
-    /**
-     * Parses "2.9 - 3.1" into a range, or "MAX 0.20" into a ceiling.
-     */
-    private function parseSpecification(string $specification): ?array
-    {
-        $specification = trim($specification);
-
-        if ($specification === '') {
-            return null;
-        }
-
-        if (preg_match('/^(-?\d+(?:\.\d+)?)\s*-\s*(-?\d+(?:\.\d+)?)$/', $specification, $m)) {
-            return ['type' => 'range', 'min' => (float) $m[1], 'max' => (float) $m[2]];
-        }
-
-        if (preg_match('/^MAX\s+(-?\d+(?:\.\d+)?)$/i', $specification, $m)) {
-            return ['type' => 'max', 'max' => (float) $m[1]];
-        }
-
-        return null;
-    }
-
-    private function judgeValue(float $value, array $spec): string
-    {
-        return match ($spec['type']) {
-            'range' => ($value >= $spec['min'] && $value <= $spec['max']) ? 'O' : 'X',
-            'max'   => $value <= $spec['max'] ? 'O' : 'X',
-            default => '-',
-        };
-    }
-
-    /**
-     * Recomputes judgement for a row after one of its measurement inputs changes.
-     */
     private function evaluateRow(int $i): void
     {
-        $row  = $this->rows[$i];
-        $spec = $this->parseSpecification($row['specification'] ?? '');
+        $row = $this->rows[$i];
+        $limits = $this->service()->computeLimits($row);
 
-        if ($spec === null) {
+        $this->rows[$i]['upperLimit'] = $limits['upperLimit'] ?? null;
+        $this->rows[$i]['lowerLimit'] = $limits['lowerLimit'] ?? null;
+        $this->rows[$i]['judge'] = $this->service()->judgeRow($row, $limits);
+    }
+
+    public function persistSpecification(int $i): void
+    {
+        if ($this->readonly) {
             return;
         }
 
-        $measurements = $row['measurements'] ?? [];
-        $filled = array_filter($measurements, fn($v) => $v !== null && trim((string) $v) !== '');
-
-        if (count($filled) === 0) {
-            $this->rows[$i]['judge'] = '-';
-            return;
-        }
-
-        $overall = 'O';
-        foreach ($filled as $val) {
-            if (is_numeric($val) && $this->judgeValue((float) $val, $spec) === 'X') {
-                $overall = 'X';
-                break;
-            }
-        }
-
-        $this->rows[$i]['judge'] = $overall;
+        $this->service()->persistSpecification($this->partNo, $this->rows[$i]['item'] ?? '', $this->rows[$i]);
     }
 
     public function toggleJudge(int $rowIndex, int $slot): void
@@ -199,12 +176,13 @@ new class extends Component
         if ($itemName === '') {
             return;
         }
-        $result = app(DimensionsService::class)->displaySpecification($this->partNo, $itemName);
 
-        $this->rows[0]['specification'] = $result['specification'] ?? '';
+        $master = app(DimensionMasterRepositoryInterface::class)
+            ->getMasterSpecification($this->partNo, $itemName);
+
+        $this->applyMasterSpecification(0, $master);
         $this->syncToParent();
     }
-
     // ------------------------------------------------------------------
     // Dimension config modal
     // ------------------------------------------------------------------
@@ -265,10 +243,6 @@ new class extends Component
         $this->closeDimensionModal();
     }
 
-    /**
-     * Resize a row's measurement slot(s) to the given count, preserving
-     * any values already entered (extra slots trimmed, new slots blank).
-     */
     private function applyMeasurementCount(int $index, int $count): void
     {
         $row = $this->rows[$index];
@@ -285,6 +259,19 @@ new class extends Component
     public function reconfigureRow(int $index): void
     {
         $this->openDimensionModal($index);
+    }
+
+    private function applyMasterSpecification(int $i, ?array $master): void
+    {
+        $spec = $this->service()->resolveSpecFromMaster($master);
+
+        if ($spec === null) {
+            return; 
+        }
+
+        $this->rows[$i] = array_merge($this->rows[$i], $spec);
+
+        $this->evaluateRow($i);
     }
 }
 ?>
@@ -316,7 +303,7 @@ new class extends Component
         <div wire:key="dim-row-{{ $i }}" data-card-index="{{ $i }}" class="w-full mb-4">
 
             @if (!$row['revealed'])
-            {{-- Collapsed: just a button to configure this dimension --}}
+          
             <button
                 type="button"
                 wire:click="openDimensionModal({{ $i }})"
@@ -336,7 +323,7 @@ new class extends Component
                 </span>
             </button>
             @else
-            {{-- Revealed: full-width entry card --}}
+
             <div class="bg-white border border-gray-200 rounded-2xl p-6 w-full">
 
                 <div class="flex items-center justify-between mb-5">
@@ -383,9 +370,59 @@ new class extends Component
 
                     <div>
                         <label class="text-sm font-medium block mb-1.5">Specification</label>
-                        <input type="text" wire:model="rows.{{ $i }}.specification"
-                            class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2"
-                            placeholder="Enter specification" @if($readonly) disabled @endif>
+                        <div class="flex items-center gap-2">
+                            <select wire:model.live="rows.{{ $i }}.specType"
+                                class="bg-gray-50 border-0 rounded-lg px-2 py-2 text-sm"
+                                @if($readonly) disabled @endif>
+                                <option value="">Select</option>
+                                <option value="max">MAX</option>
+                                <option value="min">MIN</option>
+                                <option value="tolerance">±</option>
+                                <option value="tolerance_diff">TOLERANCE DIFF</option>
+                            </select>
+
+                            @if(($row['specType'] ?? '') === 'max')
+                            <span class="text-sm text-gray-500 font-medium">MAX</span>
+                            <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.specNominal"
+                                class="w-24 bg-gray-50 border-0 rounded-lg px-3 py-2 text-center"
+                                placeholder="1.20" @if($readonly) disabled @endif>
+
+                            @elseif(($row['specType'] ?? '') === 'min')
+                            <span class="text-sm text-gray-500 font-medium">MIN</span>
+                            <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.specNominal"
+                                class="w-24 bg-gray-50 border-0 rounded-lg px-3 py-2 text-center"
+                                placeholder="1.20" @if($readonly) disabled @endif>
+
+                            @elseif(($row['specType'] ?? '') === 'tolerance')
+                            <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.specNominal"
+                                class="w-20 bg-gray-50 border-0 rounded-lg px-3 py-2 text-center"
+                                placeholder="1.20" @if($readonly) disabled @endif>
+                            <span class="text-sm text-gray-500 font-medium">±</span>
+                            <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.specTolerance"
+                                class="w-20 bg-gray-50 border-0 rounded-lg px-3 py-2 text-center"
+                                placeholder="0.10" @if($readonly) disabled @endif>
+
+                            @elseif(($row['specType'] ?? '') === 'tolerance_diff')
+                            <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.specNominal"
+                                class="w-20 bg-gray-50 border-0 rounded-lg px-3 py-2 text-center"
+                                placeholder="1.20" @if($readonly) disabled @endif>
+                            <span class="text-sm text-gray-500 font-medium">+</span>
+                            <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.specUpper"
+                                class="w-20 bg-gray-50 border-0 rounded-lg px-3 py-2 text-center"
+                                placeholder="0.10" @if($readonly) disabled @endif>
+                            <span class="text-sm text-gray-500 font-medium">-</span>
+                            <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.specLower"
+                                class="w-20 bg-gray-50 border-0 rounded-lg px-3 py-2 text-center"
+                                placeholder="0.10" @if($readonly) disabled @endif>
+                            @endif
+
+                            <button
+                                type="button"
+                                @click.prevent="if (confirm('Are you sure you want to update this dimension?')) $wire.persistSpecification({{ $i }})"
+                                class="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-100 transition">
+                                Update Dimension
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -502,7 +539,6 @@ new class extends Component
 @endforeach
 </div>
 
-{{-- Config modal --}}
 @if($activeModalIndex !== null)
 <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
     <div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-lg">

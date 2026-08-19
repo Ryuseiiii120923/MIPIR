@@ -15,17 +15,21 @@ class CreateInspection
         $checkTimes = $draft['check-time']['check-time'] ?? [];
         $dateEncodeCheck = $draft['check-time']['date-encode'] ?? [];
         $defects = $draft['defects']['defects'] ?? [];
-        $ngpercent = $draft['defects']['ngPercent'];
-        $defectJudge = $draft['defects']['judgement'];
+        $ngpercent = $draft['defects']['ngPercent'] ?? null;
+        $defectJudge = $draft['defects']['judgement'] ?? null;
         $dimensions = $draft['dimensions'] ?? [];
         $judgment = $draft['judgement']['judgement'] ?? null;
         $processDetails = $draft['process-details'] ?? null;
         $remarks = $draft['remarks'] ?? [];
         $dateJudge = $draft['judgement']['dateOfJudge'] ?? null;
-    
+        
 
         if (empty($processDetails['productionLotNo']) || empty($processDetails['machineNo'])) {
-            throw new \Exception('Process details are required to create an inspection.');
+            throw new \InvalidArgumentException('Process details are required to create an inspection.');
+        }
+
+        if (empty($checkTimes)) {
+            throw new \InvalidArgumentException('At least one check time is required to create an inspection.');
         }
 
         DB::transaction(function () use ($dateEncodeCheck, $defectJudge, $ngpercent, $ppf, $ppfLookUp, $checkTimes, $defects, $dimensions, $judgment, $processDetails, $remarks) {
@@ -74,7 +78,7 @@ class CreateInspection
                         'Defect' => $defect['type'] ?? null,
                         'Qty' => $defect['qty'] ?? null,
                         'Judgement' => $defectJudge === 'X' ? 1 : 0,
-                        'NGPercent' => $ngpercent
+                        'NGPercent' => $ngpercent[$checkTime]
                     ]);
                 }
 

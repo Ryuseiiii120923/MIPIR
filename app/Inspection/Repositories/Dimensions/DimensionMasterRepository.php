@@ -8,35 +8,29 @@ use Illuminate\Support\Collection;
 
 class DimensionMasterRepository implements DimensionMasterRepositoryInterface
 {
-    public function getDimensionName(string $partNo) : Collection
+    public function getDimensionName(string $partNo): Collection
     {
         return DimensionMaster::where('PartNo', $partNo)->distinct()->pluck('DimensionName');
     }
 
-    public function getSpecification(string $partNo, string $dimensionName): ?string
+    public function getMasterSpecification(string $partNo, string $item): ?array
     {
-        $result = DimensionMaster::select(['Specification', 'UpperLimit', 'LowerLimit'])
+        $row = DimensionMaster::query()
             ->where('PartNo', $partNo)
-            ->where('DimensionName', $dimensionName)
+            ->where('DimensionName', $item)
             ->first();
 
-        if (!$result) {
+        if (!$row) {
             return null;
         }
 
-        if ($result->UpperLimit === '0.000') {
-            return 'Max ' . $result->Specification;
-        }
-
-        if ($result->LowerLimit === '0.000') {
-            return ($result->Specification - $result->LowerLimit) . '-' . $result->Specification;
-        }
-
-        $lowerLimit = $result->Specification - $result->LowerLimit;
-        $upperLimit = $result->Specification + $result->UpperLimit;
-
-        return $lowerLimit . '-' . $upperLimit;
+        return [
+            'Specification' => $row->Specification,
+            'UpperLimit'    => $row->UpperLimit,
+            'LowerLimit'    => $row->LowerLimit,
+        ];
     }
+
 
     public function search(string $term, string $partNo): array
     {
@@ -47,11 +41,37 @@ class DimensionMasterRepository implements DimensionMasterRepositoryInterface
         }
 
         return DimensionMaster::where('PartNo', $partNo)
-        ->where('DimensionName','like', "%{$term}%")
-        ->limit(8)
-        ->orderBy('DimensionName')
-        ->distinct()
-        ->pluck('DimensionName')
-        ->all();
+            ->where('DimensionName', 'like', "%{$term}%")
+            ->limit(8)
+            ->orderBy('DimensionName')
+            ->distinct()
+            ->pluck('DimensionName')
+            ->all();
+    }
+
+    public function updateOrCreateSpecification(
+        string $partNo,
+        string $item,
+        string $specification,
+        string $upperLimit,
+        string $lowerLimit
+    ): void {
+        $row = [
+            'PartNo' => $partNo,
+            'DimensionName' => $item,
+            'Specification' => $specification,
+            'UpperLimit' => $upperLimit,
+            'LowerLimit' => $lowerLimit
+        ];
+
+        DimensionMaster::upsert(
+            $row,
+            ['PartNo', 'DimensionName'],
+            [
+                'Specification',
+                'UpperLimit',
+                'LowerLimit',
+            ]
+        );
     }
 }

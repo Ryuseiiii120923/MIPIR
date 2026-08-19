@@ -2,10 +2,12 @@
 
 use App\Inspection\Actions\CreateMachine;
 use App\Inspection\Models\Machine;
+use App\Traits\HasNotifications;
 use Livewire\Component;
 
 new class extends Component
 {
+    use HasNotifications;
     public bool $showModal = false;
     public string $machineNumber = '';
     public array $machines = [];
@@ -13,7 +15,7 @@ new class extends Component
 
     public function mount(): void
     {
-        $this->machines = Machine::orderBy('machine_number')->get()->toArray();
+        $this->machines = Machine::orderBy('created_at')->get()->toArray();
     }
 
     public function openAddMachineModal(): void
@@ -38,7 +40,7 @@ new class extends Component
 
         app(CreateMachine::class)->execute($this->machineNumber);
 
-        $this->machines = Machine::orderBy('machine_number')->get()->toArray();
+        $this->machines = Machine::orderBy('created_at')->get()->toArray();
 
         $this->showModal = false;
         $this->machineNumber = '';

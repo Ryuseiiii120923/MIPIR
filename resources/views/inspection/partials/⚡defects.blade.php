@@ -319,11 +319,16 @@ new class extends Component
         $result = $this->stagingService()
             ->removeDefect(
                 $this->defects,
-                [],
                 $type
             );
 
         $this->defects = $result['defects'];
+
+            $this->staged = $this->stagingService()
+        ->removeStagedDefect(
+            $this->staged,
+            $type
+        );
 
         $this->updateTotalNg();
         $this->computeAndjudge();

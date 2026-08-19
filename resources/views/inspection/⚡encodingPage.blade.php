@@ -6,31 +6,28 @@ use App\Inspection\Actions\DraftAction;
 use App\Inspection\Actions\UpdateInspection;
 use App\Inspection\Repositories\PPFLookUp\PpfLookUpRepository;
 use App\Traits\HasNotifications;
-use App\Traits\WithLoading;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
 new class extends Component
 {
-    // use WithLoading;
     use HasNotifications;
-
     public string $action = '';
     public int $selectedPpf = 0;
     public string $selectedMachine;
 
-    public function mount(string $selectedMachine){
+    public function mount(string $selectedMachine)
+    {
         $this->selectedMachine = $selectedMachine;
     }
-    
+
     public function setAction(string $action): void
     {
         $this->action = $action;
         $this->selectedPpf = 0;
         $this->dispatch('action-changed', action: $action);
-            $this->dispatch('machine-selected', machine: $this->selectedMachine);
+        $this->dispatch('machine-selected', machine: $this->selectedMachine);
         // $this->dispatch('read-only', false);
     }
 
@@ -40,78 +37,79 @@ new class extends Component
         $this->selectedPpf = $ppf;
     }
 
-   public function submit(): void
-{
-    if ($this->action === 'view') {
-        Log::debug('DashboardSave: view action, no-op');
-        return;
-    }
-
-    if ($this->action === 'delete') {
-        if (app(DeleteInspection::class)->execute($this->selectedPpf, $this->selectedMachine)) {
-           PpfLookUpRepository::forgetMainData($this->selectedPpf, $this->selectedMachine);
-
-            $this->notifyReload('success', 'Deleted Successfully');
-        }
-
-        return;
-    }
-
-    if ($this->action === 'edit') {
-        app(UpdateInspection::class)->execute($this->selectedPpf,$this->selectedMachine);
-
-       PpfLookUpRepository::forgetMainData($this->selectedPpf, $this->selectedMachine);
-        $this->notifyReload('success', 'Updated Successfully');
-
-        return;
-    }
-
-    $draft = app(DraftAction::class)->get($this->selectedPpf);
-
-    foreach (['ppfLookup', 'process-details', 'check-time', 'judgement'] as $component) {
-        if (!isset($draft[$component])) {
-            $this->addError('Incomplete', "Missing {$component} data.");
+    public function submit(): void
+    {
+        if ($this->action === 'view') {
+            Log::debug('DashboardSave: view action, no-op');
             return;
         }
+       
+        if ($this->action === 'delete') {
+            if (app(DeleteInspection::class)->execute($this->selectedPpf, $this->selectedMachine)) {
+                PpfLookUpRepository::forgetMainData($this->selectedPpf, $this->selectedMachine);
+                $this->notifyReload('success', 'Deleted Successfully');
+            }
+            return;
+        }
+
+        if ($this->action === 'edit') {
+            try {
+                app(UpdateInspection::class)->execute($this->selectedPpf, $this->selectedMachine);
+                PpfLookUpRepository::forgetMainData($this->selectedPpf, $this->selectedMachine);
+                $this->notifyReload('success', 'Updated Successfully');
+                return;
+            } catch (\InvalidArgumentException $e) {
+                $this->notifyFail('Validation error', $e->getMessage());
+                return;
+            }
+        }
+
+        $draft = app(DraftAction::class)->get($this->selectedPpf);
+        foreach (['ppfLookup', 'process-details', 'check-time', 'judgement'] as $component) {
+            if (!isset($draft[$component])) {
+                $this->notifyFail('Incomplete', "Missing {$component} data.");
+                return;
+            }
+        }
+
+        if (empty($draft['process-details']['productionLotNo'])) {
+             $this->dispatch('field-error', field: 'productionLotNo', message: 'Production lot number is required.');
+            $this->notifyFail('Validation error', 'Production lot number is required.');
+            return;
+        }
+
+        if (empty($draft['process-details']['machineNo'])) {
+            $this->notifyFail('Validation error', 'Machine number is required.');
+            return;
+        }
+
+        if (empty($draft['check-time']['check-time'])) {
+            $this->notifyFail('Validation error', 'At least one check time is required.');
+            return;
+        }
+
+        try {
+            app(CreateInspection::class)->execute($this->selectedPpf, $draft);
+
+            app(DraftAction::class)->clear($this->selectedPpf);
+
+            PpfLookUpRepository::forgetMainData($this->selectedPpf, $this->selectedMachine);
+            $this->notifyReload('success', 'Inspection record saved.');
+        } catch (\InvalidArgumentException $e) {
+            Log::warning('DashboardSave: validation error', [
+                'ppf' => $this->selectedPpf,
+                'message' => $e->getMessage(),
+            ]);
+            $this->notifyFail('Validation error', $e->getMessage());
+        } catch (\Throwable $e) {
+            Log::error('DashboardSave: unexpected error', [
+                'ppf' => $this->selectedPpf,
+                'exception' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            $this->notifyFail('Save failed', 'Something went wrong while saving. Please try again.');
+        }
     }
-
-    try {
-        app(CreateInspection::class)->execute(
-            $this->selectedPpf,
-            $draft
-        );
-
-        app(DraftAction::class)->clear($this->selectedPpf);
-
-       PpfLookUpRepository::forgetMainData($this->selectedPpf, $this->selectedMachine);
-        $this->notifyReload('success', 'Inspection record saved.');
-
-    } catch (\InvalidArgumentException $e) {
-
-        Log::warning('DashboardSave: validation error', [
-            'ppf' => $this->selectedPpf,
-            'message' => $e->getMessage(),
-        ]);
-
-        $this->notifyFail(
-            'Validation error',
-            $e->getMessage()
-        );
-
-    } catch (\Throwable $e) {
-
-        Log::error('DashboardSave: unexpected error', [
-            'ppf' => $this->selectedPpf,
-            'exception' => $e->getMessage(),
-            'trace' => $e->getTraceAsString(),
-        ]);
-
-        $this->notifyFail(
-            'Save failed',
-            'Something went wrong while saving. Please try again.'
-        );
-    }
-}
 };
 ?>
 
@@ -137,17 +135,17 @@ new class extends Component
         @endforeach
     </div>
     <div class="w-full justify-center">
-        <livewire:inspection::partials.table-data :selectedMachineNo="$selectedMachine"/>
+        <livewire:inspection::partials.table-data :selectedMachineNo="$selectedMachine" />
     </div>
     <div class="flex flex-col md:flex-row gap-5">
-        <livewire:inspection::partials.ppflookup :selectedMachineNo="$selectedMachine"/>
-        <livewire:inspection::partials.process-details :selectedMachineNo="$selectedMachine"/>
+        <livewire:inspection::partials.ppflookup :selectedMachineNo="$selectedMachine" />
+        <livewire:inspection::partials.process-details :selectedMachineNo="$selectedMachine" />
     </div>
     <div class="mt-4">
-        <livewire:inspection::partials.check-time :selectedMachineNo="$selectedMachine"/>
+        <livewire:inspection::partials.check-time :selectedMachineNo="$selectedMachine" />
     </div>
     <div class="mt-4">
-        <livewire:inspection::partials.judgement :selectedMachineNo="$selectedMachine"/>
+        <livewire:inspection::partials.judgement :selectedMachineNo="$selectedMachine" />
     </div>
 
     <div class="flex items-center justify-center mt-4 @if($this->selectedPpf === 0) opacity-50 cursor-not-allowed @endif">

@@ -35,7 +35,7 @@ new class extends Component
                 </button>
                 <button
                     type="button"
-                    wire:click="removeStagedDefect('{{ $stage['type'] }}')"
+                    wire:click="deleteDefect('{{ $stage['type'] }}')"
                     class="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50 transition">
                     ✕
                 </button>
