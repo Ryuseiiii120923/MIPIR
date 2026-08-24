@@ -3,19 +3,24 @@
 namespace App\Inspection\Repositories\Dimensions;
 
 use App\Inspection\Models\Dimensions\DimensionMaster;
+use App\Inspection\Models\Dimensions\DimensionMasterForXBar;
+use App\Inspection\Models\Dimensions\TempDimension;
 use App\Inspection\Repositories\Contracts\DimensionMasterRepositoryInterface;
+use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
 class DimensionMasterRepository implements DimensionMasterRepositoryInterface
 {
     public function getDimensionName(string $partNo): Collection
     {
-        return DimensionMaster::where('PartNo', $partNo)->distinct()->pluck('DimensionName');
+        return DimensionMasterForXBar::where('PartNo', $partNo)->distinct()->pluck('DimensionName');
     }
+
+    
 
     public function getMasterSpecification(string $partNo, string $item): ?array
     {
-        $row = DimensionMaster::query()
+        $row = DimensionMasterForXBar::query()
             ->where('PartNo', $partNo)
             ->where('DimensionName', $item)
             ->first();
@@ -25,6 +30,26 @@ class DimensionMasterRepository implements DimensionMasterRepositoryInterface
         }
 
         return [
+            'Device' => $row->Device,
+            'Specification' => $row->Specification,
+            'UpperLimit'    => $row->UpperLimit,
+            'LowerLimit'    => $row->LowerLimit,
+        ];
+    }
+
+     public function getTempMaster(string $partNo, string $item): ?array
+    {
+        $row = TempDimension::query()
+            ->where('PartNo', $partNo)
+            ->where('DimensionName', $item)
+            ->first();
+
+        if (!$row) {
+            return null;
+        }
+
+        return [
+            'Device' => $row->Device,
             'Specification' => $row->Specification,
             'UpperLimit'    => $row->UpperLimit,
             'LowerLimit'    => $row->LowerLimit,
@@ -40,7 +65,7 @@ class DimensionMasterRepository implements DimensionMasterRepositoryInterface
             return [];
         }
 
-        return DimensionMaster::where('PartNo', $partNo)
+        return DimensionMasterForXBar::where('PartNo', $partNo)
             ->where('DimensionName', 'like', "%{$term}%")
             ->limit(8)
             ->orderBy('DimensionName')
@@ -52,25 +77,30 @@ class DimensionMasterRepository implements DimensionMasterRepositoryInterface
     public function updateOrCreateSpecification(
         string $partNo,
         string $item,
+        string $device,
         string $specification,
         string $upperLimit,
-        string $lowerLimit
+        string $lowerLimit,
+        
     ): void {
         $row = [
             'PartNo' => $partNo,
             'DimensionName' => $item,
+            'Device' => $device,
             'Specification' => $specification,
             'UpperLimit' => $upperLimit,
-            'LowerLimit' => $lowerLimit
+            'LowerLimit' => $lowerLimit,
+            'created_at' => Carbon::now()
         ];
 
-        DimensionMaster::upsert(
+        TempDimension::upsert(
             $row,
             ['PartNo', 'DimensionName'],
             [
                 'Specification',
                 'UpperLimit',
                 'LowerLimit',
+                'Device'
             ]
         );
     }

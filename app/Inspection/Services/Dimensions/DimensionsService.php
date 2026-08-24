@@ -186,7 +186,7 @@ class DimensionsService
     public function persistSpecification(string $partNo, string $item, array $row): bool
     {
         $item = trim($item);
-
+        $device = $row['device'];
         if ($item === '' || trim($partNo) === '') {
             return false;
         }
@@ -200,6 +200,7 @@ class DimensionsService
         $this->repo->updateOrCreateSpecification(
             $partNo,
             $item,
+            $device,
             number_format((float) $row['specNominal'], 3, '.', ''),
             number_format((float) $limits['upperLimit'], 3, '.', ''),
             number_format((float) $limits['lowerLimit'], 3, '.', '')

@@ -2,7 +2,6 @@
 
 use App\Inspection\Repositories\Contracts\DimensionMasterRepositoryInterface;
 use App\Inspection\Services\Dimensions\DimensionsService;
-use Livewire\Attributes\On;
 use Livewire\Component;
 
 new class extends Component
@@ -40,11 +39,12 @@ new class extends Component
                 'mode' => null,
                 'sets' => null,
                 'revealed' => false,
-                'specType' => null,        
-                'specNominal' => '',      
+                'specType' => null,
+                'specNominal' => '',
                 'specTolerance' => '',
                 'specUpper' => '',
-                'specLower' => ''
+                'specLower' => '',
+                'device' => ''
             ],
             [
                 'item' => 'Flash Thickness',
@@ -60,7 +60,8 @@ new class extends Component
                 'specNominal' => '',
                 'specTolerance' => '',
                 'specUpper' => '',
-                'specLower' => ''
+                'specLower' => '',
+                'device' => '',
             ],
             [
                 'item' => 'Gap-Offset',
@@ -77,7 +78,8 @@ new class extends Component
                 'specNominal' => '',
                 'specTolerance' => '',
                 'specUpper' => '',
-                'specLower' => ''
+                'specLower' => '',
+                'device' => '',
             ],
         ];
 
@@ -110,23 +112,23 @@ new class extends Component
         }
     }
 
-   public function updated(string $property, mixed $value): void
-{
-    if ($property === 'partNo') {
-        $this->resolveFixedSpecifications();
-    }
+    public function updated(string $property, mixed $value): void
+    {
+        if ($property === 'partNo') {
+            $this->resolveFixedSpecifications();
+        }
 
-    if ($property === 'rows.0.item') {
-        $this->itemSuggestions = app(DimensionMasterRepositoryInterface::class)->search($value, $this->partNo);
-    }
+        if ($property === 'rows.0.item') {
+            $this->itemSuggestions = app(DimensionMasterRepositoryInterface::class)->search($value, $this->partNo);
+        }
 
-    if (preg_match('/^rows\.(\d+)\.(specType|specNominal|specTolerance|specUpper|specLower|measurements|measurements_y)(\..+)?$/', $property, $matches)) {
-        $this->evaluateRow((int) $matches[1]);
+        if (preg_match('/^rows\.(\d+)\.(specType|specNominal|specTolerance|specUpper|specLower|measurements|measurements_y)(\..+)?$/', $property, $matches)) {
+            $this->evaluateRow((int) $matches[1]);
+        }
+        if (str_starts_with($property, 'rows.')) {
+            $this->syncToParent();
+        }
     }
-    if (str_starts_with($property, 'rows.')) {
-        $this->syncToParent();
-    }
-}
 
     private function resolveFixedSpecifications(): void
     {
@@ -179,7 +181,13 @@ new class extends Component
 
         $master = app(DimensionMasterRepositoryInterface::class)
             ->getMasterSpecification($this->partNo, $itemName);
-
+        
+        if($master === null){
+             $master = app(DimensionMasterRepositoryInterface::class)->
+                getTempMaster($this->partNo, $itemName);
+        }
+        
+            
         $this->applyMasterSpecification(0, $master);
         $this->syncToParent();
     }
@@ -266,7 +274,7 @@ new class extends Component
         $spec = $this->service()->resolveSpecFromMaster($master);
 
         if ($spec === null) {
-            return; 
+            return;
         }
 
         $this->rows[$i] = array_merge($this->rows[$i], $spec);
@@ -303,7 +311,7 @@ new class extends Component
         <div wire:key="dim-row-{{ $i }}" data-card-index="{{ $i }}" class="w-full mb-4">
 
             @if (!$row['revealed'])
-          
+
             <button
                 type="button"
                 wire:click="openDimensionModal({{ $i }})"
@@ -367,8 +375,14 @@ new class extends Component
                         <div class="w-full bg-gray-50 rounded-lg px-3 py-2 font-medium">{{ $row['item'] }}</div>
                         @endif
                     </div>
-
                     <div>
+                        <label class="text-sm font-medium block mb-1.5">Measuring Device</label>
+                        <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.device"
+                            class="w-50 bg-gray-50 border-0 rounded-lg px-3 py-2 text-center"
+                            placeholder="Enter the measuring device use" @if($readonly) disabled @endif>
+                    </div>
+                    <div>
+
                         <label class="text-sm font-medium block mb-1.5">Specification</label>
                         <div class="flex items-center gap-2">
                             <select wire:model.live="rows.{{ $i }}.specType"

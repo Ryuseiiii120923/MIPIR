@@ -172,7 +172,7 @@
                 </h1>
 
                 <div class="flex-shrink-0">
-                    <form method="POST" action="{{ route('logout') }}">
+                   <form method="POST" action="{{ Auth::guard('worker')->check() ? route('worker.logout') : route('web.logout') }}">
                         @csrf
                         <button type="submit"
                             class="text-white hover:bg-emerald-800 bg-emerald-800 font-medium rounded-lg text-sm px-4 py-2">

@@ -23,6 +23,7 @@ interface DimensionMasterRepositoryInterface
      * @return array{Specification: string, UpperLimit: float, LowerLimit: float}|null
      */
     public function getMasterSpecification(string $partNo, string $item): ?array;
+     public function getTempMaster(string $partNo, string $item): ?array;
 
     /**
      * Search for dimension names matching a term for a given part number.
@@ -36,8 +37,10 @@ interface DimensionMasterRepositoryInterface
      public function updateOrCreateSpecification(
         string $partNo,
         string $item,
+        string $device,
         string $specification,
         string $upperLimit,
         string $lowerLimit
     ): void;
+
 }
