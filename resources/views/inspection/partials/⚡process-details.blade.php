@@ -17,12 +17,8 @@ new class extends \Livewire\Component
     public int $ppf = 0;
     public bool $saved = false;
     public string $action = '';
-    public int $selectedMachineNo;
 
-    public function mount(int $selectedMachineNo)
-    {
-        $this->selectedMachineNo = $selectedMachineNo;
-    }
+
 
     public function syncDraft()
     {
@@ -55,7 +51,7 @@ new class extends \Livewire\Component
     {
         $this->ppf = $ppf;
         if ($this->action != 'add') {
-            $result = app(PpfLookUpRepository::class)->getMainData($ppf, $this->selectedMachineNo);
+            $result = app(PpfLookUpRepository::class)->getMainData($ppf);
 
             $this->productionLotNo = $result['productionLotNo'];
             $this->machineNo = $result['machineNo'];

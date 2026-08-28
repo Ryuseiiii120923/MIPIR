@@ -18,14 +18,9 @@ new class extends Component
     public string $moldingDieNo = '';
     public ?int $noOfCavity = null;
     public string $nqrIssuanceCriteria = '';
-    public int $selectedMachineNo;
     public bool $found = false;
     public bool $searching = false;
     public string $action = '';
-
-    public function mount(int $selectedMachineNo){
-        $this->selectedMachineNo = $selectedMachineNo;
-    }
 
     #[On('lookup_ppf')]
     public function lookup(string $ppf = ''): void

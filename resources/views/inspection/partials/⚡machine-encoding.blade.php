@@ -13,11 +13,6 @@ new class extends Component
     public array $machines = [];
     public ?string $selectedMachine = null;
 
-    public function mount(): void
-    {
-        $this->machines = Machine::orderBy('created_at')->get()->toArray();
-    }
-
     public function openAddMachineModal(): void
     {
         $this->machineNumber = '';

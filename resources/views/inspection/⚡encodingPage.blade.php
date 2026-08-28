@@ -17,17 +17,11 @@ new class extends Component
     public int $selectedPpf = 0;
     public string $selectedMachine;
 
-    // public function mount(string $selectedMachine)
-    // {
-    //     $this->selectedMachine = $selectedMachine;
-    // }
-
     public function setAction(string $action): void
     {
         $this->action = $action;
         $this->selectedPpf = 0;
         $this->dispatch('action-changed', action: $action);
-        $this->dispatch('machine-selected', machine: $this->selectedMachine);
         // $this->dispatch('read-only', false);
     }
 
@@ -45,8 +39,8 @@ new class extends Component
         }
        
         if ($this->action === 'delete') {
-            if (app(DeleteInspection::class)->execute($this->selectedPpf, $this->selectedMachine)) {
-                PpfLookUpRepository::forgetMainData($this->selectedPpf, $this->selectedMachine);
+            if (app(DeleteInspection::class)->execute($this->selectedPpf)) {
+                PpfLookUpRepository::forgetMainData($this->selectedPpf);
                 $this->notifyReload('success', 'Deleted Successfully');
             }
             return;
@@ -54,8 +48,8 @@ new class extends Component
 
         if ($this->action === 'edit') {
             try {
-                app(UpdateInspection::class)->execute($this->selectedPpf, $this->selectedMachine);
-                PpfLookUpRepository::forgetMainData($this->selectedPpf, $this->selectedMachine);
+                app(UpdateInspection::class)->execute($this->selectedPpf);
+                PpfLookUpRepository::forgetMainData($this->selectedPpf);
                 $this->notifyReload('success', 'Updated Successfully');
                 return;
             } catch (\InvalidArgumentException $e) {
@@ -93,7 +87,7 @@ new class extends Component
 
             app(DraftAction::class)->clear($this->selectedPpf);
 
-            PpfLookUpRepository::forgetMainData($this->selectedPpf, $this->selectedMachine);
+            PpfLookUpRepository::forgetMainData($this->selectedPpf);
             $this->notifyReload('success', 'Inspection record saved.');
         } catch (\InvalidArgumentException $e) {
             Log::warning('DashboardSave: validation error', [
@@ -135,18 +129,18 @@ new class extends Component
         @endforeach
     </div>
     <div class="w-full justify-center">
-        <livewire:inspection::partials.table-data :selectedMachineNo="$selectedMachine" />
+        <livewire:inspection::partials.table-data  />
     </div>
     <div class="flex flex-col md:flex-row gap-5">
-        <livewire:inspection::partials.ppflookup :selectedMachineNo="$selectedMachine" />
-        <livewire:inspection::partials.process-details :selectedMachineNo="$selectedMachine" />
+        <livewire:inspection::partials.ppflookup  />
+        <livewire:inspection::partials.process-details  />
     </div>
     <div class="mt-4">
-        <livewire:inspection::partials.check-time :selectedMachineNo="$selectedMachine" />
+        <livewire:inspection::partials.check-time  />
     </div>
     <div class="mt-4 flex flex-row gap-5 justify-between">
         <livewire:inspection::partials.specs-control-limit />
-        <livewire:inspection::partials.judgement :selectedMachineNo="$selectedMachine" />
+        <livewire:inspection::partials.judgement  />
     </div>
 
     <div class="flex items-center justify-center mt-4 @if($this->selectedPpf === 0) opacity-50 cursor-not-allowed @endif">

@@ -24,13 +24,8 @@ new class extends \Livewire\Component
     public string $action = '';
     //Computation
     public array $dataFromMaster = [];
-    public int $selectedMachineNo;
     public string $partNo = '';
 
-    public function mount(int $selectedMachineNo)
-    {
-        $this->selectedMachineNo = $selectedMachineNo;
-    }
 
     public function addCheckTime(): void
     {
@@ -163,17 +158,17 @@ new class extends \Livewire\Component
     {
         $this->ppf = $ppf;
         if ($this->action != 'add') {
-            $result = app(PpfLookUpRepository::class)->getMainData($ppf, $this->selectedMachineNo);
+            $result = app(PpfLookUpRepository::class)->getMainData($ppf);
             $this->checkTimes = $result['checkTime'];
             $this->dateEncodeByTime = $result['dateEncode'] ?? [];
 
 
 
             foreach ($this->checkTimes as $time) {
-                $this->defectsByTime[$time] = app(PpfLookUpRepository::class)->getDefectbyCheckTime($ppf, $time, $this->selectedMachineNo);
+                $this->defectsByTime[$time] = app(PpfLookUpRepository::class)->getDefectbyCheckTime($ppf, $time);
                 $this->dimensionsByTime[$time] = app(PpfLookUpRepository::class)
-                    ->getDimensionbyCheckTime($ppf, $time, $this->selectedMachineNo);
-                $this->remarksByTime[$time] = app(PpfLookUpRepository::class)->getRemarks($ppf, $time, $this->selectedMachineNo);
+                    ->getDimensionbyCheckTime($ppf, $time);
+                $this->remarksByTime[$time] = app(PpfLookUpRepository::class)->getRemarks($ppf, $time);
             }
             $this->sortCheckTimesByDateEncode();
         }

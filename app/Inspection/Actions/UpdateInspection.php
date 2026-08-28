@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 
 class UpdateInspection
 {
-    public function execute(int $ppfno, int $machineNo): void
+    public function execute(int $ppfno): void
     {
         $draft = app(DraftAction::class)->get($ppfno);
         if (empty($draft['process-details']['productionLotNo']) || empty($draft['process-details']['machineNo'])) {
@@ -22,16 +22,16 @@ class UpdateInspection
             throw new \InvalidArgumentException('At least one check time is required to update this inspection.');
         }
 
-        DB::transaction(function () use ($ppfno, $machineNo, $draft) {
-            Defect::where('PPFNo', $ppfno)->where('MachineNo', $machineNo)->delete();
+        DB::transaction(function () use ($ppfno, $draft) {
+            Defect::where('PPFNo', $ppfno)->delete();
 
-            MIPIRDimensionMeasure::where('PPFNo', $ppfno)->where('MachineNo', $machineNo)->delete();
+            MIPIRDimensionMeasure::where('PPFNo', $ppfno)->delete();
 
-            MIPIRInspectionRecord::where('PPFNo', $ppfno)->where('MachineNo', $machineNo)->delete();
+            MIPIRInspectionRecord::where('PPFNo', $ppfno)->delete();
 
-            CheckTime::where('PPFNo', $ppfno)->where('machine-no', $machineNo)->delete();
+            CheckTime::where('PPFNo', $ppfno)->delete();
 
-            ChckTRemarks::where('PPFNo', $ppfno)->where('MachineNo', $machineNo)->delete();
+            ChckTRemarks::where('PPFNo', $ppfno)->delete();
 
             app(CreateInspection::class)->execute($ppfno, $draft);
         });

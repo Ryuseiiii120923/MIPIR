@@ -11,16 +11,16 @@ use Illuminate\Support\Facades\DB;
 
 class DeleteInspection
 {
-    public function execute(int $ppfno, int $machineNo): bool
+    public function execute(int $ppfno): bool
     {
-        return DB::transaction(function () use ($ppfno, $machineNo) {
-            Defect::where('PPFNo', $ppfno)->where('MachineNo', $machineNo)->delete();
+        return DB::transaction(function () use ($ppfno) {
+            Defect::where('PPFNo', $ppfno)->delete();
 
-            MIPIRDimensionMeasure::where('PPFNo', $ppfno)->where('MachineNo', $machineNo)->delete();
+            MIPIRDimensionMeasure::where('PPFNo', $ppfno)->delete();
 
-            MIPIRInspectionRecord::where('PPFNo', $ppfno)->where('MachineNo', $machineNo)->delete();
-            CheckTime::where('PPFNo', $ppfno)->where('machine-no', $machineNo)->delete();
-            ChckTRemarks::where('PPFNo', $ppfno)->where('MachineNo', $machineNo)->delete();
+            MIPIRInspectionRecord::where('PPFNo', $ppfno)->delete();
+            CheckTime::where('PPFNo', $ppfno)->delete();
+            ChckTRemarks::where('PPFNo', $ppfno)->delete();
 
             return true;
         });

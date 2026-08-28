@@ -44,7 +44,6 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
     public function getDataforSearch(
         string $search,
         int $encoder,
-        int $machineNo,
         int $perPage = 5
     ) {
         return MIPIRInspectionRecord::query()
@@ -56,7 +55,7 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
                 'MachineNo'
             ])
             ->where('InspectBy', $encoder)
-            ->where('MachineNo', $machineNo)
+            
             ->when($search !== '', function ($query) use ($search) {
                 $query->where('PPFNo', 'like', "%{$search}%");
             })
@@ -65,7 +64,7 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
                 MIPIRInspectionRecord::query()
                     ->selectRaw('MAX(RECNO)')
                     ->where('InspectBy', $encoder)
-                    ->where('MachineNo', $machineNo)
+                    
                     ->groupBy('PPFNo')
             )
             ->orderByDesc('DateJudge')
@@ -98,19 +97,19 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
 
 
 
-      public static function cacheKey(int $ppf, int $machineNo): string
+      public static function cacheKey(int $ppf): string
     {
-        return "ppf-main-data:{$ppf}:{$machineNo}";
+        return "ppf-main-data:{$ppf}";
     }
 
-    public function getMainData(int $ppf, int $machineNo): ?array
+    public function getMainData(int $ppf): ?array
     {
         return Cache::remember(
-            self::cacheKey($ppf, $machineNo),
+            self::cacheKey($ppf),
             now()->addMinutes(30),
-            function () use ($ppf, $machineNo) {
-                $records = MIPIRInspectionRecord::where('PPFNo', $ppf)->where('MachineNo', $machineNo)->get();
-                $checkTime = CheckTime::where('PPFNo', $ppf)->where('machine-no', $machineNo)->get();
+            function () use ($ppf) {
+                $records = MIPIRInspectionRecord::where('PPFNo', $ppf)->get();
+                $checkTime = CheckTime::where('PPFNo', $ppf)->get();
 
                 if ($records->isEmpty()) {
                     return null;
@@ -134,16 +133,15 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
         );
     }
 
-    public static function forgetMainData(int $ppf, int $machineNo): void
+    public static function forgetMainData(int $ppf): void
     {
-        Cache::forget(self::cacheKey($ppf, $machineNo));
+        Cache::forget(self::cacheKey($ppf));
     }
 
-    public function getDefectbyCheckTime(int $ppf, string $checkTime, int $selectedMachineNo): array
+    public function getDefectbyCheckTime(int $ppf, string $checkTime): array
     {
         return Defect::where('PPFNo', $ppf)
             ->where('Checktime', $checkTime)
-            ->where('MachineNo', $selectedMachineNo)
             ->get(['Defect', 'Qty'])
             ->map(fn($d) => [
                 'type' => $d->Defect,
@@ -152,11 +150,10 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
             ->all();
     }
 
-    public function getDimensionbyCheckTime(int $ppf, string $checkTime, int $selectedMachineNo): array
+    public function getDimensionbyCheckTime(int $ppf, string $checkTime): array
     {
         $records = MIPIRDimensionMeasure::where('PPFNo', $ppf)
             ->where('Checktime', $checkTime)
-            ->where('MachineNo', $selectedMachineNo)
             ->orderBy('Set')
             ->get(['DimItem', 'Specs', 'Mode', 'Note', 'Judge', 'Set', 'Value1', 'Value2', 'Value3', 'Value4', 'Value5']);
 
@@ -199,11 +196,10 @@ $rows[$item]['measurements'] = array_merge($rows[$item]['measurements'], $values
         return array_values($rows);
     }
 
-    public function getRemarks(int $ppf, string $check, int $selectedMachineNo)
+    public function getRemarks(int $ppf, string $check)
     {
         return ChckTRemarks::where('PPFNo', $ppf)
             ->where('CheckTime', $check)
-            ->where('MachineNo', $selectedMachineNo)
             ->value('Remarks');
     }
 }
