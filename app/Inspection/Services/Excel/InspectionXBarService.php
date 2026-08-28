@@ -58,14 +58,89 @@ class InspectionXBarService
         return $output;
     }
 
-    /**
-     * PhpSpreadsheet's Xlsx reader/writer only round-trips pictures and charts
-     * as drawing objects — plain shapes like straight connector lines
-     * (<xdr:cxnSp>) are silently dropped. This copies those connector blocks
-     * from the original template's drawing XML into the generated file's
-     * drawing XML so the reference lines are preserved.
-     */
-    private function restoreConnectorLines(string $templatePath, string $outputPath): void
+    public function insertHeader(int $ppf, $sheet)
+    {
+        $header = app(ExcelDataRepository::class)->getHeaderforXbar($ppf);
+
+        $sheet->setCellValue('A3', $header['partName']);
+        $sheet->setCellValue('A6', $header['partNo']);
+        $sheet->setCellValue('D3', $header['moldNo']);
+        $sheet->setCellValue('D6', $header['matNo']);
+        $sheet->setCellValue('G3', $header['process']);
+        $sheet->setCellValue('G6', '     ' . str($header['dimItem'])->upper());
+        $sheet->setCellValue('J3', $header['specs']);
+        $sheet->setCellValue('J6', $header['device']);
+        $sheet->setCellValue('N3', '5');
+        $sheet->setCellValue('S3', 'F.MI.E');
+    }
+
+   public function insertMeasurement(int $ppf, $sheet)
+{
+    $repository = app(ExcelDataRepository::class);
+    $measurements = $repository
+        ->getMeasurement($ppf)
+        ->where('Set', 1);
+
+    $groups = $measurements->groupBy(function ($measurement) {
+        return $measurement->ProdLotNo . '|' .
+            $measurement->Checktime;
+    });
+
+    $startColumn = 3; 
+    $columnIndex = 0;
+
+    foreach ($groups as $group) {
+
+        $column = Coordinate::stringFromColumnIndex(
+            $startColumn + $columnIndex
+        );
+
+        $columnIndex++;
+        $firstMeasurement = $group->first();
+
+        $sheet->setCellValue(
+            "{$column}57",
+            $firstMeasurement->ProdLotNo
+        );
+
+        $sheet->setCellValue(
+            "{$column}58",
+            $ppf
+        );
+
+        $sheet->setCellValue(
+            "{$column}59",
+            $firstMeasurement->Checktime
+        );
+        foreach ($group as $measurement) {
+
+            $values = [
+                $measurement->Value1,
+                $measurement->Value2,
+                $measurement->Value3,
+                $measurement->Value4,
+                $measurement->Value5,
+            ];
+
+            $set = (int) $measurement->Set;
+
+            // Set 1 = rows 60-64
+            $startRow = 60 + (($set - 1) * 5);
+
+            foreach ($values as $index => $value) {
+
+                $row = $startRow + $index;
+
+                $sheet->setCellValue(
+                    "{$column}{$row}",
+                    $value
+                );
+            }
+        }
+    }
+}
+
+        private function restoreConnectorLines(string $templatePath, string $outputPath): void
     {
         $templateZip = new ZipArchive();
         if ($templateZip->open($templatePath) !== true) {
@@ -117,92 +192,5 @@ class InspectionXBarService
 
         $outputZip->addFromString('xl/drawings/drawing1.xml', $splicedXml);
         $outputZip->close();
-    }
-
-    public function insertHeader(int $ppf, $sheet)
-    {
-        $header = app(ExcelDataRepository::class)->getHeaderforXbar($ppf);
-
-        $sheet->setCellValue('A3', $header['partName']);
-        $sheet->setCellValue('A6', $header['partNo']);
-        $sheet->setCellValue('D3', $header['moldNo']);
-        $sheet->setCellValue('D6', $header['matNo']);
-        $sheet->setCellValue('G3', $header['process']);
-        $sheet->setCellValue('G6', '     ' . str($header['dimItem'])->upper());
-        $sheet->setCellValue('J3', $header['specs']);
-        $sheet->setCellValue('J6', $header['device']);
-        $sheet->setCellValue('N3', '5');
-        $sheet->setCellValue('S3', 'F.MI.E');
-    }
-
-    public function insertMeasurement(int $ppf, $sheet)
-    {
-        $repository = app(ExcelDataRepository::class);
-
-        $measurements = $repository->getMeasurement($ppf);
-
-        // Group records with the same Lot No and Checktime
-        $groups = $measurements->groupBy(function ($measurement) {
-            return $measurement->ProdLotNo . '|' .
-                $measurement->Checktime;
-        });
-
-        $startColumn = 3; // C
-        $columnIndex = 0;
-
-        foreach ($groups as $group) {
-
-            // C, D, E, F...
-            $column = Coordinate::stringFromColumnIndex(
-                $startColumn + $columnIndex
-            );
-
-            $columnIndex++;
-
-            // Get first record for header information
-            $firstMeasurement = $group->first();
-
-            // Header information
-            $sheet->setCellValue(
-                "{$column}57",
-                $firstMeasurement->ProdLotNo
-            );
-
-            $sheet->setCellValue(
-                "{$column}58",
-                $ppf
-            );
-
-            $sheet->setCellValue(
-                "{$column}59",
-                $firstMeasurement->Checktime
-            );
-
-            // Measurements
-            foreach ($group as $measurement) {
-
-                $values = [
-                    $measurement->Value1,
-                    $measurement->Value2,
-                    $measurement->Value3,
-                    $measurement->Value4,
-                    $measurement->Value5,
-                ];
-
-                $set = (int) $measurement->Set;
-
-                $startRow = 60 + (($set - 1) * 5);
-
-                foreach ($values as $index => $value) {
-
-                    $row = $startRow + $index;
-
-                    $sheet->setCellValue(
-                        "{$column}{$row}",
-                        $value
-                    );
-                }
-            }
-        }
     }
 }

@@ -132,38 +132,4 @@ new class extends \Livewire\Component
             :class="$this->action === 'view' ? 'cursor-not-allowed bg-gray-50' : ''"
             readonly />
     </div>
-<div>
-    <hr class="my-2 border-gray-300">
-</div>
-    {{-- Header --}}
-    <div class="flex items-center gap-3 mt-6 mb-6">
-        <div class="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center shrink-0">
-            <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round"
-                    d="M3 7h18M3 7v10h18V7M7 7v3m4-3v3m4-3v3m4-3v3M6 17v-4h12v4" />
-            </svg>
-        </div>
-        <div>
-            <h2 class="text-lg font-semibold text-gray-900">Measuring Device</h2>
-            <p class="text-sm text-gray-500">Enter the measuring device</p>
-        </div>
-    </div>
-
-    <div class="space-y-4 @if($action === 'view' || $action === 'delete') opacity-50 cursor-not-allowed @endif">
-        <div>
-            <x-ui.input-field
-                id="device"
-                label="Measuring Device"
-                type="text"
-                wire:model="device"
-                wire:blur="syncDraft"
-                placeholder="Enter production measuring device."
-                :disabled="$this->action === 'view'"
-                :class="$errors->has('device') ? 'border-red-400 ring-1 ring-red-300' : ($this->action === 'view' ? 'cursor-not-allowed bg-gray-50' : '')" />
-            @error('device')
-            <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p>
-            @enderror
-        </div>
-
-    </div>
 </div>

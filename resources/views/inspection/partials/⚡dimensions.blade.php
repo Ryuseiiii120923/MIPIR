@@ -47,6 +47,23 @@ new class extends Component
                 'device' => ''
             ],
             [
+                'item' => '',
+                'editable' => true,
+                'specification' => '',
+                'CL' => '',
+                'judge' => '',
+                'measurements' => [],
+                'mode' => null,
+                'sets' => null,
+                'revealed' => false,
+                'specType' => null,
+                'specNominal' => '',
+                'specTolerance' => '',
+                'specUpper' => '',
+                'specLower' => '',
+                'device' => ''
+            ],
+            [
                 'item' => 'Flash Thickness',
                 'editable' => false,
                 'specification' => '',
@@ -137,6 +154,16 @@ new class extends Component
         foreach ($this->rows as $i => $row) {
             if (!$row['editable']) {
                 $this->applyMasterSpecification($i, $repo->getMasterSpecification($this->partNo, $row['item']));
+                continue;
+            }
+
+            // Editable row already has an item name (loaded from saved data)
+            // but no spec resolved yet — fetch it now instead of waiting for blur.
+            if (trim($row['item'] ?? '') !== '' && empty($row['specType'])) {
+                $master = $repo->getMasterSpecification($this->partNo, $row['item'])
+                    ?? $repo->getTempMaster($this->partNo, $row['item']);
+
+                $this->applyMasterSpecification($i, $master);
             }
         }
     }
@@ -171,9 +198,9 @@ new class extends Component
         $this->syncToParent();
     }
 
-    public function initItem(): void
+    public function initItem(int $i = 0): void
     {
-        $itemName = trim($this->rows[0]['item'] ?? '');
+        $itemName = trim($this->rows[$i]['item'] ?? '');
 
         if ($itemName === '') {
             return;
@@ -181,14 +208,12 @@ new class extends Component
 
         $master = app(DimensionMasterRepositoryInterface::class)
             ->getMasterSpecification($this->partNo, $itemName);
-        
-        if($master === null){
-             $master = app(DimensionMasterRepositoryInterface::class)->
-                getTempMaster($this->partNo, $itemName);
+
+        if ($master === null) {
+            $master = app(DimensionMasterRepositoryInterface::class)->getTempMaster($this->partNo, $itemName);
         }
-        
-            
-        $this->applyMasterSpecification(0, $master);
+
+        $this->applyMasterSpecification($i, $master);
         $this->syncToParent();
     }
     // ------------------------------------------------------------------
@@ -204,6 +229,7 @@ new class extends Component
         $this->activeModalIndex = $index;
         $this->modalStep = 'choose';
         $this->pendingSets = 1;
+        $this->initItem();
     }
 
     public function closeDimensionModal(): void
@@ -281,6 +307,27 @@ new class extends Component
 
         $this->evaluateRow($i);
     }
+
+    public function AddNewDimension()
+    {
+        $this->rows[] = [
+            'item' => '',
+            'editable' => true,
+            'specification' => '',
+            'CL' => '',
+            'judge' => '',
+            'measurements' => [],
+            'mode' => null,
+            'sets' => null,
+            'revealed' => false,
+            'specType' => null,
+            'specNominal' => '',
+            'specTolerance' => '',
+            'specUpper' => '',
+            'specLower' => '',
+            'device' => ''
+        ];
+    }
 }
 ?>
 
@@ -305,6 +352,20 @@ new class extends Component
     <div class="bg-gray-700 w-full">
         <p class="text-4xl font-extrabold text-center text-white p-4 mt-4">Dimensions</p>
     </div>
+
+    <div class="mt-3">
+        <button
+            type="button"
+            wire:click="AddNewDimension"
+            @if($readonly) disabled @endif
+            class="p-3 rounded-xl bg-green-700 text-md text-white
+               hover:bg-green-600
+               transition-colors duration-200
+               flex items-center gap-1">
+            Add New Dimension
+        </button>
+    </div>
+
 
     <div class="w-full mx-auto mt-3 @if($readonly) opacity-50 cursor-not-allowed @endif">
         @foreach ($rows as $i => $row)
@@ -360,7 +421,7 @@ new class extends Component
                         <label class="text-sm font-medium block mb-1.5">Item</label>
                         @if ($row['editable'])
                         <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.item"
-                            wire:blur="initItem"
+                            wire:blur="initItem({{ $i }})"
                             list="item-suggestions"
                             class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2"
                             placeholder="Enter item"

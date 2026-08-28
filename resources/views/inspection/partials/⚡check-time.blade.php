@@ -36,7 +36,7 @@ new class extends \Livewire\Component
     {
         $this->validate();
 
-        $newCheckTime = $this->resolveCheckTimeLabel($this->checkTime);
+        $newCheckTime = $this->resolveCheckTimeLabel(str($this->checkTime)->upper());
 
         $this->checkTimes[] = $newCheckTime;
         $this->dateEncodeByTime[$newCheckTime] = now()->toDateTimeString();
@@ -222,14 +222,7 @@ new class extends \Livewire\Component
         <div class="@if($this->ppf === 0 || $this->action === 'view') cursor-not-allowed @endif">
             <label for="checkTime" class="block text-sm font-medium text-gray-700 mb-1.5">Check Time</label>
             <div class="flex justify-center gap-2">
-                <select @if($action==='view' || $action==='delete' ) disabled @endif name="checkTime" wire:model="checkTime" @if($this->ppf === 0) disabled @endif class="border rounded p-2">
-                    <option value="">-- Choose Check time --</option>
-                    <option value="F">F</option>
-                    <option value="MI">MI</option>
-                    <option value="E">E</option>
-                    <option value="CS">CS</option>
-                    <option value="CA">CA</option>
-                </select>
+                <input placeholder="Enter Check Time" @if($action==='view' || $action==='delete' ) disabled @endif name="checkTime" wire:model="checkTime" @if($this->ppf === 0) disabled @endif class="border rounded p-2">
             </div>
             <div class="flex flex-col justify-center items-center mt-2">
                 <button

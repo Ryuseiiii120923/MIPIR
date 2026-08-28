@@ -17,10 +17,10 @@ new class extends Component
     public int $selectedPpf = 0;
     public string $selectedMachine;
 
-    public function mount(string $selectedMachine)
-    {
-        $this->selectedMachine = $selectedMachine;
-    }
+    // public function mount(string $selectedMachine)
+    // {
+    //     $this->selectedMachine = $selectedMachine;
+    // }
 
     public function setAction(string $action): void
     {
@@ -144,7 +144,8 @@ new class extends Component
     <div class="mt-4">
         <livewire:inspection::partials.check-time :selectedMachineNo="$selectedMachine" />
     </div>
-    <div class="mt-4">
+    <div class="mt-4 flex flex-row gap-5 justify-between">
+        <livewire:inspection::partials.specs-control-limit />
         <livewire:inspection::partials.judgement :selectedMachineNo="$selectedMachine" />
     </div>
 
