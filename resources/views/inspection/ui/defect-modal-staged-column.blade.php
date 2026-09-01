@@ -25,6 +25,13 @@ new class extends Component
                     <span class="text-sm font-semibold text-gray-800">{{ $stage['type'] }}</span>
                     <span class="text-xs bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded-full">qty: {{ $stage['qty'] }}</span>
                 </div>
+                @if(count($stage['smallDefects'] ?? []) > 0)
+                <div class="mt-1 flex flex-wrap gap-1">
+                    @foreach($stage['smallDefects'] as $ss)
+                    <span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">↳ {{ $ss['type'] }}: {{ $ss['qty'] }}</span>
+                    @endforeach
+                </div>
+                @endif
             </div>
             <div class="flex flex-col gap-1 shrink-0">
                 <button
@@ -35,7 +42,7 @@ new class extends Component
                 </button>
                 <button
                     type="button"
-                    wire:click="deleteDefect('{{ $stage['type'] }}')"
+                    wire:click="removeStagedDefect('{{ $stage['type'] }}')"
                     class="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50 transition">
                     ✕
                 </button>

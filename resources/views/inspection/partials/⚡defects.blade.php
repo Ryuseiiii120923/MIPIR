@@ -19,6 +19,7 @@ new class extends Component
     // Defect data
     public Collection $largeDefectMaster;
     public array $defects = [];
+    public array $smallDefects = [];
     public array $staged = [];
 
 
@@ -30,15 +31,20 @@ new class extends Component
     // Modal
     public ?string $modalSelectedType = null;
     public string $modalLargeQty = '';
+    public array $modalSmallDefects = [];
 
     // Inline editing
     public ?string $editingType = null;
+    public ?string $editingLarge = null;
+    public ?string $editingTypeSmall = null;
 
     #[Validate(
         'required|numeric|min:1',
         message: 'Please enter a quantity.'
     )]
     public string $newQuan = '';
+
+    public string $newSmallQuan = '';
 
     // Summary
     public int $totalNg = 0;
@@ -64,6 +70,7 @@ new class extends Component
         ?string $dispatchPrefix = null,
         ?string $selectedCheckTime = null,
         array $loadedDefects = [],
+        array $loadedSmallDefects = [],
         string $action = '',
         array $fromMaster = []
     ): void {
@@ -80,7 +87,7 @@ new class extends Component
 
         $this->largeDefectMaster = $repository->getLargeDefects();
 
-        $this->loadDefects($loadedDefects);
+        $this->loadDefects($loadedDefects, $loadedSmallDefects);
     }
 
 
@@ -101,6 +108,15 @@ new class extends Component
     {
         $this->defects = $data['defects'] ?? [];
 
+        $this->smallDefects = collect($data['smallDefects'] ?? [])
+            ->map(fn($items) => collect($items)
+                ->map(fn($item) => [
+                    'type' => $item['type'] ?? null,
+                    'qty'  => $item['qty']  ?? '',
+                ])
+                ->toArray())
+            ->toArray();
+
         $this->updateTotalNg();
         $this->computeAndjudge();
         $this->syncToParent();
@@ -117,13 +133,14 @@ new class extends Component
         }
 
         $this->defects = [];
+        $this->smallDefects = [];
         $this->totalNg = 0;
 
         $this->computeAndjudge();
         $this->syncToParent();
     }
 
-    
+
 
 
     /*
@@ -144,6 +161,12 @@ new class extends Component
 
         $this->modalSelectedType = $type;
         $this->modalLargeQty = '';
+
+        $this->modalSmallDefects = $this->repository()
+            ->getSmallDefectsFor($type)
+            ->map(fn($s) => ['type' => $s->SmallDefect, 'qty' => ''])
+            ->values()
+            ->toArray();
 
         $this->loadModalQuantity($type);
     }
@@ -177,12 +200,12 @@ new class extends Component
         $result = $this->stagingService()->buildStagedEntry(
             $this->modalSelectedType,
             (int) $this->modalLargeQty,
-            []
+            $this->modalSmallDefects
         );
 
         if (! $result['ok']) {
             $this->addError(
-                'modalLargeQty',
+                'modalSmallDefects',
                 $result['error']
             );
 
@@ -254,7 +277,10 @@ new class extends Component
             $this->staged[] = [
                 'type' => $type,
                 'qty' => (int) ($defect['qty'] ?? 0),
-                'smallDefects' => [],
+                'smallDefects' => collect($this->smallDefects[$type] ?? [])
+                    ->map(fn($s) => ['type' => $s['type'], 'qty' => (int) ($s['qty'] ?? 0)])
+                    ->values()
+                    ->toArray(),
             ];
         }
     }
@@ -283,12 +309,13 @@ new class extends Component
         $result = $this->stagingService()
             ->updateLargeDefectQty(
                 $this->defects,
-                [],
+                $this->smallDefects,
                 $this->editingType,
                 (float) $this->newQuan
             );
 
         $this->defects = $result['defects'];
+        $this->smallDefects = $result['smallDefects'];
 
         $this->updateTotalNg();
         $this->computeAndjudge();
@@ -301,7 +328,8 @@ new class extends Component
                     'qty' => $this->newQuan,
                 ],
             ],
-            'update'
+            'update',
+            $this->smallDefects
         );
 
         $this->resetEditingState();
@@ -319,16 +347,18 @@ new class extends Component
         $result = $this->stagingService()
             ->removeDefect(
                 $this->defects,
+                $this->smallDefects,
                 $type
             );
 
         $this->defects = $result['defects'];
+        $this->smallDefects = $result['smallDefects'];
 
-            $this->staged = $this->stagingService()
-        ->removeStagedDefect(
-            $this->staged,
-            $type
-        );
+        $this->staged = $this->stagingService()
+            ->removeStagedDefect(
+                $this->staged,
+                $type
+            );
 
         $this->updateTotalNg();
         $this->computeAndjudge();
@@ -341,7 +371,8 @@ new class extends Component
                     'qty' => 0,
                 ],
             ],
-            'delete'
+            'delete',
+            $this->smallDefects
         );
 
         $this->dispatch(
@@ -351,6 +382,67 @@ new class extends Component
         );
 
         $this->broadcastNg();
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Inline Edit / Delete — Small Defects
+    |--------------------------------------------------------------------------
+    */
+
+    public function startEditSmallDefect(string $largeType, string $smallType): void
+    {
+        $this->editingLarge = $largeType;
+        $this->editingTypeSmall = $smallType;
+
+        $small = collect($this->smallDefects[$largeType] ?? [])
+            ->first(fn($s) => strtolower(trim($s['type'])) === strtolower(trim($smallType)));
+
+        $this->newSmallQuan = $small ? (string) $small['qty'] : '';
+    }
+
+    public function updateSmallDefect(): void
+    {
+        $this->smallDefects = $this->stagingService()
+            ->updateSmallDefectQty(
+                $this->smallDefects,
+                $this->defects,
+                $this->editingLarge,
+                $this->editingTypeSmall,
+                (float) $this->newSmallQuan
+            );
+
+        $this->dispatchDefectUpdate(
+            $this->defects,
+            'update',
+            $this->smallDefects
+        );
+
+        $this->resetSmallEditingState();
+    }
+
+    public function deleteSmallDefect(string $largeType, string $smallType): void
+    {
+        $this->smallDefects = $this->stagingService()
+            ->removeSmallDefect(
+                $this->smallDefects,
+                $largeType,
+                $smallType
+            );
+
+        $this->dispatchDefectUpdate(
+            $this->defects,
+            'delete',
+            $this->smallDefects
+        );
+
+        $this->dispatch(
+            'NeedToDeleteSmall',
+            selectedCheckTime: $this->selectedCheckTime,
+            type: $smallType,
+            largeDefect: $largeType
+        );
     }
 
 
@@ -450,7 +542,7 @@ new class extends Component
             ->buildStagedEntry(
                 $type,
                 (int) $this->modalLargeQty,
-                []
+                $this->modalSmallDefects
             );
 
         if (! $result['ok']) {
@@ -477,11 +569,12 @@ new class extends Component
             ->mergeStagedIntoDefects(
                 $this->staged,
                 $this->defects,
-                [],
+                $this->smallDefects,
                 $this->largeDefectMaster
             );
 
         $this->defects = $merged['defects'];
+        $this->smallDefects = $merged['smallDefects'];
 
         $this->updateTotalNg();
         $this->computeAndjudge();
@@ -489,7 +582,8 @@ new class extends Component
 
         $this->dispatchDefectUpdate(
             $this->defects,
-            'add'
+            'add',
+            $this->smallDefects
         );
 
         $this->broadcastNg();
@@ -517,6 +611,7 @@ new class extends Component
             'defects-synced',
             selectedCheckTime: $this->selectedCheckTime,
             defects: $this->defects,
+            smallDefects: $this->smallDefects,
             ngpercent: $this->ngpercent,
             judgement: $this->judgement
         );
@@ -549,11 +644,13 @@ new class extends Component
 
     private function dispatchDefectUpdate(
         array $defects,
-        string $action
+        string $action,
+        array $smallDefects = []
     ): void {
         $this->dispatch(
             $this->dispatchPrefix . '.defects-updated',
             defects: $defects,
+            smallDefects: $smallDefects,
             selectedCheckTime: $this->selectedCheckTime,
             action: $action
         );
@@ -570,12 +667,20 @@ new class extends Component
     {
         $this->modalSelectedType = null;
         $this->modalLargeQty = '';
+        $this->modalSmallDefects = [];
     }
 
     private function resetEditingState(): void
     {
         $this->editingType = null;
         $this->newQuan = '';
+    }
+
+    private function resetSmallEditingState(): void
+    {
+        $this->editingLarge = null;
+        $this->editingTypeSmall = null;
+        $this->newSmallQuan = '';
     }
 
     private function resetDefectState(): void
@@ -614,6 +719,15 @@ new class extends Component
 
         $this->modalLargeQty = (string) $entry['qty'];
 
+        foreach ($this->modalSmallDefects as &$small) {
+            $saved = collect($entry['smallDefects'] ?? [])->firstWhere('type', $small['type']);
+
+            if ($saved) {
+                $small['qty'] = $saved['qty'];
+            }
+        }
+        unset($small);
+
         return true;
     }
 
@@ -625,6 +739,17 @@ new class extends Component
         if ($defect) {
             $this->modalLargeQty = (string) $defect['qty'];
         }
+
+        if (isset($this->smallDefects[$type])) {
+            foreach ($this->modalSmallDefects as &$small) {
+                $saved = collect($this->smallDefects[$type])->firstWhere('type', $small['type']);
+
+                if ($saved) {
+                    $small['qty'] = $saved['qty'];
+                }
+            }
+            unset($small);
+        }
     }
 
 
@@ -634,9 +759,10 @@ new class extends Component
     |--------------------------------------------------------------------------
     */
 
-    private function loadDefects(array $defects): void
+    private function loadDefects(array $defects, array $smallDefects = []): void
     {
         $this->defects = $defects;
+        $this->smallDefects = $smallDefects;
 
         $this->updateTotalNg();
     }
@@ -647,6 +773,11 @@ new class extends Component
     | Services
     |--------------------------------------------------------------------------
     */
+
+    private function repository(): DefectRepository
+    {
+        return app(DefectRepository::class);
+    }
 
     private function stagingService(): DefectStagingService
     {

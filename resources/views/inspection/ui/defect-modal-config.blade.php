@@ -8,8 +8,8 @@ new class extends Component
 };
 ?>
 
-{{-- Column 3: qty for the currently selected large defect.
-     Expects: $modalSelectedType, $modalLargeQty --}}
+{{-- Column 3: qty + small defects for the currently selected large defect.
+     Expects: $modalSelectedType, $modalLargeQty, $modalSmallDefects --}}
 <div class="w-1/3 px-4 py-4 flex flex-col gap-3 h-full">
     @if($modalSelectedType)
         <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest shrink-0">
@@ -26,7 +26,7 @@ new class extends Component
 
         {{-- Scrollable content area --}}
         <div class="flex-1 min-h-0 overflow-y-auto flex flex-col gap-3">
-            {{-- Defect qty --}}
+            {{-- Large defect qty --}}
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-1">
                     Quantity for <span class="text-blue-600">{{ $modalSelectedType }}</span>
@@ -41,6 +41,39 @@ new class extends Component
                 <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
                 @enderror
             </div>
+
+            {{-- Small defects --}}
+            @if($modalSmallDefects && count($modalSmallDefects) > 0)
+            <div class="flex flex-col gap-2">
+                <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+                    Small Defects <span class="normal-case font-normal">(optional)</span>
+                </p>
+                @foreach($modalSmallDefects as $index => $small)
+                <div class="flex items-center gap-3 bg-white border border-gray-200 rounded-lg px-3 py-2"
+                    wire:key="modal-small-{{ $index }}">
+                    <span class="flex-1 text-sm text-gray-700">{{ $small['type'] }}</span>
+                    <input
+                        type="number"
+                        min="0"
+                        wire:model="modalSmallDefects.{{ $index }}.qty"
+                        class="w-16 border border-gray-300 rounded-md px-2 py-1 text-sm text-gray-900 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                        placeholder="Qty">
+                </div>
+                @endforeach
+
+                {{-- Live small total indicator --}}
+                <div class="text-right text-xs text-gray-500">
+                    Small total:
+                    <span class="font-semibold {{ collect($modalSmallDefects)->sum(fn($s) => (int)($s['qty'] ?: 0)) > (int)($modalLargeQty ?: 0) ? 'text-red-500' : 'text-green-600' }}">
+                        {{ collect($modalSmallDefects)->sum(fn($s) => (int)($s['qty'] ?: 0)) }}
+                    </span>
+                    / {{ $modalLargeQty ?: '—' }}
+                </div>
+                @error('modalSmallDefects')
+                <p class="text-red-500 text-sm">{{ $message }}</p>
+                @enderror
+            </div>
+            @endif
         </div>
 
     @else

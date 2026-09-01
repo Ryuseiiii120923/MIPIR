@@ -17,7 +17,7 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
 {
     public function getPartNoMoldNo(int $ppf): ?Molding
     {
-        return Molding::select('品番 as PartNo', '金型NO as MoldNo')->where('流動NO', $ppf)->first();
+        return Molding::select('品番 as PartNo', '金型NO as MoldNo', 'PRESS_NO')->where('流動NO', $ppf)->first();
     }
 
     public function getCavity(string $partNo): ?int

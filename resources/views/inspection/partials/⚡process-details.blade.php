@@ -59,10 +59,10 @@ new class extends \Livewire\Component
         $this->syncDraft();
     }
 
-    #[On('machine-selected')]
-    public function machineSelected(int $machine)
+    #[On('fetchMachine')]
+    public function machineSelected(int $machineNo)
     {
-        $this->machineNo = $machine;
+        $this->machineNo = $machineNo;
     }
 
     #[On('field-error')]

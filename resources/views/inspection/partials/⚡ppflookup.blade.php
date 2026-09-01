@@ -21,6 +21,7 @@ new class extends Component
     public bool $found = false;
     public bool $searching = false;
     public string $action = '';
+    public int $machineNo;
 
     #[On('lookup_ppf')]
     public function lookup(string $ppf = ''): void
@@ -83,6 +84,7 @@ new class extends Component
         $this->moldingDieNo = $result['moldNo'];
         $this->noOfCavity = $result['noOfCavity'];
         $this->nqrIssuanceCriteria = $result['nqr'];
+        $this->machineNo = $result['machineNo'];
         $this->found = true;
 
         // Notify other components only after PPF was found.
@@ -92,6 +94,8 @@ new class extends Component
             'fetchPartNo',
             partNo: $this->partNumber
         );
+
+        $this->dispatch('fetchMachine', machineNo: $this->machineNo);
 
         $this->dispatch('fromMaster', [
             'noOfCavity' => $this->noOfCavity,

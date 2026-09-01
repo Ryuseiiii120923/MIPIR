@@ -26,6 +26,7 @@ class PpfLookUpService{
         return[
             'partNo' => $result->PartNo,
             'moldNo' => $result->MoldNo,
+            'machineNo' => $result->PRESS_NO,
             'noOfCavity' => $cavities,
             'nqr' => round($nqr->nqrCriteria,2)
         ];

@@ -128,10 +128,12 @@ class DefectStagingService
         return ['defects' => $defects, 'smallDefects' => $smallDefects];
     }
 
-    public function removeDefect(array $defects, string $type): array
+   public function removeDefect(array $defects, array $smallDefects, string $type): array
     {
         $defects = collect($defects)->reject(fn($d) => $d['type'] === $type)->values()->toArray();
-        return ['defects' => $defects];
+        unset($smallDefects[$type]);
+
+        return ['defects' => $defects, 'smallDefects' => $smallDefects];
     }
 
     public function removeSmallDefect(array $smallDefects, string $largeDefect, string $type): array
