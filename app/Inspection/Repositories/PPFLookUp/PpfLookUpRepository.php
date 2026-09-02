@@ -10,6 +10,7 @@ use App\Inspection\Models\CheckTime;
 use App\Inspection\Models\Defect;
 use App\Inspection\Models\MIPIRDimensionMeasure;
 use App\Inspection\Models\MIPIRInspectionRecord;
+use App\Inspection\Models\SmallDefect;
 use App\Inspection\Repositories\Contracts\PpfLookUpRepositoryInterface;
 use Illuminate\Support\Facades\Cache;
 
@@ -55,7 +56,7 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
                 'MachineNo'
             ])
             ->where('InspectBy', $encoder)
-            
+
             ->when($search !== '', function ($query) use ($search) {
                 $query->where('PPFNo', 'like', "%{$search}%");
             })
@@ -64,7 +65,7 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
                 MIPIRInspectionRecord::query()
                     ->selectRaw('MAX(RECNO)')
                     ->where('InspectBy', $encoder)
-                    
+
                     ->groupBy('PPFNo')
             )
             ->orderByDesc('DateJudge')
@@ -97,7 +98,7 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
 
 
 
-      public static function cacheKey(int $ppf): string
+    public static function cacheKey(int $ppf): string
     {
         return "ppf-main-data:{$ppf}";
     }
@@ -144,9 +145,25 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
             ->where('Checktime', $checkTime)
             ->get(['Defect', 'Qty'])
             ->map(fn($d) => [
-                'type' => $d->Defect,
-                'qty' => $d->Qty,
+                'type' => trim($d->Defect),
+                'qty'  => $d->Qty,
             ])
+            ->all();
+    }
+
+    public function getSmallDefectbyCheckTime(int $ppf, string $checkTime): array
+    {
+        return SmallDefect::where('PPFNo', $ppf)
+            ->where('Checktime', $checkTime)
+            ->get(['largeDefect', 'smallDefect', 'qty'])
+            ->groupBy(fn($d) => trim($d->largeDefect))
+            ->map(fn($group) => $group
+                ->map(fn($d) => [
+                    'type' => trim($d->smallDefect),
+                    'qty'  => $d->qty,
+                ])
+                ->values()
+                ->all())
             ->all();
     }
 
@@ -172,20 +189,20 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
                 continue;
             }
 
-          if (!isset($rows[$item]['measurements'])) {
-    $rows[$item] = array_merge($rows[$item] ?? [], [
-        'item' => $item,
-        'editable' => !in_array($item, ['Flash Thickness', 'Gap-Offset'], true),
-        'specification' => $d->Specs,
-        'CL' => $d->Note,
-        'mode' => $d->Mode,
-        'judge' => $d->Judge === 1 ? 'X' : 'O',
-        'measurements' => [],
-        'revealed' => true,
-    ]);
-}
+            if (!isset($rows[$item]['measurements'])) {
+                $rows[$item] = array_merge($rows[$item] ?? [], [
+                    'item' => $item,
+                    'editable' => !in_array($item, ['Flash Thickness', 'Gap-Offset'], true),
+                    'specification' => $d->Specs,
+                    'CL' => $d->Note,
+                    'mode' => $d->Mode,
+                    'judge' => $d->Judge === 1 ? 'X' : 'O',
+                    'measurements' => [],
+                    'revealed' => true,
+                ]);
+            }
 
-$rows[$item]['measurements'] = array_merge($rows[$item]['measurements'], $values);
+            $rows[$item]['measurements'] = array_merge($rows[$item]['measurements'], $values);
         }
 
         // Now that all sets are merged, compute the sets count per item

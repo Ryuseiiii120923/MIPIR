@@ -1,0 +1,31 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::connection('mipirDB')->create('tblSmallDefect', function (Blueprint $table) {
+            $table->id('RECNO')->primary();
+            $table->integer('PPFNo');
+            $table->text('Checktime');
+            $table->text('largeDefect');
+            $table->text('smallDefect');
+            $table->integer('qty');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('tblSmallDefect');
+    }
+};

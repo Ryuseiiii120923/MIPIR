@@ -2,6 +2,7 @@
 
 namespace App\Inspection\Actions;
 
+use App\Inspection\Repositories\MIPIRInspectionReporsitory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -15,6 +16,7 @@ class CreateInspection
         $checkTimes = $draft['check-time']['check-time'] ?? [];
         $dateEncodeCheck = $draft['check-time']['date-encode'] ?? [];
         $defects = $draft['defects']['defects'] ?? [];
+        $smallDefects = $draft['defects']['smallDefects'] ?? [];
         $ngpercent = $draft['defects']['ngPercent'] ?? null;
         $defectJudge = $draft['defects']['judgement'] ?? null;
         $dimensions = $draft['dimensions'] ?? [];
@@ -22,7 +24,6 @@ class CreateInspection
         $processDetails = $draft['process-details'] ?? null;
         $remarks = $draft['remarks'] ?? [];
         $dateJudge = $draft['judgement']['dateOfJudge'] ?? null;
-        
 
         if (empty($processDetails['productionLotNo']) || empty($processDetails['machineNo'])) {
             throw new \InvalidArgumentException('Process details are required to create an inspection.');
@@ -32,7 +33,7 @@ class CreateInspection
             throw new \InvalidArgumentException('At least one check time is required to create an inspection.');
         }
 
-        DB::transaction(function () use ($dateEncodeCheck, $defectJudge, $ngpercent, $ppf, $ppfLookUp, $checkTimes, $defects, $dimensions, $judgment, $processDetails, $remarks) {
+        DB::transaction(function () use ($dateEncodeCheck, $defectJudge, $ngpercent, $ppf, $ppfLookUp, $checkTimes, $defects, $dimensions, $judgment, $processDetails, $remarks, $smallDefects) {
             foreach ($checkTimes as $checkTime) {
                 app(CreateInspectionService::class)->createInspectionRecord([
                     'PPFNo' => $ppf,
@@ -66,7 +67,6 @@ class CreateInspection
                 ]);
 
                 $defectsForThisTime = $defects[$checkTime] ?? [];
-
                 foreach ($defectsForThisTime as $defect) {
                     app(CreateInspectionService::class)->createDefect([
                         'PPFNo' => $ppf,
@@ -80,6 +80,16 @@ class CreateInspection
                         'Judgement' => $defectJudge === 'X' ? 1 : 0,
                         'NGPercent' => $ngpercent[$checkTime]
                     ]);
+                      $smallDefectForThisTime = $smallDefects[$checkTime][$defect['type']] ?? [];
+                    foreach($smallDefectForThisTime as $small){
+                        app(MIPIRInspectionReporsitory::class)->createSmall([
+                            'PPFNo' => $ppf,
+                            'Checktime' => $checkTime,
+                            'largeDefect' => $defect['type'],
+                            'smallDefect' => $small['type'],
+                            'qty' => $small['qty']
+                        ]);
+                    }
                 }
 
                 $rowsForThisTime = $dimensions[$checkTime] ?? [];

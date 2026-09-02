@@ -73,7 +73,6 @@ class DefectStagingService
             ->reject(fn($e) => $e['type'] === $type)
             ->values()
             ->toArray();
-        
     }
 
     public function largeDefectExists(string $type, Collection $largeDefects): bool
@@ -91,20 +90,20 @@ class DefectStagingService
     public function mergeStagedIntoDefects(array $stagedDefects, array $defects, array $smallDefects, Collection $largeDefects): array
     {
         foreach ($stagedDefects as $entry) {
-            $largeType = $entry['type'];
+            $largeType = trim($entry['type']);
             $largeQty  = (int) $entry['qty'];
 
             if (!$this->largeDefectExists($largeType, $largeDefects)) {
                 continue;
             }
 
-            $normalized    = strtolower(trim($largeType));
+            $normalized    = strtolower($largeType);
             $existingIndex = collect($defects)->search(fn($d) => strtolower(trim($d['type'])) === $normalized);
 
             if ($existingIndex !== false) {
                 $defects[$existingIndex]['qty'] = $largeQty;
             } else {
-                $defects[] = ['type' => trim($largeType), 'category' => 'large', 'qty' => $largeQty];
+                $defects[] = ['type' => $largeType, 'category' => 'large', 'qty' => $largeQty];
             }
 
             if (!isset($smallDefects[$largeType])) {
@@ -128,7 +127,7 @@ class DefectStagingService
         return ['defects' => $defects, 'smallDefects' => $smallDefects];
     }
 
-   public function removeDefect(array $defects, array $smallDefects, string $type): array
+    public function removeDefect(array $defects, array $smallDefects, string $type): array
     {
         $defects = collect($defects)->reject(fn($d) => $d['type'] === $type)->values()->toArray();
         unset($smallDefects[$type]);

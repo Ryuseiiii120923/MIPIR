@@ -11,5 +11,6 @@
             x-transition:enter-end="opacity-100 translate-y-0">
             <livewire:inspection::encodingPage />
         </div>
+        
     </div>
 </x-layouts.app>

@@ -15,6 +15,7 @@ new class extends \Livewire\Component
 
     public ?string $selectedCheckTime = null;
     public array $defectsByTime = [];
+    public array $smallDefectsByTime = [];
     public array $ngpercentByTime = [];
     public array $judgementByTime = [];
     public array $dimensionsByTime = [];
@@ -79,6 +80,7 @@ new class extends \Livewire\Component
 
         app(DraftAction::class)->put($this->ppf, 'defects', [
             'defects'    => $this->defectsByTime,
+            'smallDefects' => $this->smallDefectsByTime,
             'ngPercent'  => $this->ngpercentByTime,
             'judgement'  => $this->judgementByTime,
         ]);
@@ -111,11 +113,12 @@ new class extends \Livewire\Component
     
 
     #[On('defects-synced')]
-    public function onDefectsSynced(string $selectedCheckTime, array $defects, float $ngpercent, string $judgement): void
+    public function onDefectsSynced(string $selectedCheckTime, array $defects, float $ngpercent, string $judgement, array $smallDefects): void
     {
         $this->defectsByTime[$selectedCheckTime] = $defects;
         $this->ngpercentByTime[$selectedCheckTime] = $ngpercent;
         $this->judgementByTime[$selectedCheckTime] = $judgement;
+        $this->smallDefectsByTime[$selectedCheckTime] = $smallDefects;
         $this->syncDraft();
     }
 
@@ -166,6 +169,7 @@ new class extends \Livewire\Component
 
             foreach ($this->checkTimes as $time) {
                 $this->defectsByTime[$time] = app(PpfLookUpRepository::class)->getDefectbyCheckTime($ppf, $time);
+                $this->smallDefectsByTime[$time] = app(PpfLookUpRepository::class)->getSmallDefectbyCheckTime($ppf, $time);
                 $this->dimensionsByTime[$time] = app(PpfLookUpRepository::class)
                     ->getDimensionbyCheckTime($ppf, $time);
                 $this->remarksByTime[$time] = app(PpfLookUpRepository::class)->getRemarks($ppf, $time);
@@ -283,6 +287,7 @@ new class extends \Livewire\Component
         :key="'defects-' . $selectedCheckTime"
         :selectedCheckTime="$selectedCheckTime"
         :loaded-defects="$defectsByTime[$selectedCheckTime] ?? []"
+        :loaded-small-defects="$smallDefectsByTime[$selectedCheckTime] ?? []"
         :action="$action"
         :fromMaster="$dataFromMaster" />
 

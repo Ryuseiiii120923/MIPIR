@@ -7,6 +7,7 @@ use App\Inspection\Models\CheckTime;
 use App\Inspection\Models\Defect;
 use App\Inspection\Models\MIPIRDimensionMeasure;
 use App\Inspection\Models\MIPIRInspectionRecord;
+use App\Inspection\Models\SmallDefect;
 use Illuminate\Support\Facades\DB;
 
 class UpdateInspection
@@ -32,7 +33,7 @@ class UpdateInspection
             CheckTime::where('PPFNo', $ppfno)->delete();
 
             ChckTRemarks::where('PPFNo', $ppfno)->delete();
-
+            SmallDefect::where('PPFNo', $ppfno)->delete();
             app(CreateInspection::class)->execute($ppfno, $draft);
         });
     }

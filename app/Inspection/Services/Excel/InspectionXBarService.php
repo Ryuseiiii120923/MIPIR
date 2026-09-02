@@ -21,7 +21,8 @@ class InspectionXBarService
         $sheet = $spreadsheet->getSheet(0);
 
         $this->insertHeader($ppf, $sheet);
-        $this->insertMeasurement($ppf, $sheet);
+        $partNos = ['Y578D01802B', 'Y578D01802C'];
+        $this->insertMeasurement($partNos, $sheet);
 
         foreach ($sheet->getChartCollection() as $chart) {
             $axisY = $chart->getChartAxisY();
@@ -74,73 +75,74 @@ class InspectionXBarService
         $sheet->setCellValue('S3', 'F.MI.E');
     }
 
-   public function insertMeasurement(int $ppf, $sheet)
-{
-    $repository = app(ExcelDataRepository::class);
-    $measurements = $repository
-        ->getMeasurement($ppf)
-        ->where('Set', 1);
+    public function insertMeasurement(array $partNos, $sheet)
+    {
+        
+        $repository = app(ExcelDataRepository::class);
+        $measurements = $repository
+            ->getMeasurement($partNos)
+            ->where('Set', 1);
 
-    $groups = $measurements->groupBy(function ($measurement) {
-        return $measurement->ProdLotNo . '|' .
-            $measurement->Checktime;
-    });
+        $groups = $measurements->groupBy(function ($measurement) {
+            return $measurement->ProdLotNo . '|' .
+                $measurement->Checktime;
+        });
 
-    $startColumn = 3; 
-    $columnIndex = 0;
+        $startColumn = 3;
+        $columnIndex = 0;
 
-    foreach ($groups as $group) {
+        foreach ($groups as $group) {
 
-        $column = Coordinate::stringFromColumnIndex(
-            $startColumn + $columnIndex
-        );
+            $column = Coordinate::stringFromColumnIndex(
+                $startColumn + $columnIndex
+            );
 
-        $columnIndex++;
-        $firstMeasurement = $group->first();
+            $columnIndex++;
+            $firstMeasurement = $group->first();
 
-        $sheet->setCellValue(
-            "{$column}57",
-            $firstMeasurement->ProdLotNo
-        );
+            $sheet->setCellValue(
+                "{$column}57",
+                $firstMeasurement->ProdLotNo
+            );
 
-        $sheet->setCellValue(
-            "{$column}58",
-            $ppf
-        );
+            $sheet->setCellValue(
+                "{$column}58",
+                $firstMeasurement->PPFNo
+            );
 
-        $sheet->setCellValue(
-            "{$column}59",
-            $firstMeasurement->Checktime
-        );
-        foreach ($group as $measurement) {
+            $sheet->setCellValue(
+                "{$column}59",
+                $firstMeasurement->Checktime
+            );
+            foreach ($group as $measurement) {
 
-            $values = [
-                $measurement->Value1,
-                $measurement->Value2,
-                $measurement->Value3,
-                $measurement->Value4,
-                $measurement->Value5,
-            ];
+                $values = [
+                    $measurement->Value1,
+                    $measurement->Value2,
+                    $measurement->Value3,
+                    $measurement->Value4,
+                    $measurement->Value5,
+                ];
 
-            $set = (int) $measurement->Set;
+                $set = (int) $measurement->Set;
 
-            // Set 1 = rows 60-64
-            $startRow = 60 + (($set - 1) * 5);
+                // Set 1 = rows 60-64
+                $startRow = 60 + (($set - 1) * 5);
 
-            foreach ($values as $index => $value) {
+                foreach ($values as $index => $value) {
 
-                $row = $startRow + $index;
+                    $row = $startRow + $index;
 
-                $sheet->setCellValue(
-                    "{$column}{$row}",
-                    $value
-                );
+                    $sheet->setCellValue(
+                        "{$column}{$row}",
+                        $value
+                    );
+                }
             }
         }
     }
-}
 
-        private function restoreConnectorLines(string $templatePath, string $outputPath): void
+    private function restoreConnectorLines(string $templatePath, string $outputPath): void
     {
         $templateZip = new ZipArchive();
         if ($templateZip->open($templatePath) !== true) {
@@ -193,4 +195,13 @@ class InspectionXBarService
         $outputZip->addFromString('xl/drawings/drawing1.xml', $splicedXml);
         $outputZip->close();
     }
+
+    // public function insertFooter(int $ppf, $sheet)
+    // {
+    //     $footer = app(ExcelDataRepository::class)->getFooterforXbar($ppf);
+
+    //     $sheet->setCellValue('A70', $footer['inspectedBy']);
+    //     $sheet->setCellValue('D70', $footer['checkedBy']);
+    //     $sheet->setCellValue('G70', $footer['approvedBy']);
+    // }
 }

@@ -77,9 +77,9 @@ class ExcelDataRepository
         ];
     }
 
-public function getMeasurement(int $ppf)
+   public function getMeasurement(array $partNo)
 {
-    return MIPIRDimensionMeasure::where('PPFNo', $ppf)
+    return MIPIRDimensionMeasure::whereIn('PartNo', $partNo)
         ->select([
             'ProdLotNo',
             'MachineNo',
@@ -96,6 +96,26 @@ public function getMeasurement(int $ppf)
         ->orderBy('Checktime')
         ->orderBy('Set')
         ->get();
-}    
-public function getHeaderforRec($ppf) {}
+}
+
+    // public function getFooterforXbar(int $ppf)
+    // {
+    //     $mainRec = $this->getMainData($ppf);
+
+    //     $upperControlLimit = $mainRec['upper'];
+    //     $lowerControlLimit = $mainRec['lower'];
+    //     $trendChartResult = $upperControlLimit > $lowerControlLimit ? 'OK' : 'NG';
+
+    //     $inspectDate = $mainRec['dateJudge'];
+    //     $inspectorNo = $mainRec['dateJudge'];
+    //     $checkedBy = $mainRec['dateJudge'];
+
+    //     return [
+    //         'inspectedBy' => $inspectedBy,
+    //         'checkedBy' => $checkedBy,
+    //         'approvedBy' => $approvedBy,
+    //     ];
+    // }
+
+    public function getHeaderforRec($ppf) {}
 }

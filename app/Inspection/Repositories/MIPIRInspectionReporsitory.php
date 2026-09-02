@@ -7,7 +7,7 @@ use App\Inspection\Models\CheckTime;
 use App\Inspection\Models\MIPIRInspectionRecord;
 use App\Inspection\Models\MIPIRDimensionMeasure;
 use App\Inspection\Models\Defect;
-
+use App\Inspection\Models\SmallDefect;
 
 class MIPIRInspectionReporsitory
 {
@@ -31,7 +31,6 @@ class MIPIRInspectionReporsitory
 
     public function createDimensionMeasure(array $data): MIPIRDimensionMeasure
     {
-        logger('Creating Dimension Measure', ['data' => $data]);
         return MIPIRDimensionMeasure::create([
             'PPFNo' => $data['PPFNo'],
             'MDNo' => $data['MDNo'],
@@ -65,6 +64,16 @@ class MIPIRInspectionReporsitory
             'Qty' => $data['Qty'],
             'NGPercent' => $data['NGPercent'],
             'Judgement' => $data['Judgement']
+        ]);
+    }
+
+    public function createSmall(array $data){
+        return SmallDefect::create([
+            'PPFNo' => $data['PPFNo'],
+            'Checktime' => $data['Checktime'],
+            'largeDefect' => $data['largeDefect'],
+            'smallDefect' => $data['smallDefect'],
+            'qty' => $data['qty'],
         ]);
     }
 

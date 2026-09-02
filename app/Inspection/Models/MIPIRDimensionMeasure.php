@@ -14,8 +14,6 @@ class MIPIRDimensionMeasure extends Model
 
     protected $keyType = 'int';
 
-    public $timestamps = false;
-
     protected $fillable = [
         'PPFNo',
         'ProdLotNo',

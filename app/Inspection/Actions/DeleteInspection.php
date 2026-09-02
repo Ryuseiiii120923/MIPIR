@@ -7,6 +7,7 @@ use App\Inspection\Models\CheckTime;
 use App\Inspection\Models\Defect;
 use App\Inspection\Models\MIPIRDimensionMeasure;
 use App\Inspection\Models\MIPIRInspectionRecord;
+use App\Inspection\Models\SmallDefect;
 use Illuminate\Support\Facades\DB;
 
 class DeleteInspection
@@ -15,7 +16,7 @@ class DeleteInspection
     {
         return DB::transaction(function () use ($ppfno) {
             Defect::where('PPFNo', $ppfno)->delete();
-
+            SmallDefect::where('PPFNo', $ppfno)->delete();
             MIPIRDimensionMeasure::where('PPFNo', $ppfno)->delete();
 
             MIPIRInspectionRecord::where('PPFNo', $ppfno)->delete();
