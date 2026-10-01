@@ -8,6 +8,7 @@ use App\Inspection\Models\MIPIRInspectionRecord;
 use App\Inspection\Models\MIPIRDimensionMeasure;
 use App\Inspection\Models\Defect;
 use App\Inspection\Models\SmallDefect;
+use Illuminate\Log\Logger;
 
 class MIPIRInspectionReporsitory
 {
@@ -24,13 +25,13 @@ class MIPIRInspectionReporsitory
             'Checktime' => $data['Checktime'],
             'DateJudge' => $data['DateJudge'],
             'InspectBy' => $data['InspectBy'],
-            'Judgement' => $data['Judgement'],
             'Year' => $data['Year'],
         ]);
     }
 
     public function createDimensionMeasure(array $data): MIPIRDimensionMeasure
     {
+        
         return MIPIRDimensionMeasure::create([
             'PPFNo' => $data['PPFNo'],
             'MDNo' => $data['MDNo'],
@@ -39,15 +40,19 @@ class MIPIRInspectionReporsitory
             'MachineNo' => $data['MachineNo'],
             'Checktime' => $data['Checktime'],
             'Mode' => $data['Mode'],
+            'CL' => $data['CL'],
             'Set' => $data['Set'],
+            'ForXBar' => $data['forXBar'] ?? false,
             'Specs' => $data['Specs'],
             'DimItem' => $data['DimItem'],
             'Judge' => $data['Judge'] ?? null,
+            'xbarTransaction' => $data['xbarTransaction'] ?? null,
             'Value1' => $data['1'] ?? null,
             'Value2' => $data['2'] ?? null,
             'Value3' => $data['3'] ?? null,
             'Value4' => $data['4'] ?? null,
             'Value5' => $data['5'] ?? null,
+            'InspectedBy' => $data['InspectedBy']
         ]);
     }
 
@@ -67,7 +72,8 @@ class MIPIRInspectionReporsitory
         ]);
     }
 
-    public function createSmall(array $data){
+    public function createSmall(array $data)
+    {
         return SmallDefect::create([
             'PPFNo' => $data['PPFNo'],
             'Checktime' => $data['Checktime'],
@@ -81,13 +87,15 @@ class MIPIRInspectionReporsitory
     {
         return CheckTime::create([
             'PPFNo' => $data['PPFNo'],
-            'check-time' => $data['check-time'],
-            'date-encode' => $data['date-encode'],
-            'machine-no' => $data['machine-no']
+            'PartNo' => $data['PartNo'],
+            'Checktime' => $data['Checktime'],
+            'DateEncode' => $data['DateEncode'],
+            'MachineNo' => $data['MachineNo']
         ]);
     }
 
-    public function saveRemarksTime(array $data): ChckTRemarks{
+    public function saveRemarksTime(array $data): ChckTRemarks
+    {
         return ChckTRemarks::create([
             'PPFNo' => $data['PPFNo'],
             'PartNo' => $data['PartNo'],
@@ -97,5 +105,4 @@ class MIPIRInspectionReporsitory
             'Remarks' => $data['Remarks']
         ]);
     }
-
 }

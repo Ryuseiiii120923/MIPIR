@@ -1,9 +1,6 @@
 <?php
 
 
-
-use App\Inspection\Actions\DraftAction;
-use App\Inspection\Repositories\PPFLookUp\PpfLookUpRepository;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Validate;
 
@@ -17,17 +14,6 @@ new class extends \Livewire\Component
     public int $ppf = 0;
     public bool $saved = false;
     public string $action = '';
-
-
-
-    public function syncDraft()
-    {
-        app(DraftAction::class)->put($this->ppf, 'process-details', [
-            'productionLotNo' => $this->productionLotNo,
-            'machineNo' => $this->machineNo,
-            'device' => $this->device
-        ]);
-    }
 
     public function clear(): void
     {
@@ -46,23 +32,11 @@ new class extends \Livewire\Component
         }
     }
 
-    #[On('ppf-checked')]
-    public function onPpfChecked(int $ppf): void
-    {
-        $this->ppf = $ppf;
-        if ($this->action != 'add') {
-            $result = app(PpfLookUpRepository::class)->getMainData($ppf);
-
-            $this->productionLotNo = $result['productionLotNo'];
-            $this->machineNo = $result['machineNo'];
-        }
-        $this->syncDraft();
-    }
-
-    #[On('fetchMachine')]
-    public function machineSelected(int $machineNo)
+    #[On('fetchMachineLotNo')]
+    public function machineSelected(int $machineNo, string $lotNo)
     {
         $this->machineNo = $machineNo;
+        $this->productionLotNo = $lotNo;
     }
 
     #[On('field-error')]
@@ -108,10 +82,10 @@ new class extends \Livewire\Component
                 label="Production Lot No."
                 type="text"
                 wire:model="productionLotNo"
-                wire:blur="syncDraft"
                 placeholder="Enter production lot no."
                 :disabled="$this->action === 'view'"
-                :class="$errors->has('productionLotNo') ? 'border-red-400 ring-1 ring-red-300' : ($this->action === 'view' ? 'cursor-not-allowed bg-gray-50' : '')" />
+                :class="$errors->has('productionLotNo') ? 'border-red-400 ring-1 ring-red-300' : ($this->action === 'view' ? 'cursor-not-allowed bg-gray-50' : '')" 
+                readonly/>
             @error('productionLotNo')
             <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p>
             @enderror
@@ -122,7 +96,6 @@ new class extends \Livewire\Component
             label="Machine No."
             type="text"
             wire:model="machineNo"
-            wire:blur="syncDraft"
             placeholder="Enter machine no."
             :disabled="$this->action === 'view'"
             :class="$this->action === 'view' ? 'cursor-not-allowed bg-gray-50' : ''"

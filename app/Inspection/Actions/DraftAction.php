@@ -2,6 +2,7 @@
 
 namespace App\Inspection\Actions;
 
+
 class DraftAction{
 
     protected function key(int $ppf): string

@@ -2,50 +2,23 @@
 
 namespace App\Inspection\Actions;
 
-use App\Inspection\Services\Excel\InspectionXBarService;
-use Symfony\Component\Process\Process;
-use Symfony\Component\Process\Exception\ProcessFailedException;
+use App\Inspection\Services\Excel\ExportService;
+use Illuminate\Http\Request;
 
 class GenerateExcel
 {
-    public function __invoke(int $ppf)
+    public function __invoke(Request $request)
     {
-        $xlsxPath = app(InspectionXBarService::class)
-            ->generate($ppf);
+        $partNos = (array) $request->query('partNo', []);
+        $dimension = $request->query('dimension');
 
-        $pdfPath = $this->convertToPdf($xlsxPath);
+        if (empty($partNos) || ! $dimension) {
+            abort(400, 'Missing part number(s) or dimension.');
+        }
+
+        $pdfPath = app(ExportService::class)->generatePdfXBar($partNos, $dimension);
 
         return response()->download($pdfPath)
             ->deleteFileAfterSend(true);
-    }
-
-    private function convertToPdf(string $xlsxPath): string
-    {
-        $outputDir = dirname($xlsxPath);
-
-        $process = new Process([
-            'C:\Program Files\LibreOffice\program\soffice.exe',
-            '--headless',
-            '--convert-to', 'pdf',
-            '--outdir', $outputDir,
-            $xlsxPath,
-        ]);
-
-        $process->setTimeout(60);
-        $process->run();
-
-        if (!$process->isSuccessful()) {
-            throw new ProcessFailedException($process);
-        }
-
-        $pdfPath = preg_replace('/\.xlsx$/i', '.pdf', $xlsxPath);
-
-        if (!file_exists($pdfPath)) {
-            throw new \RuntimeException("PDF conversion failed, expected output not found: {$pdfPath}");
-        }
-
-        @unlink($xlsxPath);
-
-        return $pdfPath;
     }
 }

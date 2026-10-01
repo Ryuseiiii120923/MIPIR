@@ -32,23 +32,7 @@ new class extends Component
             [
                 'item' => '',
                 'editable' => true,
-                'specification' => '',
-                'CL' => '',
-                'judge' => '',
-                'measurements' => [],
-                'mode' => null,
-                'sets' => null,
-                'revealed' => false,
-                'specType' => null,
-                'specNominal' => '',
-                'specTolerance' => '',
-                'specUpper' => '',
-                'specLower' => '',
-                'device' => ''
-            ],
-            [
-                'item' => '',
-                'editable' => true,
+                'forXBar' => true,
                 'specification' => '',
                 'CL' => '',
                 'judge' => '',
@@ -80,24 +64,6 @@ new class extends Component
                 'specLower' => '',
                 'device' => '',
             ],
-            [
-                'item' => 'Gap-Offset',
-                'editable' => false,
-                'specification' => '',
-                'CL' => '',
-                'judge' => '',
-                'measurements' => [],
-                'measurements_y' => [],
-                'mode' => null,
-                'sets' => null,
-                'revealed' => false,
-                'specType' => null,
-                'specNominal' => '',
-                'specTolerance' => '',
-                'specUpper' => '',
-                'specLower' => '',
-                'device' => '',
-            ],
         ];
 
         foreach ($this->rows as $i => $row) {
@@ -111,6 +77,7 @@ new class extends Component
 
         $this->resolveFixedSpecifications();
         $this->action = $action;
+        $this->syncToParent();
 
         if ($this->action === 'view' || $this->action === 'delete') {
             $this->readonly = true;
@@ -172,10 +139,20 @@ new class extends Component
     {
         $row = $this->rows[$i];
         $limits = $this->service()->computeLimits($row);
-
+        $this->rows[$i]['specification'] = $this->service()->formatSpecification($row);
         $this->rows[$i]['upperLimit'] = $limits['upperLimit'] ?? null;
         $this->rows[$i]['lowerLimit'] = $limits['lowerLimit'] ?? null;
         $this->rows[$i]['judge'] = $this->service()->judgeRow($row, $limits);
+
+        if ($limits !== null) {
+            $this->dispatch(
+                'dimension-spec-limits-changed',
+                rowIndex: $i,
+                CSLx: (float) ($row['specNominal'] ?? 0),
+                USLx: (float) $limits['judgingUpperLimit'],
+                LSLx: (float) $limits['judgingLowerLimit'],
+            );
+        }
     }
 
     public function persistSpecification(int $i): void
@@ -205,6 +182,8 @@ new class extends Component
         if ($itemName === '') {
             return;
         }
+
+        $this->dispatch('dimension-item-changed', dimItem: $itemName);
 
         $master = app(DimensionMasterRepositoryInterface::class)
             ->getMasterSpecification($this->partNo, $itemName);
@@ -328,6 +307,27 @@ new class extends Component
             'device' => ''
         ];
     }
+
+    public function removeDimension(int $index): void
+    {
+        if ($this->readonly) {
+            return;
+        }
+
+        if (!array_key_exists($index, $this->rows)) {
+            return;
+        }
+
+        if (empty($this->rows[$index]['editable'])) {
+            // Fixed/master rows (e.g. Flash Thickness) can't be removed, only reconfigured.
+            return;
+        }
+
+        unset($this->rows[$index]);
+        $this->rows = array_values($this->rows);
+
+        $this->syncToParent();
+    }
 }
 ?>
 
@@ -348,7 +348,8 @@ new class extends Component
         const el = document.querySelector(`[data-card-index='${cardIndex}'] input[data-measurement-index='${slotIndex}']`);
         if (el) el.focus();
     }
-}">
+}"
+    x-on:focus.capture="$event.target.matches('input[type=text], input[type=number]') && $event.target.select()">
     <div class="bg-gray-700 w-full">
         <p class="text-4xl font-extrabold text-center text-white p-4 mt-4">Dimensions</p>
     </div>
@@ -394,7 +395,6 @@ new class extends Component
             @else
 
             <div class="bg-white border border-gray-200 rounded-2xl p-6 w-full">
-
                 <div class="flex items-center justify-between mb-5">
                     <div class="flex items-center gap-3">
                         <div class="w-11 h-11 rounded-xl bg-green-100 flex items-center justify-center">
@@ -414,6 +414,16 @@ new class extends Component
                         class="text-sm text-gray-500 hover:text-blue-600 flex items-center gap-1">
                         <i class="ti ti-settings text-base"></i> Reconfigure
                     </button>
+
+                    @if($row['editable'])
+                    <button
+                        type="button"
+                        @if($readonly) disabled @endif
+                        @click.prevent="if (confirm('Delete this dimension row?')) $wire.removeDimension({{ $i }})"
+                        class="text-sm text-red-500 hover:text-red-700 flex items-center gap-1 ml-3">
+                        <i class="ti ti-trash text-base"></i> Delete
+                    </button>
+                    @endif
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -443,10 +453,19 @@ new class extends Component
                             placeholder="Enter the measuring device use" @if($readonly) disabled @endif>
                     </div>
                     <div>
+                        @if($row['forXBar'] ?? false)
+                        <livewire:inspection::partials.specs-control-limit
+                            :dimItem="$row['item']"
+                            :partNo="$partNo"
+                            :rowIndex="$i"
+                            :key="'specs-control-limit-'.$i" />
+                        @endif
+                    </div>
+                    <div>
 
                         <label class="text-sm font-medium block mb-1.5">Specification</label>
                         <div class="flex items-center gap-2">
-                            <select wire:model.live="rows.{{ $i }}.specType"
+                            <select wire:model.live.debounce.400ms="rows.{{ $i }}.specType"
                                 class="bg-gray-50 border-0 rounded-lg px-2 py-2 text-sm"
                                 @if($readonly) disabled @endif>
                                 <option value="">Select</option>
@@ -502,8 +521,9 @@ new class extends Component
                 </div>
 
                 <div class="mb-4">
-                    <label class="text-sm font-medium block mb-1.5">Note</label>
-                    <input type="text" wire:model="rows.{{ $i }}.CL"
+                    <label class="text-sm font-medium block mb-1.5">Control Limit</label>
+                    <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.CL"
+                        value=""
                         class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2 text-gray-500"
                         placeholder="Refer to parts WI" @if($readonly) disabled @endif>
                 </div>
@@ -515,53 +535,7 @@ new class extends Component
                         Measurements
                         <span class="text-gray-400 font-normal">({{ count($row['measurements']) }} total)</span>
                     </label>
-
-                    @if($row['item'] === 'Gap-Offset')
-                    @php $setsCount = (int) ceil(count($row['measurements']) / 5); @endphp
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
-                        @for ($s = 0; $s < $setsCount; $s++)
-                            <div wire:key="dim-{{ $i }}-set-{{ $s }}" class="flex flex-col gap-1.5">
-                            <p class="text-xs text-gray-400">Set {{ $s + 1 }}</p>
-                            <div class="flex flex-wrap gap-2">
-                                @for ($k = 0; $k < 5; $k++)
-                                    @php $j=$s * 5 + $k; @endphp
-                                    @if($j < count($row['measurements']))
-                                    <input @if($readonly) disabled @endif type="text"
-                                    wire:model.live.debounce.150ms="rows.{{ $i }}.measurements.{{ $j }}"
-                                    wire:key="dim-{{ $i }}-x-{{ $j }}"
-                                    data-x-index="{{ $j }}"
-                                    @if($j===0) data-first-measurement @endif
-                                    @keyup="if($event.target.value.trim() !== '') focusY({{ $i }}, {{ $j }})"
-                                    class="w-16 bg-gray-50 border-0 rounded-lg text-center py-2"
-                                    placeholder="x{{ $j + 1 }}">
-                                    @endif
-                                    @endfor
-                            </div>
-                            <div class="flex flex-wrap gap-2">
-                                @for ($k = 0; $k < 5; $k++)
-                                    @php
-                                    $j=$s * 5 + $k;
-                                    $isLastOverall=$j===count($row['measurements_y'] ?? []) - 1;
-                                    @endphp
-                                    @if($j < count($row['measurements_y'] ?? []))
-                                    <input @if($readonly) disabled @endif type="text"
-                                    wire:model.live.debounce.150ms="rows.{{ $i }}.measurements_y.{{ $j }}"
-                                    wire:key="dim-{{ $i }}-y-{{ $j }}"
-                                    data-y-index="{{ $j }}"
-                                    @if(!$isLastOverall)
-                                    @keyup="if($event.target.value.trim() !== '') focusX({{ $i }}, {{ $j + 1 }})"
-                                    @else
-                                    @keyup="if($event.target.value.trim() !== '') focusNextCard({{ $i }})"
-                                    @endif
-                                    class="w-16 bg-gray-50 border-0 rounded-lg text-center py-2"
-                                    placeholder="y{{ $j + 1 }}">
-                                    @endif
-                                    @endfor
-                            </div>
-                    </div>
-                    @endfor
                 </div>
-                @else
                 @php $setsCount = (int) ceil(count($row['measurements']) / 5); @endphp
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
                     @for ($s = 0; $s < $setsCount; $s++)
@@ -577,15 +551,10 @@ new class extends Component
                                 @endphp
                                 @if($j < count($row['measurements']))
                                 <input @if($readonly) disabled @endif type="text"
-                                wire:model.live.debounce="rows.{{ $i }}.measurements.{{ $j }}"
+                                wire:model.live.debounce.400ms="rows.{{ $i }}.measurements.{{ $j }}"
                                 wire:key="dim-{{ $i }}-m-{{ $j }}"
                                 data-measurement-index="{{ $j }}"
                                 @if($j===0) data-first-measurement @endif
-                                @if(!$isLastOverall)
-                                @keyup="if($event.target.value.trim() !== '') focusMeasurement({{ $i }}, {{ $j + 1 }})"
-                                @else
-                                @keyup="if($event.target.value.trim() !== '') focusNextCard({{ $i }})"
-                                @endif
                                 class="w-16 bg-gray-50 border-0 rounded-lg text-center py-2"
                                 placeholder="{{ $j + 1 }}">
                                 @endif
@@ -594,9 +563,8 @@ new class extends Component
                 </div>
                 @endfor
             </div>
-            @endif
-        </div>
-
+        </div> {{-- closes "bg-white border border-gray-200 rounded-2xl p-6 w-full" (moved inside @else) --}}
+        @endif
         <hr class="border-gray-200 my-4">
 
         <div class="flex items-center justify-between">
@@ -608,10 +576,8 @@ new class extends Component
             </div>
             <button @if($readonly) disabled @endif type="button" class="text-sm text-gray-500 hover:text-gray-700">Clear</button>
         </div>
-    </div>
-    @endif
-</div>
-@endforeach
+    </div> {{-- closes wire:key="dim-row-{{ $i }}" wrapper --}}
+    @endforeach
 </div>
 
 @if($activeModalIndex !== null)

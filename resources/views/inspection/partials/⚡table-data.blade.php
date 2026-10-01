@@ -93,7 +93,7 @@ new class extends Component
                         <button class="text-white bg-blue-600 px-4 py-2 rounded"
                             wire:loading.attr="disabled"
                             wire:click.throttle.10000ms="confirm_ppf({{ $d->PPFNo}})"
-                            @click="window.dispatchEvent(new CustomEvent('show-loading', { detail: { message: 'Loading PPF...' } }))">
+                           >
                             Edit
                         </button>
 
@@ -101,7 +101,7 @@ new class extends Component
                         <button class="text-white bg-gray-500 px-4 py-2 rounded"
                             wire:loading.attr="disabled"
                             wire:click.throttle.10000ms="confirm_ppf({{ $d->PPFNo}})"
-                            @click="window.dispatchEvent(new CustomEvent('show-loading', { detail: { message: 'Loading PPF...' } }))">
+                           >
                             View
                         </button>
 
@@ -109,7 +109,7 @@ new class extends Component
                         <button class="text-white bg-red-600 px-4 py-2 rounded"
                             wire:loading.attr="disabled"
                             wire:click.throttle.10000ms="confirm_ppf({{ $d->PPFNo}})"
-                            @click="window.dispatchEvent(new CustomEvent('show-loading', { detail: { message: 'Deleting PPF...' } }))">
+                           >
                             Delete
                         </button>
                         @endif

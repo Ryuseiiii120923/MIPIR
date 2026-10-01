@@ -33,11 +33,17 @@ new class extends Component
 
     public function submit(): void
     {
+        $requestId = uniqid();
+        Log::debug('DashboardSave: submit() called', [
+            'requestId' => $requestId,
+            'action' => $this->action,
+            'selectedPpf' => $this->selectedPpf,
+        ]);
         if ($this->action === 'view') {
             Log::debug('DashboardSave: view action, no-op');
             return;
         }
-       
+
         if ($this->action === 'delete') {
             if (app(DeleteInspection::class)->execute($this->selectedPpf)) {
                 PpfLookUpRepository::forgetMainData($this->selectedPpf);
@@ -59,20 +65,22 @@ new class extends Component
         }
 
         $draft = app(DraftAction::class)->get($this->selectedPpf);
-        foreach (['ppfLookup', 'process-details', 'check-time', 'judgement'] as $component) {
+        foreach (['ppfLookup', 'check-time'] as $component) {
             if (!isset($draft[$component])) {
                 $this->notifyFail('Incomplete', "Missing {$component} data.");
                 return;
             }
         }
 
-        if (empty($draft['process-details']['productionLotNo'])) {
-             $this->dispatch('field-error', field: 'productionLotNo', message: 'Production lot number is required.');
+        if (empty($draft['ppfLookup']['productionLotNo'])) {
+            
+            $this->dispatch('field-error', field: 'productionLotNo', message: 'Production lot number is required.');
             $this->notifyFail('Validation error', 'Production lot number is required.');
             return;
         }
 
-        if (empty($draft['process-details']['machineNo'])) {
+        if (empty($draft['ppfLookup']['machineNo'])) {
+            
             $this->notifyFail('Validation error', 'Machine number is required.');
             return;
         }
@@ -129,18 +137,14 @@ new class extends Component
         @endforeach
     </div>
     <div class="w-full justify-center">
-        <livewire:inspection::partials.table-data  />
+        <livewire:inspection::partials.table-data />
     </div>
     <div class="flex flex-col md:flex-row gap-5">
-        <livewire:inspection::partials.ppflookup  />
-        <livewire:inspection::partials.process-details  />
+        <livewire:inspection::partials.ppflookup />
+        <livewire:inspection::partials.process-details />
     </div>
     <div class="mt-4">
-        <livewire:inspection::partials.check-time  />
-    </div>
-    <div class="mt-4 flex flex-row gap-5 justify-between">
-        <livewire:inspection::partials.specs-control-limit />
-        <livewire:inspection::partials.judgement  />
+        <livewire:inspection::partials.check-time />
     </div>
 
     <div class="flex items-center justify-center mt-4 @if($this->selectedPpf === 0) opacity-50 cursor-not-allowed @endif">

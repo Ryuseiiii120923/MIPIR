@@ -1,98 +1,94 @@
 <?php
 
-use App\Inspection\Repositories\XBarRepository;
+use App\Domain\XBar\Repositories\XBarRepository;
 use App\Inspection\Services\XBarChartService;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 
 new class extends Component
 {
-    // protected XBarRepository $repository;
-    // protected XBarChartService $chartService;
-
     public string $partSearch = '';
-    public ?string $selectedPartNo = null;
+    public array $selectedPartNos = [];
 
     public string $dimensionSearch = '';
-    public ?int $selectedDimensionId = null;
     public ?string $selectedDimensionName = null;
 
     public bool $generating = false;
     public array $chartData = [];
 
-    // public function boot(XBarRepository $repository, XBarChartService $chartService): void
-    // {
-    //     $this->repository = $repository;
-    //     $this->chartService = $chartService;
-    // }
+    #[Computed]
+    public function partNumbers()
+    {
+        return app(XBarRepository::class)->searchPartNumbers($this->partSearch);
+    }
 
-    // #[Computed]
-    // public function partNumbers()
-    // {
-    //     return $this->repository->searchPartNumbers($this->partSearch);
-    // }
+    #[Computed]
+    public function dimensions()
+    {
+        if (empty($this->selectedPartNos)) {
+            return collect();
+        }
 
-    // #[Computed]
-    // public function dimensions()
-    // {
-    //     if (! $this->selectedPartNo) {
-    //         return collect();
-    //     }
+        return app(XBarRepository::class)->searchDimensionsForParts($this->selectedPartNos, $this->dimensionSearch);
+    }
 
-    //     return $this->repository->searchDimensionsForPart($this->selectedPartNo, $this->dimensionSearch);
-    // }
+    public function togglePart(string $partNo): void
+    {
+        if (in_array($partNo, $this->selectedPartNos, true)) {
+            $this->selectedPartNos = array_values(array_diff($this->selectedPartNos, [$partNo]));
+        } elseif (count($this->selectedPartNos) < 2) {
+            $this->selectedPartNos[] = $partNo;
+        }
 
-    // public function selectPart(string $partNo): void
-    // {
-    //     $this->selectedPartNo = $partNo;
-    //     $this->selectedDimensionId = null;
-    //     $this->selectedDimensionName = null;
-    //     $this->dimensionSearch = '';
-    //     $this->chartData = [];
-    // }
+        $this->selectedDimensionName = null;
+        $this->dimensionSearch = '';
+        $this->chartData = [];
+    }
 
-    // public function changePart(): void
-    // {
-    //     $this->reset([
-    //         'selectedPartNo',
-    //         'selectedDimensionId',
-    //         'selectedDimensionName',
-    //         'dimensionSearch',
-    //         'chartData',
-    //     ]);
-    // }
+    public function removePart(string $partNo): void
+    {
+        $this->selectedPartNos = array_values(array_diff($this->selectedPartNos, [$partNo]));
+        $this->selectedDimensionName = null;
+        $this->chartData = [];
+    }
 
-    // public function selectDimension(int $dimensionId, string $dimensionName): void
-    // {
-    //     $this->selectedDimensionId = $dimensionId;
-    //     $this->selectedDimensionName = $dimensionName;
-    //     $this->chartData = [];
-    // }
+    public function changeParts(): void
+    {
+        $this->reset([
+            'selectedPartNos',
+            'selectedDimensionName',
+            'dimensionSearch',
+            'chartData',
+        ]);
+    }
 
-    // public function changeDimension(): void
-    // {
-    //     $this->reset(['selectedDimensionId', 'selectedDimensionName', 'chartData']);
-    // }
+    public function selectDimension(string $dimensionName): void
+    {
+        $this->selectedDimensionName = $dimensionName;
+        $this->chartData = [];
+    }
 
-    // public function generate(): void
-    // {
-    //     $this->validate([
-    //         'selectedPartNo'       => 'required|string',
-    //         'selectedDimensionId'  => 'required|integer',
-    //     ], [
-    //         'selectedPartNo.required'      => 'Please select a part number first.',
-    //         'selectedDimensionId.required' => 'Please select a dimension first.',
-    //     ]);
+    public function changeDimension(): void
+    {
+        $this->reset(['selectedDimensionName', 'chartData']);
+    }
 
-    //     $this->generating = true;
+    public function generate()
+    {
+        $this->validate([
+            'selectedPartNos'        => 'required|array|min:1|max:2',
+            'selectedDimensionName'  => 'required|string',
+        ], [
+            'selectedPartNos.required'       => 'Please select at least one part number.',
+            'selectedPartNos.max'            => 'You can only select up to 2 part numbers.',
+            'selectedDimensionName.required' => 'Please select a dimension first.',
+        ]);
 
-    //     $this->chartData = $this->chartService->generate(
-    //         $this->selectedPartNo,
-    //         $this->selectedDimensionId
-    //     );
-
-    //     $this->generating = false;
-    // }
+        return $this->redirect(route('inspection.xbar.download', [
+            'partNo'    => $this->selectedPartNos,
+            'dimension' => $this->selectedDimensionName,
+        ]));
+    }
 };
 ?>
 
@@ -100,13 +96,18 @@ new class extends Component
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
 
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border-b border-gray-100">
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
                 <h2 class="text-lg font-semibold text-gray-800">X-Bar Chart Generator</h2>
-                @if ($selectedPartNo)
-                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
-                        {{ $selectedPartNo }}
+                @foreach ($selectedPartNos as $partNo)
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
+                        {{ $partNo }}
+                        <button type="button" wire:click="removePart(@js($partNo))" class="hover:text-emerald-900">
+                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
                     </span>
-                @endif
+                @endforeach
                 @if ($selectedDimensionName)
                     <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold">
                         {{ $selectedDimensionName }}
@@ -115,9 +116,9 @@ new class extends Component
             </div>
         </div>
 
-        {{-- STEP 1: PART NUMBER --}}
-        @if (! $selectedPartNo)
-            <div class="p-4 border-b border-gray-100">
+        {{-- STEP 1: PART NUMBER (multi-select, up to 2) --}}
+        @if (empty($selectedDimensionName))
+            <div class="flex items-center justify-between gap-3 p-4 border-b border-gray-100">
                 <div class="relative w-full sm:w-72">
                     <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10.5a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z" />
@@ -128,6 +129,7 @@ new class extends Component
                         placeholder="Search part number..."
                         class="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
                 </div>
+                <p class="text-xs text-gray-400 whitespace-nowrap">{{ count($selectedPartNos) }}/2 selected</p>
             </div>
 
             <div class="overflow-x-auto">
@@ -135,27 +137,27 @@ new class extends Component
                     <thead>
                         <tr class="text-left bg-gray-50 text-gray-600 text-xs uppercase tracking-wide">
                             <th class="p-3 font-medium">Part No</th>
-                            <th class="p-3 font-medium">Description</th>
                             <th class="p-3 font-medium text-right">Action</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100">
                         @forelse ($this->partNumbers as $part)
-                            <tr wire:key="part-{{ $part->PartNo }}" class="hover:bg-emerald-50/60 transition-colors duration-150">
+                            @php $isSelected = in_array($part->PartNo, $selectedPartNos, true); @endphp
+                            <tr wire:key="part-{{ $part->PartNo }}" class="{{ $isSelected ? 'bg-emerald-50' : '' }} hover:bg-emerald-50/60 transition-colors duration-150">
                                 <td class="p-3 font-medium text-gray-800">{{ $part->PartNo }}</td>
-                                <td class="p-3 text-gray-600">{{ $part->Description ?? '—' }}</td>
                                 <td class="p-3 text-right">
                                     <button
                                         type="button"
-                                        wire:click="selectPart(@js($part->PartNo))"
-                                        class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg transition-colors duration-150">
-                                        Select
+                                        wire:click="togglePart(@js($part->PartNo))"
+                                        @if (! $isSelected && count($selectedPartNos) >= 2) disabled @endif
+                                        class="inline-flex items-center gap-1.5 px-3 py-1.5 {{ $isSelected ? 'bg-gray-500 hover:bg-gray-600' : 'bg-emerald-600 hover:bg-emerald-700' }} disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-medium rounded-lg transition-colors duration-150">
+                                        {{ $isSelected ? 'Remove' : 'Select' }}
                                     </button>
                                 </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="3" class="p-10 text-center">
+                                <td colspan="2" class="p-10 text-center">
                                     <div class="flex flex-col items-center gap-2 text-gray-400">
                                         <svg class="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 10.5a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z" />
@@ -170,10 +172,21 @@ new class extends Component
                     </tbody>
                 </table>
             </div>
+
+            @if (! empty($selectedPartNos))
+                <div class="flex justify-end p-4 border-t border-gray-100">
+                    <button
+                        type="button"
+                        wire:click="$refresh"
+                        class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors duration-150">
+                        Continue to Dimension →
+                    </button>
+                </div>
+            @endif
         @endif
 
         {{-- STEP 2: DIMENSION --}}
-        @if ($selectedPartNo && ! $selectedDimensionId)
+        @if (! empty($selectedPartNos) && ! $selectedDimensionName)
             <div class="flex items-center justify-between gap-3 p-4 border-b border-gray-100">
                 <div class="relative w-full sm:w-72">
                     <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -187,9 +200,9 @@ new class extends Component
                 </div>
                 <button
                     type="button"
-                    wire:click="changePart"
+                    wire:click="changeParts"
                     class="text-xs font-medium text-gray-500 hover:text-gray-700 whitespace-nowrap">
-                    ← Change part
+                    ← Change part(s)
                 </button>
             </div>
 
@@ -205,7 +218,7 @@ new class extends Component
                     </thead>
                     <tbody class="divide-y divide-gray-100">
                         @forelse ($this->dimensions as $dimension)
-                            <tr wire:key="dim-{{ $dimension->id }}" class="hover:bg-emerald-50/60 transition-colors duration-150">
+                            <tr wire:key="dim-{{ $dimension->DimensionName }}" class="hover:bg-emerald-50/60 transition-colors duration-150">
                                 <td class="p-3 font-medium text-gray-800">{{ $dimension->DimensionName }}</td>
                                 <td class="p-3 text-gray-600">{{ $dimension->Device }}</td>
                                 <td class="p-3 text-gray-600">
@@ -215,7 +228,7 @@ new class extends Component
                                 <td class="p-3 text-right">
                                     <button
                                         type="button"
-                                        wire:click="selectDimension({{ $dimension->id }}, @js($dimension->DimensionName))"
+                                        wire:click="selectDimension(@js($dimension->DimensionName))"
                                         class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg transition-colors duration-150">
                                         Select
                                     </button>
@@ -229,7 +242,7 @@ new class extends Component
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                         </svg>
                                         <p class="text-sm">
-                                            {{ $dimensionSearch ? 'No dimensions match your search.' : 'No dimensions found for this part.' }}
+                                            {{ $dimensionSearch ? 'No dimensions match your search.' : 'No shared dimension found for the selected part(s).' }}
                                         </p>
                                     </div>
                                 </td>
@@ -241,12 +254,12 @@ new class extends Component
         @endif
 
         {{-- STEP 3: GENERATE --}}
-        @if ($selectedPartNo && $selectedDimensionId)
+        @if (! empty($selectedPartNos) && $selectedDimensionName)
             <div class="p-5 space-y-4">
                 <div class="flex items-center justify-between">
                     <p class="text-sm text-gray-600">
                         Ready to generate the X-bar/R chart for
-                        <span class="font-semibold text-gray-800">{{ $selectedPartNo }}</span> —
+                        <span class="font-semibold text-gray-800">{{ implode(' & ', $selectedPartNos) }}</span> —
                         <span class="font-semibold text-gray-800">{{ $selectedDimensionName }}</span>.
                     </p>
                     <button
@@ -269,17 +282,6 @@ new class extends Component
                     </svg>
                     Generate X-Bar Chart
                 </button>
-
-                @if (! empty($chartData))
-                    <div class="mt-4 p-4 rounded-lg bg-gray-50 border border-gray-100 text-sm text-gray-600">
-                        <p class="font-medium text-gray-800 mb-2">Result summary</p>
-                        <p>Grand Mean (X̿): {{ $chartData['grandMean'] ?? '—' }}</p>
-                        <p>Average Range (R̄): {{ $chartData['averageRange'] ?? '—' }}</p>
-                        <p>X-bar UCL / LCL: {{ $chartData['xBarUcl'] ?? '—' }} / {{ $chartData['xBarLcl'] ?? '—' }}</p>
-                        <p>R UCL / LCL: {{ $chartData['rUcl'] ?? '—' }} / {{ $chartData['rLcl'] ?? '—' }}</p>
-                        {{-- Plug chartData['subgroups'] into your charting lib (Chart.js/Alpine canvas) here --}}
-                    </div>
-                @endif
             </div>
         @endif
     </div>

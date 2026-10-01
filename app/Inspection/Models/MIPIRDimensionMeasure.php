@@ -23,7 +23,7 @@ class MIPIRDimensionMeasure extends Model
         'Checktime',
         'DimItem',
         'Specs',
-        'Note',
+        'CL',
         'Judge',
         'Value1',
         'Value2',
@@ -31,6 +31,10 @@ class MIPIRDimensionMeasure extends Model
         'Value4',
         'Value5',
         'Mode',
-        'Set'
+        'Set',
+        'ForXBar',
+        'xbarTransaction',
+        'isRecord',
+        'InspectedBy'
     ];
 }

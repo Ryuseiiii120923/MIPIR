@@ -2,6 +2,7 @@
 
 
 use App\Inspection\Actions\DraftAction;
+use App\Inspection\Models\MIPIRInspectionRecord;
 use App\Inspection\Services\PPFLookUp\PpfLookUpService;
 use App\Traits\WithLoading;
 use Livewire\Attributes\On;
@@ -22,13 +23,26 @@ new class extends Component
     public bool $searching = false;
     public string $action = '';
     public int $machineNo;
+    public string $mode = '';
+    public string $lotNo = '';
+
+    #[On('gap-offset-action')]
+    public function onGapOffsetAction(string $action, $mode): void
+    {
+        $this->action = $action;
+        $this->mode = $mode;
+    }
 
     #[On('lookup_ppf')]
-    public function lookup(string $ppf = ''): void
+    public function onLookupPpf(string $ppf): void
     {
-        if ($this->ppfno === '') {
-            $this->ppfno = $ppf;
-        }
+        $this->ppfno = $ppf;
+        $this->lookup();
+    }
+
+
+    public function lookup(): void
+    {
 
         if ($this->action === '') {
             $this->addError(
@@ -47,6 +61,17 @@ new class extends Component
                 'Please enter a PPF No.'
             );
 
+            $this->stopLoading();
+
+            return;
+        }
+
+        $isExist = MIPIRInspectionRecord::where('PPFNo', $this->ppfno)->exists();
+        if ($isExist && $this->action === 'add' && $this->mode != 'gap-offset') {
+            $this->addError(
+                'ppfno',
+                'This PPFNo already exists. Please press the Update button instead.'
+            );
             $this->stopLoading();
 
             return;
@@ -85,8 +110,9 @@ new class extends Component
         $this->noOfCavity = $result['noOfCavity'];
         $this->nqrIssuanceCriteria = $result['nqr'];
         $this->machineNo = $result['machineNo'];
-        $this->found = true;
+        $this->lotNo = $result['prodLotNo'];
 
+        $this->found = true;
         // Notify other components only after PPF was found.
         $this->dispatch('ppf-checked', ppf: (int) $this->ppfno);
 
@@ -95,7 +121,7 @@ new class extends Component
             partNo: $this->partNumber
         );
 
-        $this->dispatch('fetchMachine', machineNo: $this->machineNo);
+        $this->dispatch('fetchMachineLotNo', machineNo: $this->machineNo, lotNo: $this->lotNo);
 
         $this->dispatch('fromMaster', [
             'noOfCavity' => $this->noOfCavity,
@@ -116,7 +142,9 @@ new class extends Component
             'partNo' => $this->partNumber,
             'moldNo' => $this->moldingDieNo,
             'noOfCavity' => $this->noOfCavity,
-            'nqr' => $this->nqrIssuanceCriteria
+            'nqr' => $this->nqrIssuanceCriteria,
+            'machineNo' => $this->machineNo,
+            'productionLotNo' => $this->lotNo
         ]);
     }
 
@@ -129,6 +157,14 @@ new class extends Component
     #[On('action-changed')]
     public function onActionChanged(string $action): void
     {
+        $this->action = $action;
+        if ($action) {
+            $this->clear();
+        }
+    }
+
+    #[On('action-changed-gapoffset')]
+    public function actionChangedGap(string $action){
         $this->action = $action;
         if ($action) {
             $this->clear();

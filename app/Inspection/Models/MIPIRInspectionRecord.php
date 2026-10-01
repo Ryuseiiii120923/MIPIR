@@ -30,6 +30,10 @@ class MIPIRInspectionRecord extends Model
         'ConfirmedBy',
         'InspectBy',
         'Year',
-        'Judgement',
     ];
+
+    public function dimensionMeasures()
+{
+    return $this->hasMany(MIPIRDimensionMeasure::class, 'PPFNo', 'PPFNo');
+}
 }

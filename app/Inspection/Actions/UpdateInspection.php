@@ -15,7 +15,7 @@ class UpdateInspection
     public function execute(int $ppfno): void
     {
         $draft = app(DraftAction::class)->get($ppfno);
-        if (empty($draft['process-details']['productionLotNo']) || empty($draft['process-details']['machineNo'])) {
+        if (empty($draft['ppfLookup']['productionLotNo']) || empty($draft['ppfLookup']['machineNo'])) {
             throw new \InvalidArgumentException('Process details are required to update this inspection.');
         }
 
@@ -24,16 +24,6 @@ class UpdateInspection
         }
 
         DB::transaction(function () use ($ppfno, $draft) {
-            Defect::where('PPFNo', $ppfno)->delete();
-
-            MIPIRDimensionMeasure::where('PPFNo', $ppfno)->delete();
-
-            MIPIRInspectionRecord::where('PPFNo', $ppfno)->delete();
-
-            CheckTime::where('PPFNo', $ppfno)->delete();
-
-            ChckTRemarks::where('PPFNo', $ppfno)->delete();
-            SmallDefect::where('PPFNo', $ppfno)->delete();
             app(CreateInspection::class)->execute($ppfno, $draft);
         });
     }

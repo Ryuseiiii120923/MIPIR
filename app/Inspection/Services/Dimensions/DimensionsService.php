@@ -30,6 +30,7 @@ class DimensionsService
         $nominal = (float) $master['Specification'];
         $upper   = (float) $master['UpperLimit'];
         $lower   = (float) $master['LowerLimit'];
+        $device = $master['Device'];
 
         if ($lower === 0.00 && $upper === $nominal) {
             return [
@@ -38,6 +39,7 @@ class DimensionsService
                 'specTolerance' => '',
                 'specUpper'     => '',
                 'specLower'     => '',
+                'device'         => $device,
             ];
         }
 
@@ -48,6 +50,7 @@ class DimensionsService
                 'specTolerance' => '',
                 'specUpper'     => '',
                 'specLower'     => '',
+                'device'         => $device,
             ];
         }
 
@@ -58,6 +61,7 @@ class DimensionsService
                 'specTolerance' => '',
                 'specUpper'     => (string) $upper,
                 'specLower'     => (string) $lower,
+                'device'         => $device,
             ];
         }
 
@@ -67,6 +71,7 @@ class DimensionsService
             'specTolerance' => (string) round($upper, 4),
             'specUpper'     => '',
             'specLower'     => '',
+            'device'         => $device,
         ];
     }
 
@@ -208,4 +213,37 @@ class DimensionsService
 
         return true;
     }
+
+    /**
+ * Human-readable spec text saved to MIPIRDimensionMeasure.Specs,
+ * e.g. "MAX 0.12", "MIN 0.05", "1.2 ± 0.1", "1.2 (1.15 ~ 1.3)".
+ * Returns '' while the spec is incomplete.
+ */
+public function formatSpecification(array $row): string
+{
+    $limits = $this->computeLimits($row);
+
+    if ($limits === null) {
+        return '';
+    }
+
+    $nominal = $this->trimNumber((float) $row['specNominal']);
+
+    return match ($row['specType']) {
+        'max'            => "MAX {$nominal}",
+        'min'            => "MIN {$nominal}",
+        'tolerance'      => "{$nominal} ± " . $this->trimNumber((float) $row['specTolerance']),
+        'tolerance_diff' => "{$nominal} ("
+            . $this->trimNumber($limits['judgingLowerLimit'])
+            . ' ~ '
+            . $this->trimNumber($limits['judgingUpperLimit'])
+            . ')',
+        default          => '',
+    };
+}
+
+private function trimNumber(float $value): string
+{
+    return rtrim(rtrim(number_format($value, 4, '.', ''), '0'), '.');
+}
 }

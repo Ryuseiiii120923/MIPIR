@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::connection('mipirDB')->create('checktime', function (Blueprint $table) {
             $table->id();
             $table->string('check-time');
+            $table->text('partNo');
             $table->dateTime('date-encode');
         });
     }

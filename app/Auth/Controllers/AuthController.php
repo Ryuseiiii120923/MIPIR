@@ -41,9 +41,11 @@ class AuthController extends Controller
             return redirect()->route('landing-page');
         }
 
-        return back()->withErrors([
-            'credentials' => 'Incorrect credentials',
-        ]);
+        return back()
+            ->withInput($request->only('userid'))
+            ->withErrors([
+                'credentials' => 'Incorrect credentials',
+            ]);
     }
 
     public function logout(Request $request)

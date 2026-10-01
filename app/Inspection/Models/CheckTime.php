@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 class CheckTime extends Model{
     protected $table = 'checktime';
     protected $connection = 'mipirDB';
-    protected $fillable = ['check-time','date-encode','PPFNo','machine-no'];
+    protected $fillable = ['Checktime','DateEncode','PPFNo','MachineNo'];
        public $incrementing = true;
     public $timestamps = false;
 

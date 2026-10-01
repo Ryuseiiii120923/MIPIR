@@ -51,6 +51,7 @@
 </head>
 
 <body class="overflow-x-hidden font-sans">
+    <livewire:notification.pop-up-notif />
     <livewire:notification.session-modal-notification />
 
     <div
@@ -172,7 +173,7 @@
                 </h1>
 
                 <div class="flex-shrink-0">
-                   <form method="POST" action="{{ Auth::guard('worker')->check() ? route('worker.logout') : route('web.logout') }}">
+                    <form method="POST" action="{{ Auth::guard('worker')->check() ? route('worker.logout') : route('web.logout') }}">
                         @csrf
                         <button type="submit"
                             class="text-white hover:bg-emerald-800 bg-emerald-800 font-medium rounded-lg text-sm px-4 py-2">
@@ -188,7 +189,7 @@
                 <h1 class="text-2xl sm:text-3xl md:text-4xl font-bold mb-6 text-gray-800 text-center sm:text-left">
                     Welcome, {{
                 Auth::user()?->employeeName?->名前
-                ?? Auth::guard('worker')->user()?->inspector?->employeeName?->名前
+                ?? Auth::guard('worker')->user()?->Name
                 ?? 'User'
                 }}!
                 </h1>

@@ -7,14 +7,19 @@ use Illuminate\Support\Collection;
 
 class DefectRepository
 {
-    public function getLargeDefects(): Collection
-    {
-        return DefectMaster::select('LargeDefect')
-            ->distinct()
-            ->whereNotNull('LargeDefect')
-            ->orderBy('LargeDefect', 'asc')
-            ->get();
-    }
+   public function getLargeDefects(): Collection
+{
+    return DefectMaster::select('LargeDefect')
+        ->distinct()
+        ->whereNotNull('LargeDefect')
+        ->whereNotIn('LargeDefect', [
+            'Coating Defect',
+            'Excessive flash',
+            'Off set',
+        ])
+        ->orderBy('LargeDefect', 'asc')
+        ->get();
+}
 
      public function getSmallDefectsFor(string $largeDefect): Collection
     {

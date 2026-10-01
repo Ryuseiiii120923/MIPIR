@@ -21,12 +21,17 @@ new class extends \Livewire\Component
     public array $dimensionsByTime = [];
     public array $remarksByTime = [];
     public array $dateEncodeByTime = [];
+    public array $deletedCheckTime = [];
     public int $ppf = 0;
     public string $action = '';
     //Computation
     public array $dataFromMaster = [];
     public string $partNo = '';
-
+    public string $lookupTime = '';
+    public array $startTimeByTime = [];
+    public array $endTimeByTime = [];
+    public array $touchedThisSession = [];
+    public array $controlLimitByTime = [];
 
     public function addCheckTime(): void
     {
@@ -36,6 +41,9 @@ new class extends \Livewire\Component
 
         $this->checkTimes[] = $newCheckTime;
         $this->dateEncodeByTime[$newCheckTime] = now()->toDateTimeString();
+        $this->startTimeByTime[$newCheckTime] = $this->lookupTime !== '' ? $this->lookupTime : now()->toDateTimeString();
+        $this->endTimeByTime[$newCheckTime] = $this->startTimeByTime[$newCheckTime];
+        $this->touchedThisSession[$newCheckTime] = true;
 
         $this->sortCheckTimesByDateEncode();
 
@@ -75,7 +83,11 @@ new class extends \Livewire\Component
     {
         app(DraftAction::class)->put($this->ppf, 'check-time', [
             'check-time' => $this->checkTimes,
-            'date-encode'  => $this->dateEncodeByTime,
+            'date-encode' => $this->dateEncodeByTime,
+            'start-time' => $this->startTimeByTime,
+            'end-time' => $this->endTimeByTime,
+            'touched' => array_keys($this->touchedThisSession),
+            'deleted' => $this->deletedCheckTime,
         ]);
 
         app(DraftAction::class)->put($this->ppf, 'defects', [
@@ -86,6 +98,7 @@ new class extends \Livewire\Component
         ]);
 
         app(DraftAction::class)->put($this->ppf, 'dimensions', $this->dimensionsByTime);
+        app(DraftAction::class)->put($this->ppf, 'control-limit', $this->controlLimitByTime);
 
         app(DraftAction::class)->put($this->ppf, 'remarks', $this->remarksByTime);
     }
@@ -97,20 +110,28 @@ new class extends \Livewire\Component
 
     public function removeCheckTime(string $time): void
     {
+        $this->deletedCheckTime[] = [
+            'time' => $time,
+            'dimensions' => $this->dimensionsByTime[$time] ?? [],
+        ];
         $this->checkTimes = array_values(array_diff($this->checkTimes, [$time]));
         unset($this->defectsByTime[$time]);
         unset($this->dimensionsByTime[$time]);
+        unset($this->controlLimitByTime[$time]);
         unset($this->ngpercentByTime[$time]);
         unset($this->judgementByTime[$time]);
         unset($this->dateEncodeByTime[$time]);
         unset($this->remarksByTime[$time]);
+        unset($this->startTimeByTime[$time]);
+        unset($this->endTimeByTime[$time]);
+        unset($this->touchedThisSession[$time]);
         if ($this->selectedCheckTime === $time) {
             $this->selectedCheckTime = null;
         }
+
         $this->syncDraft();
     }
 
-    
 
     #[On('defects-synced')]
     public function onDefectsSynced(string $selectedCheckTime, array $defects, float $ngpercent, string $judgement, array $smallDefects): void
@@ -119,14 +140,41 @@ new class extends \Livewire\Component
         $this->ngpercentByTime[$selectedCheckTime] = $ngpercent;
         $this->judgementByTime[$selectedCheckTime] = $judgement;
         $this->smallDefectsByTime[$selectedCheckTime] = $smallDefects;
+        $this->endTimeByTime[$selectedCheckTime] = now()->toDateTimeString();
+        $this->touchedThisSession[$selectedCheckTime] = true;
         $this->syncDraft();
     }
 
     #[On('dimensions-synced')]
     public function onDimensionsSynced(string $selectedCheckTime, array $rows): void
     {
-
         $this->dimensionsByTime[$selectedCheckTime] = $rows;
+        $this->endTimeByTime[$selectedCheckTime] = now()->toDateTimeString();
+        $this->touchedThisSession[$selectedCheckTime] = true;
+        $this->syncDraft();
+    }
+
+    #[On('control-limit-synced')]
+    public function onControlLimitSynced(array $draft): void
+    {
+        $this->controlLimitByTime[$this->selectedCheckTime] = [
+            'dimItem' => $draft['dimItem'],
+            'partNo'  => $draft['partNo'],
+            'CSLx'    => $draft['CSLx'],
+            'USLx'    => $draft['USLx'],
+            'LSLx'    => $draft['LSLx'],
+            'CCLx'    => $draft['CCLx'],
+            'UCLx'    => $draft['UCLx'],
+            'LCLx'    => $draft['LCLx'],
+            'CSLr'    => $draft['CSLr'],
+            'USLr'    => $draft['USLr'],
+            'LSLr'    => $draft['LSLr'],
+            'CCLr'    => $draft['CCLr'],
+            'UCLr'    => $draft['UCLr'],
+            'LCLr'    => $draft['LCLr'],
+        ];
+        $this->endTimeByTime[$this->selectedCheckTime] = now()->toDateTimeString();
+        $this->touchedThisSession[$this->selectedCheckTime] = true;
         $this->syncDraft();
     }
 
@@ -138,6 +186,7 @@ new class extends \Livewire\Component
             'selectedCheckTime',
             'defectsByTime',
             'dimensionsByTime',
+            'controlLimitByTime',
             'ngpercentByTime',
             'judgementByTime',
             'dateEncodeByTime',
@@ -159,30 +208,33 @@ new class extends \Livewire\Component
     #[On('ppf-checked')]
     public function onPpfChecked(int $ppf): void
     {
+        $this->clear();
         $this->ppf = $ppf;
+        $this->lookupTime = now()->toDateTimeString(); // capture the moment this PPF was opened/looked up
+
         if ($this->action != 'add') {
             $result = app(PpfLookUpRepository::class)->getMainData($ppf);
             $this->checkTimes = $result['checkTime'];
+            $this->startTimeByTime = $result['startTime'] ?? [];
+            $this->endTimeByTime = $result['endTime'] ?? [];
             $this->dateEncodeByTime = $result['dateEncode'] ?? [];
-
-
 
             foreach ($this->checkTimes as $time) {
                 $this->defectsByTime[$time] = app(PpfLookUpRepository::class)->getDefectbyCheckTime($ppf, $time);
                 $this->smallDefectsByTime[$time] = app(PpfLookUpRepository::class)->getSmallDefectbyCheckTime($ppf, $time);
-                $this->dimensionsByTime[$time] = app(PpfLookUpRepository::class)
-                    ->getDimensionbyCheckTime($ppf, $time);
+                $this->dimensionsByTime[$time] = app(PpfLookUpRepository::class)->getDimensionbyCheckTime($ppf, $time);
                 $this->remarksByTime[$time] = app(PpfLookUpRepository::class)->getRemarks($ppf, $time);
             }
             $this->sortCheckTimesByDateEncode();
         }
         $this->syncDraft();
     }
-
     #[On('remarks-synced')]
     public function onRemarksSynced(string $selectedCheckTime, string $remarks): void
     {
         $this->remarksByTime[$selectedCheckTime] = $remarks;
+        $this->endTimeByTime[$selectedCheckTime] = now()->toDateTimeString();
+        $this->touchedThisSession[$selectedCheckTime] = true;
         $this->syncDraft();
     }
     #[On('fromMaster')]
@@ -241,28 +293,30 @@ new class extends \Livewire\Component
 
     {{-- Saved check times: bordered row, click to select --}}
     @if (count($checkTimes) > 0)
-    <div class="mt-4 flex flex-wrap gap-2 @if ($action === 'view') flex flex-row justify-center items-center @endif">
+    <div class="mt-4 flex flex-wrap gap-2 sm:gap-3 @if ($action === 'view') flex flex-row justify-center items-center @endif">
         @foreach ($checkTimes as $time)
         <div
             wire:key="check-time-{{ $time }}"
-            class="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition cursor-pointer
-                        {{ $selectedCheckTime === $time
-                            ? 'border-emerald-600 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-300'
-                            : 'border-gray-300 bg-white text-gray-700 hover:border-emerald-400 hover:bg-emerald-50' }}">
+            class="flex items-center gap-1 sm:gap-2 rounded-lg border pl-3 pr-1.5 sm:pl-4 sm:pr-2 py-1.5 sm:py-2.5 text-sm sm:text-base font-medium transition
+                    {{ $selectedCheckTime === $time
+                        ? 'border-emerald-600 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-300'
+                        : 'border-gray-300 bg-white text-gray-700 hover:border-emerald-400 hover:bg-emerald-50' }}">
             <button
                 wire:click="selectCheckTime('{{ $time }}')"
                 type="button"
-                class="flex-1 text-left">
+                class="flex items-center gap-1 whitespace-nowrap cursor-pointer">
                 {{ $time }}
                 @if(count($defectsByTime[$time] ?? []) > 0)
-                <span class="ml-1 text-xs text-emerald-600">({{ count($defectsByTime[$time]) }})</span>
+                <span class="text-xs sm:text-sm text-emerald-600">({{ count($defectsByTime[$time]) }})</span>
                 @endif
             </button>
             <button
                 @if($action==='view' || $action==='delete' ) disabled @endif
-                wire:click="removeCheckTime('{{ $time }}')"
+                @click.prevent="if (confirm('Are you sure you want to remove this check time?')) $wire.removeCheckTime('{{ $time }}')"
                 type="button"
-                class="text-gray-400 hover:text-red-600">
+                class="flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center rounded-md text-gray-400 text-sm sm:text-base
+                   hover:text-red-600 hover:bg-red-50 transition
+                   disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400">
                 ✕
             </button>
         </div>

@@ -3,6 +3,7 @@
 use App\Dashboard\Action\DimensionApprovalAction;
 use App\Inspection\Models\Dimensions\TempDimension;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\File;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 use Livewire\WithFileUploads;
@@ -53,6 +54,30 @@ new class extends Component
                 || str_contains(mb_strtolower($temp->DimensionName), $needle)
                 || str_contains(mb_strtolower($temp->Device), $needle);
         });
+    }
+
+    #[Computed]
+    public function availableSymbols()
+    {
+        $symbolPath = storage_path('app/Symbol');
+
+        if (! File::isDirectory($symbolPath)) {
+            return collect();
+        }
+
+        return collect(File::files($symbolPath))
+            ->filter(fn ($file) => in_array(strtolower($file->getExtension()), ['png', 'jpg', 'jpeg']))
+            ->map(fn ($file) => [
+                'number'   => pathinfo($file->getFilename(), PATHINFO_FILENAME),
+                'filename' => $file->getFilename(),
+            ])
+            ->sortBy(fn ($item) => (int) $item['number'])
+            ->values();
+    }
+
+    public function selectSymbol(string $number): void
+    {
+        $this->symbol = $number;
     }
 
     public function review(int $id): void
@@ -244,10 +269,28 @@ new class extends Component
 
                     <div>
                         <label class="block text-xs font-medium text-gray-600 mb-1">Symbol</label>
-                        <input
-                            type="text"
-                            wire:model="symbol"
-                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
+
+                        @if ($this->availableSymbols->isEmpty())
+                            <p class="text-xs text-gray-400 italic">No symbol images found in storage.</p>
+                        @else
+                            <div class="grid grid-cols-4 gap-2">
+                                @foreach ($this->availableSymbols as $sym)
+                                    <button
+                                        type="button"
+                                        wire:click="selectSymbol('{{ $sym['number'] }}')"
+                                        class="relative border-2 rounded-lg overflow-hidden transition-colors duration-150 {{ (string) $symbol === (string) $sym['number'] ? 'border-emerald-500 ring-2 ring-emerald-200' : 'border-gray-200 hover:border-gray-300' }}">
+                                        <img
+                                            src="{{ route('symbols.show', ['filename' => $sym['filename']]) }}"
+                                            class="w-full h-14 object-contain bg-white p-1"
+                                            loading="lazy">
+                                        <span class="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[10px] text-center py-0.5">
+                                            {{ $sym['number'] }}
+                                        </span>
+                                    </button>
+                                @endforeach
+                            </div>
+                        @endif
+
                         @error('symbol') <span class="text-red-600 text-xs mt-1 block">{{ $message }}</span> @enderror
                     </div>
 

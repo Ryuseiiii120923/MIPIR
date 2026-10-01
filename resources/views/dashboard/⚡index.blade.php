@@ -8,11 +8,6 @@ new class extends Component
 {
     use HasNotifications;
 
-    public function generateExcel()
-    {
-        return $this->redirect(route('inspection.xbar.download', ['ppf' => 1764898]));
-    }
-
     public function goToLink()
     {
         try {
@@ -37,9 +32,5 @@ new class extends Component
 ?>
 
 <div>
-    Dashboard <br>
-
-    <button wire:click="generateExcel">Generate Excel</button>
-    <br>
-    <button wire:click="goToLink">Link</button>
+    Dashboard 
 </div>
