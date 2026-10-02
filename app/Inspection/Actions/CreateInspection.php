@@ -81,6 +81,7 @@ class CreateInspection
                     'DateJudge' => $dateJudge ?? now(),
                     'InspectBy' => Auth::user()->EmployeeID ?? null,
                     'Year' => now()->year,
+                    'MoldingOperator' => $ppfLookUp['moldOperator'] ?? null
                 ]);
 
 
@@ -429,7 +430,6 @@ class CreateInspection
                 $service->appendFlashToExcel($context, $upserts, $allRows);
             }
         } catch (\Throwable $e) {
-            // Excel failure must never break the inspection save
             Log::error('Tightened Flash Thickness Excel failed', [
                 'PPFNo' => $ppf,
                 'error' => $e->getMessage(),
@@ -454,7 +454,6 @@ class CreateInspection
         $partNo = (string) ($ppfLookUp['partNo'] ?? '');
         $isF00VE = str_starts_with(strtoupper(trim($partNo)), 'F00VE');
 
-        // 'measurements' is the X axis (90°), 'measurements_y' the Y axis (0°), as CreateInspection saves them
         $gapRowsFor = function (array $times) use ($dimensions, $remarks, $isTightenedGap): array {
             $rows = [];
 
@@ -464,13 +463,12 @@ class CreateInspection
                         $rows[] = [
                             'checkTime'     => $checkTime,
                             'remarks'       => $remarks[$checkTime] ?? '',
-                            'judgement'     => $row['judge'] ?? null,   // used by the O-Ring sheet only
+                            'judgement'     => $row['judge'] ?? null,   
                             'specification' => $row['specification'] ?? '',
                             'controlLimit'  => $row['CL'] ?? '',
                             'measurements'  => [
                                 '0'  => $row['measurements_y'] ?? [],
                                 '90' => $row['measurements'] ?? [],
-                                // O-Ring only: '45' and '135' go here once we know where they live in $row
                             ],
                         ];
                     }
@@ -485,7 +483,6 @@ class CreateInspection
         foreach ($touchedCheckTimes as $checkTime) {
             foreach ($dimensions[$checkTime] ?? [] as $row) {
                 if ($isGap($row) && ! $isTightenedGap($row)) {
-                    // Gap-Offset row is now Normal: an old tightened row may have to leave the file
                     $needsRebuild = true;
                 }
             }
@@ -513,7 +510,6 @@ class CreateInspection
             'machineNo' => $ppfLookUp['machineNo'],
             'lotNo'     => $ppfLookUp['productionLotNo'],
             'inspector' => $inspectorNo,
-            // F00VE header (E4 / E5), only used when the file is created
             'spec'      => $allRows[0]['specification'] ?? '',
             'limit'     => $allRows[0]['controlLimit'] ?? '',
         ];
@@ -533,7 +529,6 @@ class CreateInspection
                     : $service->appendGapOringToExcel($context, $upserts, $allRows);
             }
         } catch (\Throwable $e) {
-            // Excel failure must never break the inspection save
             Log::error('Tightened Gap-Offset Excel failed', [
                 'PPFNo' => $ppf,
                 'error' => $e->getMessage(),

@@ -214,7 +214,7 @@ new class extends \Livewire\Component
 
         if ($this->action != 'add') {
             $result = app(PpfLookUpRepository::class)->getMainData($ppf);
-            $this->checkTimes = $result['checkTime'];
+            $this->checkTimes = $result['checkTime'] ?? [];
             $this->startTimeByTime = $result['startTime'] ?? [];
             $this->endTimeByTime = $result['endTime'] ?? [];
             $this->dateEncodeByTime = $result['dateEncode'] ?? [];

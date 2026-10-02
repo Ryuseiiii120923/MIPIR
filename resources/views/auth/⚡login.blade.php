@@ -24,12 +24,19 @@ new #[Layout('components.layouts.guest')] class extends Component {
         $this->status = null;
         $this->resetValidation('userId');
 
+        Log::info('User logged in', [
+            'inspector_id' => $this->userId,
+        ]);
         if (blank($this->userId)) {
             return;
         }
 
         $inspector = InspectorDb::where('EmployeeID', $this->userId)->first();
         if ($inspector) {
+            Log::info('User logged in', [
+                'inspector_id' => $this->userId,
+                'has_password' => !blank($inspector->Password),
+            ]);
             // Registered inspector with no password yet -> open the creator
             if (blank($inspector->Password)) {
                 $this->showPasswordModal = true;
@@ -128,12 +135,12 @@ new #[Layout('components.layouts.guest')] class extends Component {
                         <div>
                             <label for="userid" class="block mb-2 text-sm font-medium text-gray-900">User ID</label>
                             <p id="userid-error" class="hidden text-xs text-blue-500 mt-1 mb-1">
-                                UserId must be exactly 4 digits
+                                UserId must be exactly 6 digits
                             </p>
                             <input type="text" name="userid" id="userid"
-                                maxlength="4" inputmode="numeric"
+                                maxlength="6" inputmode="numeric"
                                 class="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-primary-600 focus:border-primary-600 block w-full p-2.5"
-                                placeholder="xxxx"
+                                placeholder="xxxxxx"
                                 wire:model="userId"
                                 wire:blur="checkUserId"
                                 required />

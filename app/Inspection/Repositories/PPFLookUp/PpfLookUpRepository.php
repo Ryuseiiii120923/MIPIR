@@ -3,8 +3,9 @@
 namespace App\Inspection\Repositories\PPFLookUp;
 
 use App\Domain\Master\MoldedProduct;
-use App\Domain\Master\Molding;
+use App\Domain\Master\MoldingPlan;
 use App\Domain\Master\NQR;
+use App\Domain\Master\SEIHIN;
 use App\Inspection\Models\ChckTRemarks;
 use App\Inspection\Models\CheckTime;
 use App\Inspection\Models\Defect;
@@ -12,34 +13,110 @@ use App\Inspection\Models\MIPIRDimensionMeasure;
 use App\Inspection\Models\MIPIRInspectionRecord;
 use App\Inspection\Models\SmallDefect;
 use App\Inspection\Repositories\Contracts\PpfLookUpRepositoryInterface;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 
 class PpfLookUpRepository implements PpfLookUpRepositoryInterface
 {
-    public function getPartNoMoldNo(int $ppf): ?Molding
+    public function getPartNoMoldNo(int $ppf): ?MoldingPlan
     {
-        return Molding::select('品番 as PartNo', '金型NO as MoldNo', 'PRESSNO', '成形ﾛｯﾄ as ProdLotNo')->where('流動NO', $ppf)->first();
+        return MoldingPlan::select('品番 as PartNo', '金型NO as MoldNo', 'PRESS_NO as PRESSNO')->where('流動NO', $ppf)->first();
     }
 
-    public function getCavity(string $partNo): ?int
+    public function getProdLotNo(int $ppf, string $operator)
+    {
+        $result = MoldingPlan::select(
+            '班 as Shift',
+            '成形日 as MoldingDate'
+        )
+            ->where('流動NO', $ppf)
+            ->first();
+
+        if (!$result) {
+            return null;
+        }
+
+        $shift = $result->Shift;
+        $moldingDate = Carbon::parse($result->MoldingDate);
+
+        $year = $moldingDate->format('Y');
+        $month = (int) $moldingDate->format('m');
+        $day = $moldingDate->format('d');
+
+        if ($month >= 10) {
+            $romanMonths = [
+                10 => 'X',
+                11 => 'XI',
+                12 => 'XII',
+            ];
+
+            $monthCode = $romanMonths[$month];
+        } else {
+            $monthCode = $month;
+        }
+
+        if (substr($year, 2, 1) == '2') {
+            $yearCode = substr(
+                'ABCDEFGHIJ',
+                (int) substr($year, 3, 1),
+                1
+            );
+        } elseif (substr($year, 2, 1) == '3') {
+            $yearCode = substr(
+                'KLMNOPQRST',
+                (int) substr($year, 3, 1),
+                1
+            );
+        } elseif (substr($year, 2, 1) == '4') {
+            $yearCode = substr(
+                'UVWXYZ',
+                (int) substr($year, 3, 1),
+                1
+            );
+        } else {
+            $yearCode = substr($year, 3, 1);
+        }
+        $prodLotNo = '20'
+            . $yearCode
+            . $monthCode
+            . $day
+            . '-'
+            . $shift
+            . $operator;
+
+        return $prodLotNo;
+    }
+
+    public function getCavity(string|null $partNo): ?int
     {
         return MoldedProduct::where('品番', $partNo)
             ->distinct()
             ->value('仕込取数');
     }
 
-    public function getNQR(string $partNo, string $moldNo): ?NQR
+    public function getNQR(string|null $partNo, string|null $moldNo)
     {
+        if (!$partNo || !$moldNo) {
+            return null;
+        }
         return NQR::where('partNo', $partNo)
             ->where('mdNo', $moldNo)
             ->where('status_remarks', 'APPROVED(CURRENT)')
             ->orderByDesc('approvedDate')
-            ->first();
+            ->value('nqrCriteria');
     }
 
+    public function getNQRSeihin(string|null $partNo, string|null $moldNo)
+    {
+        if (!$partNo || !$moldNo) {
+            return null;
+        }
+
+        return SEIHIN::where('品番 ', $partNo)->value('不良率');
+    }
     public function isExist(int $ppf): bool
     {
-        return Molding::where('流動NO', $ppf)->exists();
+        return MoldingPlan::where('流動NO', $ppf)->exists();
     }
 
     public function getDataforSearch(
@@ -73,62 +150,62 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
     }
 
 
-public function getDataforSearchGapOffset(
-    string $search,
-    int $encoder,
-    int $perPage = 5,
-    bool $excludeGenerated = false
-) {
-    $dimSub = MIPIRInspectionRecord::query()
-        ->getConnection()
-        ->table('DB_MIPIR.dbo.tblDimensionMeasure')
-        ->select(['PPFNo', 'DimItem', 'created_at', 'isRecord'])
-        ->selectRaw('ROW_NUMBER() OVER (PARTITION BY PPFNo ORDER BY created_at DESC) as rn')
-        ->whereIn('DimItem', ['Gap-Offset', 'Gap-Offset (Y)']);
+    public function getDataforSearchGapOffset(
+        string $search,
+        int $encoder,
+        int $perPage = 5,
+        bool $excludeGenerated = false
+    ) {
+        $dimSub = MIPIRInspectionRecord::query()
+            ->getConnection()
+            ->table('DB_MIPIR.dbo.tblDimensionMeasure')
+            ->select(['PPFNo', 'DimItem', 'created_at', 'isRecord'])
+            ->selectRaw('ROW_NUMBER() OVER (PARTITION BY PPFNo ORDER BY created_at DESC) as rn')
+            ->whereIn('DimItem', ['Gap-Offset', 'Gap-Offset (Y)']);
 
-    $query = MIPIRInspectionRecord::query()
-        ->select([
-            'tblInspectionRecord.PPFNo',
-            'tblInspectionRecord.PartNo',
-            'tblInspectionRecord.MDNo',
-            'tblInspectionRecord.DateJudge',
-            'tblInspectionRecord.MachineNo',
-            'dm.DimItem',
-            'dm.created_at',
-        ])
-        ->leftJoinSub($dimSub, 'dm', function ($join) {
-            $join->on('dm.PPFNo', '=', 'tblInspectionRecord.PPFNo')
-                 ->where('dm.rn', '=', 1);
-        })
-        ->where('tblInspectionRecord.InspectBy', $encoder)
-        ->when($search !== '', function ($query) use ($search) {
-            $query->where('tblInspectionRecord.PPFNo', 'like', "%{$search}%");
-        });
+        $query = MIPIRInspectionRecord::query()
+            ->select([
+                'tblInspectionRecord.PPFNo',
+                'tblInspectionRecord.PartNo',
+                'tblInspectionRecord.MDNo',
+                'tblInspectionRecord.DateJudge',
+                'tblInspectionRecord.MachineNo',
+                'dm.DimItem',
+                'dm.created_at',
+            ])
+            ->leftJoinSub($dimSub, 'dm', function ($join) {
+                $join->on('dm.PPFNo', '=', 'tblInspectionRecord.PPFNo')
+                    ->where('dm.rn', '=', 1);
+            })
+            ->where('tblInspectionRecord.InspectBy', $encoder)
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where('tblInspectionRecord.PPFNo', 'like', "%{$search}%");
+            });
 
-    if ($excludeGenerated) {
-        // Add/Update: ipakita kung walang Gap-Offset pa (bagong ie-encode),
-        // O may Gap-Offset na pero hindi pa naka-generate sa report (isRecord null).
-        $query->where(function ($q) {
-            $q->whereNull('dm.DimItem')
-              ->orWhereNull('dm.isRecord');
-        });
-    } else {
-        // Delete: kailangang may existing Gap-Offset na para may matanggal.
-        $query->whereNotNull('dm.DimItem');
+        if ($excludeGenerated) {
+            // Add/Update: ipakita kung walang Gap-Offset pa (bagong ie-encode),
+            // O may Gap-Offset na pero hindi pa naka-generate sa report (isRecord null).
+            $query->where(function ($q) {
+                $q->whereNull('dm.DimItem')
+                    ->orWhereNull('dm.isRecord');
+            });
+        } else {
+            // Delete: kailangang may existing Gap-Offset na para may matanggal.
+            $query->whereNotNull('dm.DimItem');
+        }
+
+        return $query
+            ->whereIn(
+                'tblInspectionRecord.RECNO',
+                MIPIRInspectionRecord::query()
+                    ->selectRaw('MAX(RECNO)')
+                    ->where('InspectBy', $encoder)
+                    ->groupBy('PPFNo')
+            )
+            ->orderByDesc('tblInspectionRecord.DateJudge')
+            ->orderByDesc('tblInspectionRecord.PPFNo')
+            ->paginate($perPage);
     }
-
-    return $query
-        ->whereIn(
-            'tblInspectionRecord.RECNO',
-            MIPIRInspectionRecord::query()
-                ->selectRaw('MAX(RECNO)')
-                ->where('InspectBy', $encoder)
-                ->groupBy('PPFNo')
-        )
-        ->orderByDesc('tblInspectionRecord.DateJudge')
-        ->orderByDesc('tblInspectionRecord.PPFNo')
-        ->paginate($perPage);
-}
     //Fetching Repositories
 
     // public function getMainData(int $ppf): ?array
@@ -185,6 +262,7 @@ public function getDataforSearchGapOffset(
                     'dateEncode' => $checkTime->pluck('DateEncode', 'Checktime')->all(),
                     'judgement' => $ppfLookUp['Judgement'] === 1 ? 'Failed' : 'Passed',
                     'dateJudge' => \Carbon\Carbon::parse($ppfLookUp['DateJudge'])->format('Y/m/d'),
+                    'moldOperator' => $ppfLookUp['MoldingOperator'] ?? null
                 ];
             }
         );
@@ -228,7 +306,7 @@ public function getDataforSearchGapOffset(
         $records = MIPIRDimensionMeasure::where('PPFNo', $ppf)
             ->where('Checktime', $checkTime)
             ->orderBy('Set')
-            ->get(['DimItem', 'Specs','ForXBar', 'Mode', 'CL', 'Judge', 'Set', 'Value1', 'Value2', 'Value3', 'Value4', 'Value5']);
+            ->get(['DimItem', 'Specs', 'ForXBar', 'Mode', 'CL', 'Judge', 'Set', 'Value1', 'Value2', 'Value3', 'Value4', 'Value5']);
 
         $rows = [];
 

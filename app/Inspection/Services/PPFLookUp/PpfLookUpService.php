@@ -4,6 +4,7 @@ namespace App\Inspection\Services\PPFLookUp;
 
 use App\Inspection\Repositories\Contracts\PpfLookUpRepositoryInterface;
 use App\Inspection\Repositories\PPFLookUp\PpfLookUpRepository;
+use Illuminate\Support\Facades\Log;
 
 use function Livewire\off;
 
@@ -23,6 +24,14 @@ class PpfLookUpService
         $cavities = $this->repo->getCavity($result->PartNo);
         $nqr = $this->repo->getNQR($result->PartNo, $result->MoldNo);
 
+        if($nqr === null || $nqr === 0) {
+            $nqr = $this->repo->getNQRSeihin($result->PartNo, $result->MoldNo);
+        } 
+
+        Log::info('User logged in', [
+            'nqr' => $nqr ?? 0,
+        ]);
+
         $ppfLookUpRepo = app(PpfLookUpRepository::class);
         $mainData = $ppfLookUpRepo->getMainData($ppf);
         $checkTimes = $mainData['checkTime'] ?? [];
@@ -34,16 +43,17 @@ class PpfLookUpService
         }
 
         return [
-            'partNo' => $result->PartNo,
-            'moldNo' => $result->MoldNo,
-            'machineNo' => $result->PRESSNO,
-            'noOfCavity' => $cavities,
-            'nqr' => round($nqr->nqrCriteria, 2),
-            'prodLotNo' => $result->ProdLotNo,
+            'partNo' => $result->PartNo ?? null,
+            'moldNo' => $result->MoldNo ?? null,
+            'machineNo' => $result->PRESSNO ?? null,
+            'noOfCavity' => $cavities ?? null,
+            'nqr' => round($nqr ?? 0, 2) ?? null,
+            'prodLotNo' => $mainData['productionLotNo'] ?? "",
             'checkTimes' => $checkTimes,
             'measurementsXByTime' => $measurementsXByTime ?? [],
             'measurementsYByTime' => $measurementsYByTime ?? [],
-            'judgementByTime' => $judgementByTime ?? []
-        ]; 
+            'judgementByTime' => $judgementByTime ?? [],
+            'moldOperator' => $mainData['moldOperator'] ?? null
+        ];
     }
 }

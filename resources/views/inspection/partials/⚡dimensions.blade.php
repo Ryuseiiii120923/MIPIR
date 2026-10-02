@@ -347,6 +347,14 @@ new class extends Component
     focusMeasurement(cardIndex, slotIndex) {
         const el = document.querySelector(`[data-card-index='${cardIndex}'] input[data-measurement-index='${slotIndex}']`);
         if (el) el.focus();
+    },
+    nextMeasurement(cardIndex, slotIndex) {
+        const next = document.querySelector(`[data-card-index='${cardIndex}'] input[data-measurement-index='${slotIndex + 1}']`);
+        if (next) {
+            next.focus();
+        } else {
+            this.focusNextCard(cardIndex);
+        }
     }
 }"
     x-on:focus.capture="$event.target.matches('input[type=text], input[type=number]') && $event.target.select()">
@@ -553,6 +561,7 @@ new class extends Component
                                 <input @if($readonly) disabled @endif type="text"
                                 wire:model.live.debounce.400ms="rows.{{ $i }}.measurements.{{ $j }}"
                                 wire:key="dim-{{ $i }}-m-{{ $j }}"
+                                 @keydown.enter.prevent="nextMeasurement({{ $i }}, {{ $j }})"
                                 data-measurement-index="{{ $j }}"
                                 @if($j===0) data-first-measurement @endif
                                 class="w-16 bg-gray-50 border-0 rounded-lg text-center py-2"

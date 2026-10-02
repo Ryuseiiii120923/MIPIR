@@ -3,6 +3,7 @@
 
 use App\Inspection\Actions\DraftAction;
 use App\Inspection\Models\MIPIRInspectionRecord;
+use App\Inspection\Repositories\PPFLookUp\PpfLookUpRepository;
 use App\Inspection\Services\PPFLookUp\PpfLookUpService;
 use App\Traits\WithLoading;
 use Livewire\Attributes\On;
@@ -22,9 +23,11 @@ new class extends Component
     public bool $found = false;
     public bool $searching = false;
     public string $action = '';
-    public int $machineNo;
+    public int $machineNo = 0;
     public string $mode = '';
     public string $lotNo = '';
+    public string $operator = '';
+    public string $moldOperator = '';
 
     #[On('gap-offset-action')]
     public function onGapOffsetAction(string $action, $mode): void
@@ -92,6 +95,7 @@ new class extends Component
         $result = app(PpfLookUpService::class)
             ->findByPpfNo($this->ppfno);
 
+
         if (is_null($result)) {
             $this->addError(
                 'ppfno',
@@ -106,11 +110,12 @@ new class extends Component
         }
 
         $this->partNumber = $result['partNo'];
-        $this->moldingDieNo = $result['moldNo'];
-        $this->noOfCavity = $result['noOfCavity'];
-        $this->nqrIssuanceCriteria = $result['nqr'];
-        $this->machineNo = $result['machineNo'];
-        $this->lotNo = $result['prodLotNo'];
+        $this->moldingDieNo = $result['moldNo'] ?? '';
+        $this->noOfCavity = $result['noOfCavity'] ?? 0;
+        $this->nqrIssuanceCriteria = $result['nqr'] ?? '';
+        $this->machineNo = $result['machineNo'] ?? 0;
+        $this->lotNo = $result['prodLotNo'] ?? '';
+        $this->moldOperator = $result['moldOperator'] ?? '';
 
         $this->found = true;
         // Notify other components only after PPF was found.
@@ -120,8 +125,8 @@ new class extends Component
             'fetchPartNo',
             partNo: $this->partNumber
         );
-
         $this->dispatch('fetchMachineLotNo', machineNo: $this->machineNo, lotNo: $this->lotNo);
+
 
         $this->dispatch('fromMaster', [
             'noOfCavity' => $this->noOfCavity,
@@ -144,13 +149,14 @@ new class extends Component
             'noOfCavity' => $this->noOfCavity,
             'nqr' => $this->nqrIssuanceCriteria,
             'machineNo' => $this->machineNo,
-            'productionLotNo' => $this->lotNo
+            'productionLotNo' => $this->lotNo,
+            'moldOperator' => $this->moldOperator
         ]);
     }
 
     public function clear(): void
     {
-        $this->reset(['ppfno', 'partNumber', 'moldingDieNo', 'noOfCavity', 'nqrIssuanceCriteria', 'found']);
+        $this->reset(['ppfno', 'partNumber', 'moldingDieNo', 'noOfCavity', 'nqrIssuanceCriteria', 'found', 'moldOperator']);
         $this->resetErrorBag();
     }
 
@@ -164,11 +170,19 @@ new class extends Component
     }
 
     #[On('action-changed-gapoffset')]
-    public function actionChangedGap(string $action){
+    public function actionChangedGap(string $action)
+    {
         $this->action = $action;
         if ($action) {
             $this->clear();
         }
+    }
+
+    public function fetchProductionLotNo()
+    {
+        $this->lotNo = app(PpfLookUpRepository::class)->getProdLotNo($this->ppfno, $this->moldOperator);
+        $this->dispatch('fetchMachineLotNo', machineNo: $this->machineNo, lotNo: $this->lotNo);
+        $this->syncDraft();
     }
 };
 ?>
@@ -218,6 +232,11 @@ new class extends Component
 
     {{-- Result fields --}}
     <div class="space-y-4">
+        <x-ui.input-field id="moldOperator"
+            label="Molding Operator"
+            type="text"
+            wire:blur="fetchProductionLotNo"
+            wire:model="moldOperator" />
         <x-ui.input-field id="partNumber"
             label="Part Number"
             type="text"
@@ -241,7 +260,6 @@ new class extends Component
         <label class="block text-sm font-medium text-gray-700 mb-1.5">NQR Issuance Criteria</label>
         <textarea
             wire:model="nqrIssuanceCriteria"
-            readonly
             rows="3"
             placeholder="—"
             class="w-full rounded-lg border-gray-200 bg-gray-50 text-gray-800 text-sm py-2.5 px-3.5 cursor-not-allowed resize-none"></textarea>

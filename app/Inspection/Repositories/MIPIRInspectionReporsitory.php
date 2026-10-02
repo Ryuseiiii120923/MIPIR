@@ -26,6 +26,7 @@ class MIPIRInspectionReporsitory
             'DateJudge' => $data['DateJudge'],
             'InspectBy' => $data['InspectBy'],
             'Year' => $data['Year'],
+            'MoldingOperator' => $data['MoldingOperator'] ?? null
         ]);
     }
 

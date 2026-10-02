@@ -30,6 +30,7 @@ class MIPIRInspectionRecord extends Model
         'ConfirmedBy',
         'InspectBy',
         'Year',
+        'MoldingOperator'
     ];
 
     public function dimensionMeasures()
