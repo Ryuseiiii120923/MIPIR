@@ -13,14 +13,14 @@ class DimensionMasterRepository implements DimensionMasterRepositoryInterface
 {
     public function getDimensionName(string $partNo): Collection
     {
-        return DimensionMasterForXBar::where('PartNo', $partNo)->distinct()->pluck('DimensionName');
+        return DimensionMaster::where('PartNo', $partNo)->distinct()->pluck('DimensionName');
     }
 
     
 
     public function getMasterSpecification(string $partNo, string $item): ?array
     {
-        $row = DimensionMasterForXBar::query()
+        $row = DimensionMaster::query()
             ->where('PartNo', $partNo)
             ->where('DimensionName', $item)
             ->first();
@@ -65,7 +65,7 @@ class DimensionMasterRepository implements DimensionMasterRepositoryInterface
             return [];
         }
 
-        return DimensionMasterForXBar::where('PartNo', $partNo)
+        return DimensionMaster::where('PartNo', $partNo)
             ->where('DimensionName', 'like', "%{$term}%")
             ->limit(8)
             ->orderBy('DimensionName')

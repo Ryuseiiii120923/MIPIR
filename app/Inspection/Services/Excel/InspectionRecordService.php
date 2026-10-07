@@ -354,10 +354,6 @@ class InspectionRecordService
 
             foreach ($lot as $item) {
                 $entries[] = ['ppf' => $item['ppf'], 'checktime' => $item['checktime'], 'synthetic' => false];
-
-                if ($this->appearanceJudgeIsNg($item['ppf'], $item['checktime'])) {
-                    $entries[] = ['ppf' => null, 'checktime' => null, 'synthetic' => true];
-                }
             }
 
             $plan[] = $entries;

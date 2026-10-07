@@ -14,8 +14,11 @@ class InspectorID extends Model
     public $timestamps = false;
 
     protected $fillable = [
+        '区分',
         '社員CD',
-        '作業員CD'
+        '作業員CD',
+        '更新日',
+        '登録者',
     ];
 
     public function getAuthIdentifier()

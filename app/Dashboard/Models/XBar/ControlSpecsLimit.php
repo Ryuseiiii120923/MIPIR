@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Inspection\Models\XBar;
+namespace App\Dashboard\Models\XBar;
 
 use Illuminate\Database\Eloquent\Model;
 

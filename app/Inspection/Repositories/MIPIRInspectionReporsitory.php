@@ -41,7 +41,7 @@ class MIPIRInspectionReporsitory
             'MachineNo' => $data['MachineNo'],
             'Checktime' => $data['Checktime'],
             'Mode' => $data['Mode'],
-            'CL' => $data['CL'],
+            'CL' => $data['CL'] ?? null,
             'Set' => $data['Set'],
             'ForXBar' => $data['forXBar'] ?? false,
             'Specs' => $data['Specs'],

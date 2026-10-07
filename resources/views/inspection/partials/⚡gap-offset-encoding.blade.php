@@ -70,12 +70,15 @@ new class extends Component
 
     public string $action = '';
 
+    public string $controlLimit = '';
+
     #[On('ppf-checked')]
     public function onPpfChecked(int $ppf): void
     {
         $this->ppf = $ppf;
 
         $result = app(PpfLookUpService::class)->findByPpfNo((string) $ppf);
+        $gapOffsetChecktime = app(PpfLookUpRepository::class)->getGapOffsetChecktime((string) $ppf);
 
         if (! $result) {
             return;
@@ -85,7 +88,7 @@ new class extends Component
         $this->moldNo = $result['moldNo'] ?? '';
         $this->prodLotNo = $result['prodLotNo'] ?? '';
         $this->machineNo = (string) (int) ($result['machineNo'] ?? 0);
-        $this->checkTimes = $result['checkTimes'] ?? [];
+        $this->checkTimes = $gapOffsetChecktime;
         $this->measurementsXByTime = $result['measurementsXByTime'] ?? [];
         $this->measurementsYByTime = $result['measurementsYByTime'] ?? [];
         $this->judgeByTime = $result['judgementByTime'] ?? [];
@@ -112,7 +115,8 @@ new class extends Component
                 'specNominal',
                 'specTolerance',
                 'specUpper',
-                'specLower'
+                'specLower',
+                'controlLimit',
             ]);
         }
         $this->action = $action;
@@ -213,8 +217,6 @@ new class extends Component
         $this->measurementsXByTime[$time] = $parsed['x'];
         $this->measurementsYByTime[$time] = $parsed['y'];
 
-        // Auto-detect: 5 o mas kaunti = Normal (1 set), higit sa 5 = Tightened
-        // (bilang ng sets = ceil(count / 5), bawat set ay 5 measurements).
         $count = count($parsed['x']);
         $sets = max(1, (int) ceil($count / 5));
         $mode = $count <= 5 ? 'normal' : 'tightened';
@@ -235,38 +237,29 @@ new class extends Component
             return ['x' => [], 'y' => []];
         }
 
-        $x = [];
-        $y = [];
-        $currentAngle = null; // null until we hit the first DEGREES marker (skips the header row)
+        $values = [];
 
         foreach ($rows as $row) {
-            $label = trim((string) ($row[0] ?? ''));
-
-            if ($label !== '') {
-                if (stripos($label, '90') !== false && stripos($label, 'DEGREE') !== false) {
-                    $currentAngle = 'y';
-                } elseif (stripos($label, 'DEGREE') !== false) {
-                    $currentAngle = 'x';
-                }
-            }
-
-            if ($currentAngle === null) {
+            if (!is_numeric($row[3] ?? null)) {
                 continue;
             }
 
+            // Measurement is always the last column
             $value = $row[count($row) - 1] ?? null;
-            $value = is_numeric($value) ? (float) $value : 0;
 
-            if ($currentAngle === 'x') {
-                $x[] = $value;
-            } else {
-                $y[] = $value;
+            if (!is_numeric($value)) {
+                continue;
             }
+
+            $values[] = (float) $value;
         }
+        $half = intdiv(count($values), 2);
 
-        return ['x' => $x, 'y' => $y];
+        return [
+            'x' => array_slice($values, 0, $half),
+            'y' => array_slice($values, $half),
+        ];
     }
-
     /*
     |--------------------------------------------------------------------------
     | Normal / Tightened modal
@@ -359,12 +352,13 @@ new class extends Component
             return;
         }
 
-        $this->device = $master['Device'];
-        $this->specType = $spec['specType'];
-        $this->specNominal = $spec['specNominal'];
-        $this->specTolerance = $spec['specTolerance'];
-        $this->specUpper = $spec['specUpper'];
-        $this->specLower = $spec['specLower'];
+        $this->device         = $master['Device'];
+        $this->controlLimit   = (string) ($master['CL'] ?? '');
+        $this->specType       = $spec['specType'];
+        $this->specNominal    = $spec['specNominal'];
+        $this->specTolerance  = $spec['specTolerance'];
+        $this->specUpper      = $spec['specUpper'];
+        $this->specLower      = $spec['specLower'];
     }
 
     /** Fires on every wire:model.live update — recomputes limits/judge live, same as dimensions.blade.php. */
@@ -382,15 +376,16 @@ new class extends Component
     public function persistSpecification(): void
     {
         app(DimensionsService::class)->persistSpecification($this->partNo, 'Gap-Offset', [
-            'specType' => $this->specType,
-            'specNominal' => $this->specNominal,
+            'specType'      => $this->specType,
+            'specNominal'   => $this->specNominal,
             'specTolerance' => $this->specTolerance,
-            'specUpper' => $this->specUpper,
-            'specLower' => $this->specLower,
-            'device' => $this->device,
+            'specUpper'     => $this->specUpper,
+            'specLower'     => $this->specLower,
+            'device'        => $this->device,
+            'controlLimit'  => $this->controlLimit,
         ]);
 
-        $this->notifySuccess('Gap-Offset specification updated.');
+        $this->notifySuccess('Saved', 'Gap-Offset specification updated.');
     }
 
     private function evaluateJudge(string $time): void
@@ -514,6 +509,7 @@ new class extends Component
                 'ProdLotNo' => $this->prodLotNo,
                 'MachineNo' => $this->machineNo,
                 'Checktime' => $time,
+                'CL'     => $this->controlLimit,
                 'Mode'      => $mode,
                 'Set'       => $s + 1,
                 'Specs'     => $this->specNominal,
@@ -540,6 +536,7 @@ new class extends Component
                 'ProdLotNo' => $this->prodLotNo,
                 'MachineNo' => $this->machineNo,
                 'Checktime' => $time,
+                'CL'     => $this->controlLimit,
                 'Mode'      => $mode,
                 'Set'       => $s + 1,
                 'Specs'     => $this->specNominal,
@@ -595,7 +592,7 @@ new class extends Component
             <div>
                 <label class="text-sm font-medium block mb-1.5">Specification</label>
                 <div class="flex items-center gap-2 flex-wrap">
-                    <select wire:model.live="specType" class="bg-gray-50 border-0 rounded-lg px-2 py-2 text-sm">
+                    <select wire:model.live="specType" class="bg-gray-50 border-0 rounded-lg px-2 py-2 text-sm" disabled>
                         <option value="">Select</option>
                         <option value="max">MAX</option>
                         <option value="min">MIN</option>
@@ -630,13 +627,15 @@ new class extends Component
                     <input type="text" wire:model.live.debounce.400ms="specLower"
                         class="w-20 bg-gray-50 border-0 rounded-lg px-3 py-2 text-center" placeholder="0.10">
                     @endif
-
-                    <button type="button"
-                        @click.prevent="if (confirm('Are you sure you want to update this dimension?')) $wire.persistSpecification()"
-                        class="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-100 transition">
-                        Update Dimension
-                    </button>
                 </div>
+            </div>
+
+            <div class="mb-4">
+                <label for="controlLimit" class="text-sm font-medium block mb-1.5">Control Limit</label>
+                <input id="controlLimit" type="text" wire:model.live.debounce.400ms="controlLimit"
+                    class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2 text-gray-700"
+                    placeholder="Refer to parts WI"
+                    @if($ppf===0) disabled @endif>
             </div>
         </div>
 

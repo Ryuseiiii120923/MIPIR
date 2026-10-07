@@ -150,88 +150,76 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
     }
 
 
-    public function getDataforSearchGapOffset(
-        string $search,
-        int $encoder,
-        int $perPage = 5,
-        bool $excludeGenerated = false
-    ) {
-        $dimSub = MIPIRInspectionRecord::query()
-            ->getConnection()
-            ->table('DB_MIPIR.dbo.tblDimensionMeasure')
-            ->select(['PPFNo', 'DimItem', 'created_at', 'isRecord'])
-            ->selectRaw('ROW_NUMBER() OVER (PARTITION BY PPFNo ORDER BY created_at DESC) as rn')
-            ->whereIn('DimItem', ['Gap-Offset', 'Gap-Offset (Y)']);
+public function getDataforSearchGapOffset(
+    string $search,
+    int|string $encoder, // EmployeeID ng encoder
+    int $perPage = 5,
+    bool $excludeGenerated = false
+) {
+    $conn = MIPIRInspectionRecord::query()->getConnection();
 
-        $query = MIPIRInspectionRecord::query()
-            ->select([
-                'tblInspectionRecord.PPFNo',
-                'tblInspectionRecord.PartNo',
-                'tblInspectionRecord.MDNo',
-                'tblInspectionRecord.DateJudge',
-                'tblInspectionRecord.MachineNo',
-                'dm.DimItem',
-                'dm.created_at',
-            ])
-            ->leftJoinSub($dimSub, 'dm', function ($join) {
-                $join->on('dm.PPFNo', '=', 'tblInspectionRecord.PPFNo')
-                    ->where('dm.rn', '=', 1);
-            })
-            ->where('tblInspectionRecord.InspectBy', $encoder)
-            ->when($search !== '', function ($query) use ($search) {
-                $query->where('tblInspectionRecord.PPFNo', 'like', "%{$search}%");
-            });
+    // Plant ng encoder
+    $encoderPlant = $conn
+        ->table('DB_MIPIR.dbo.tblUser')
+        ->select('Plant')
+        ->where('EmployeeID', $encoder)
+        ->limit(1);
 
-        if ($excludeGenerated) {
-            // Add/Update: ipakita kung walang Gap-Offset pa (bagong ie-encode),
-            // O may Gap-Offset na pero hindi pa naka-generate sa report (isRecord null).
-            $query->where(function ($q) {
-                $q->whereNull('dm.DimItem')
-                    ->orWhereNull('dm.isRecord');
-            });
-        } else {
-            // Delete: kailangang may existing Gap-Offset na para may matanggal.
-            $query->whereNotNull('dm.DimItem');
-        }
+    // EmployeeID ng lahat ng nasa parehong plant (ito ang laman ng InspectBy)
+    $plantEmployees = $conn
+        ->table('DB_MIPIR.dbo.tblUser')
+        ->select('EmployeeID')
+        ->where('Plant', '=', $encoderPlant);
 
-        return $query
-            ->whereIn(
-                'tblInspectionRecord.RECNO',
-                MIPIRInspectionRecord::query()
-                    ->selectRaw('MAX(RECNO)')
-                    ->where('InspectBy', $encoder)
-                    ->groupBy('PPFNo')
-            )
-            ->orderByDesc('tblInspectionRecord.DateJudge')
-            ->orderByDesc('tblInspectionRecord.PPFNo')
-            ->paginate($perPage);
+    $dimSub = $conn
+        ->table('DB_MIPIR.dbo.tblDimensionMeasure')
+        ->select(['PPFNo', 'DimItem', 'created_at', 'isRecord'])
+        ->selectRaw('ROW_NUMBER() OVER (PARTITION BY PPFNo ORDER BY created_at DESC) as rn')
+        ->whereIn('DimItem', ['Gap-Offset', 'Gap-Offset (Y)']);
+
+    $query = MIPIRInspectionRecord::query()
+        ->select([
+            'tblInspectionRecord.PPFNo',
+            'tblInspectionRecord.PartNo',
+            'tblInspectionRecord.MDNo',
+            'tblInspectionRecord.DateJudge',
+            'tblInspectionRecord.MachineNo',
+            'tblInspectionRecord.InspectBy',
+            'dm.DimItem',
+            'dm.created_at',
+        ])
+        ->leftJoinSub($dimSub, 'dm', function ($join) {
+            $join->on('dm.PPFNo', '=', 'tblInspectionRecord.PPFNo')
+                ->where('dm.rn', '=', 1);
+        })
+        ->whereIn('tblInspectionRecord.InspectBy', $plantEmployees)
+        ->when($search !== '', function ($query) use ($search) {
+            $query->where('tblInspectionRecord.PPFNo', 'like', "%{$search}%");
+        });
+
+    if ($excludeGenerated) {
+        $query->where(function ($q) {
+            $q->whereNull('dm.DimItem')
+                ->orWhereNull('dm.isRecord');
+        });
+    } else {
+        $query->whereNotNull('dm.DimItem');
     }
-    //Fetching Repositories
 
-    // public function getMainData(int $ppf): ?array
-    // {
-    //     $records = MIPIRInspectionRecord::where('PPFNo', $ppf)->get();
-
-    //     if ($records->isEmpty()) {
-    //         return null;
-    //     }
-
-    //     $ppfLookUp = $records->first();
-
-    //     return [
-    //         'ppfno' => $ppf,
-    //         'partNumber' => $ppfLookUp['PartNo'],
-    //         'moldingDieNo' =>  $ppfLookUp['MDNo'],
-    //         'noOfCavity' => $ppfLookUp['NoofCavity'],
-    //         'productionLotNo' => $ppfLookUp['ProdLotNo'],
-    //         'machineNo' => $ppfLookUp['MachineNo'],
-    //         'checkTime' => $records->pluck('Checktime')->all()
-    //     ];
-    // }
-
-
-
-    public static function cacheKey(int $ppf): string
+    return $query
+        ->whereIn(
+            'tblInspectionRecord.RECNO',
+            MIPIRInspectionRecord::query()
+                ->selectRaw('MAX(RECNO)')
+                ->whereIn('InspectBy', $plantEmployees)
+                ->groupBy('PPFNo')
+        )
+        ->orderByDesc('tblInspectionRecord.DateJudge')
+        ->orderByDesc('tblInspectionRecord.PPFNo')
+        ->paginate($perPage);
+}
+   
+   public static function cacheKey(int $ppf): string
     {
         return "ppf-main-data:{$ppf}";
     }
@@ -377,5 +365,14 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
         return ChckTRemarks::where('PPFNo', $ppf)
             ->where('CheckTime', $check)
             ->value('Remarks');
+    }
+
+    public function getGapOffsetChecktime(int $ppf): array
+    {
+        return MIPIRDimensionMeasure::where('PPFNo', $ppf)
+            ->whereIn('DimItem', ['Gap-Offset', 'Gap-Offset (Y)'])
+            ->distinct()
+            ->pluck('Checktime')
+            ->all();
     }
 }

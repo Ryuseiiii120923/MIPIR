@@ -21,8 +21,8 @@
 
     @if (auth('web')->check())
     <x-ui.sidebar-button
-        page="dimension-approval"
-        title="Dimension Approval"
+        page="dimension-encoding"
+        title="Dimension Encoding"
         @click.stop="desktopExpanded = false; mobileOpen = false">
         <x-slot:icon>
             <svg xmlns="http://www.w3.org/2000/svg"

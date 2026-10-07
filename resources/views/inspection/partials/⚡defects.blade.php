@@ -149,6 +149,10 @@ new class extends Component
     |--------------------------------------------------------------------------
     */
 
+    private const EXTRA_SMALL_DEFECTS = [
+        'Surface Damaged' => ['Flow Mark', 'Surface Dirty'],
+    ];
+
     public function selectLargeDefect(string $type): void
     {
         $this->autoStageCurrentDefect($type);
@@ -162,15 +166,43 @@ new class extends Component
         $this->modalSelectedType = $type;
         $this->modalLargeQty = '';
 
-        $this->modalSmallDefects = $this->repository()
-            ->getSmallDefectsFor($type)
-            ->map(fn($s) => ['type' => $s->SmallDefect, 'qty' => ''])
-            ->values()
-            ->toArray();
+        $this->modalSmallDefects = $this->withExtraSmallDefects(
+            $type,
+            $this->repository()
+                ->getSmallDefectsFor($type)
+                ->map(fn($s) => ['type' => $s->SmallDefect, 'qty' => ''])
+                ->values()
+                ->toArray()
+        );
 
         $this->loadModalQuantity($type);
     }
 
+    private function withExtraSmallDefects(string $largeType, array $smallDefects): array
+    {
+        $needle = strtolower(trim($largeType));
+        $extras = [];
+
+        foreach (self::EXTRA_SMALL_DEFECTS as $large => $smalls) {
+            if (strtolower(trim($large)) === $needle) {
+                $extras = $smalls;
+                break;
+            }
+        }
+
+        $existing = array_map(
+            fn(array $s) => strtolower(trim($s['type'])),
+            $smallDefects
+        );
+
+        foreach ($extras as $extra) {
+            if (! in_array(strtolower(trim($extra)), $existing, true)) {
+                $smallDefects[] = ['type' => $extra, 'qty' => ''];
+            }
+        }
+
+        return $smallDefects;
+    }
     /*
     |--------------------------------------------------------------------------
     | Compute and Judge

@@ -24,6 +24,7 @@ use Illuminate\Support\Facades\Log;
 
 class CreateInspection
 {
+    private const SMALL_DEFECT_MARKER = '[Small Defects]';
     public function execute(int $ppf, array $draft, bool $recordDuration = true): void
     {
         $ppfLookUp = $draft['ppfLookup'] ?? null;
@@ -38,10 +39,18 @@ class CreateInspection
         $defectJudge = $draft['defects']['judgement'] ?? null;
         $dimensions = $draft['dimensions'] ?? [];
         $remarks = $draft['remarks'] ?? [];
-        $controlLimitsforXBar = $draft['control-limit'] ?? [];
         $deletedCheckTimes = $draft['check-time']['deleted'] ?? [];
         $dateJudge = $draft['judgement']['dateOfJudge'] ?? null;
         $inspectorNo = Auth::user()->InspectorNo ?? Null;
+
+        $composedRemarks = [];
+        foreach ($checkTimes as $time) {
+            $composedRemarks[$time] = $this->composeRemarks(
+                $remarks[$time] ?? '',
+                $defects[$time] ?? [],
+                $smallDefects[$time] ?? []
+            );
+        }
 
 
 
@@ -53,7 +62,7 @@ class CreateInspection
             throw new \InvalidArgumentException('At least one check time is required to create an inspection.');
         }
 
-        DB::transaction(function () use ($controlLimitsforXBar, $dateEncodeCheck, $defectJudge, $inspectorNo, $ngpercent, $ppf, $ppfLookUp, $touchedCheckTimes, $defects, $dimensions, $dateJudge, $remarks, $smallDefects) {
+        DB::transaction(function () use ($composedRemarks, $dateEncodeCheck, $defectJudge, $inspectorNo, $ngpercent, $ppf, $ppfLookUp, $touchedCheckTimes, $defects, $dimensions, $dateJudge, $remarks, $smallDefects) {
             foreach ($touchedCheckTimes as $checkTime) {
                 $isExistingCheckTime = MIPIRInspectionRecord::where('PPFNo', $ppf)
                     ->where('Checktime', $checkTime)
@@ -63,6 +72,17 @@ class CreateInspection
                     ->get(['DimItem', 'Set', 'xbarTransaction'])
                     ->mapWithKeys(fn($m) => ["{$m->DimItem}|{$m->Set}" => $m->xbarTransaction])
                     ->all();
+                $existingDefect = Defect::where('PPFNo', $ppf)
+                    ->where('Checktime', $checkTime)
+                    ->first(['Judgement', 'NGPercent']);
+
+
+                $judgementForTime = $defectJudge[$checkTime]
+                    ?? ($existingDefect ? ($existingDefect->Judgement ? 'X' : 'O') : null);
+
+                $ngPercentForTime = $ngpercent[$checkTime]
+                    ?? $existingDefect?->NGPercent
+                    ?? 0;
                 MIPIRDimensionMeasure::where('PPFNo', $ppf)->where('Checktime', $checkTime)->delete();
                 Defect::where('PPFNo', $ppf)->where('Checktime', $checkTime)->delete();
                 ChckTRemarks::where('PPFNo', $ppf)->where('CheckTime', $checkTime)->delete();
@@ -102,7 +122,7 @@ class CreateInspection
                     'MachineNo' => $ppfLookUp['machineNo'],
                     'CheckTime' => $checkTime ?? null,
                     'ProdLotNo' => $ppfLookUp['productionLotNo'],
-                    'Remarks' => $remarks[$checkTime] ?? ''
+                    'Remarks' => $composedRemarks[$checkTime] ?? '',
                 ]);
 
                 $defectsForThisTime = $defects[$checkTime] ?? [];
@@ -116,8 +136,8 @@ class CreateInspection
                         'Checktime' => $checkTime,
                         'Defect' => $defect['type'] ?? null,
                         'Qty' => $defect['qty'] ?? null,
-                        'Judgement' => $defectJudge[$checkTime] === 'X' ? 1 : 0,
-                        'NGPercent' => $ngpercent[$checkTime]
+                        'Judgement' => $judgementForTime === 'X' ? 1 : 0,
+                        'NGPercent' => $ngPercentForTime,
                     ]);
                     $smallDefectForThisTime = $smallDefects[$checkTime][$defect['type']] ?? [];
                     foreach ($smallDefectForThisTime as $small) {
@@ -266,45 +286,9 @@ class CreateInspection
             }
         });
 
-        $this->refreshTightenedFlashExcel($ppf, $ppfLookUp, $inspectorNo, $checkTimes, $touchedCheckTimes, $dimensions, $remarks, $deletedCheckTimes);
-        $this->refreshTightenedGapOffsetExcel($ppf, $ppfLookUp, $inspectorNo, $checkTimes, $touchedCheckTimes, $dimensions, $remarks, $deletedCheckTimes);
-        
-        foreach ($controlLimitsforXBar as $checkTime => $limit) {
-            if (empty($limit['dimItem']) || empty($limit['partNo'])) {
-                continue;
-            }
+        $this->refreshTightenedFlashExcel($ppf, $ppfLookUp, $inspectorNo, $checkTimes, $touchedCheckTimes, $dimensions, $composedRemarks, $deletedCheckTimes);
+        $this->refreshTightenedGapOffsetExcel($ppf, $ppfLookUp, $inspectorNo, $checkTimes, $touchedCheckTimes, $dimensions, $composedRemarks, $deletedCheckTimes);
 
-            try {
-                ControlSpecsLimit::updateOrCreate(
-                    [
-                        'PartNo'  => $limit['partNo'],
-                        'DimItem' => $limit['dimItem'],
-                    ],
-                    [
-                        'CSLx' => $limit['CSLx'] ?? null,
-                        'USLx' => $limit['USLx'] ?? null,
-                        'LSLx' => $limit['LSLx'] ?? null,
-                        'CCLx' => $limit['CCLx'] ?? null,
-                        'UCLx' => $limit['UCLx'] ?? null,
-                        'LCLx' => $limit['LCLx'] ?? null,
-                        'CSLr' => $limit['CSLr'] ?? null,
-                        'USLr' => $limit['USLr'] ?? null,
-                        'LSLr' => $limit['LSLr'] ?? null,
-                        'CCLr' => $limit['CCLr'] ?? null,
-                        'UCLr' => $limit['UCLr'] ?? null,
-                        'LCLr' => $limit['LCLr'] ?? null,
-                    ]
-                );
-            } catch (\Throwable $e) {
-                Log::error('Failed to save control specs limit', [
-                    'PPFNo' => $ppf,
-                    'Checktime' => $checkTime,
-                    'PartNo' => $limit['partNo'],
-                    'DimItem' => $limit['dimItem'],
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        }
         if ($recordDuration) {
             Log::info('EncodingDuration: recordDuration block entered', [
                 'PPFNo' => $ppf,
@@ -463,7 +447,7 @@ class CreateInspection
                         $rows[] = [
                             'checkTime'     => $checkTime,
                             'remarks'       => $remarks[$checkTime] ?? '',
-                            'judgement'     => $row['judge'] ?? null,   
+                            'judgement'     => $row['judge'] ?? null,
                             'specification' => $row['specification'] ?? '',
                             'controlLimit'  => $row['CL'] ?? '',
                             'measurements'  => [
@@ -534,5 +518,40 @@ class CreateInspection
                 'error' => $e->getMessage(),
             ]);
         }
+    }
+
+
+    private function composeRemarks(string $remarks, array $defectsForTime, array $smallDefectsForTime): string
+    {
+        $base = trim(preg_replace(
+            '/\s*' . preg_quote(self::SMALL_DEFECT_MARKER, '/') . '.*$/s',
+            '',
+            $remarks
+        ));
+
+        $parts = [];
+
+        foreach ($defectsForTime as $defect) {
+            $large = $defect['type'] ?? null;
+
+            if ($large === null) {
+                continue;
+            }
+
+            $smalls = collect($smallDefectsForTime[$large] ?? [])
+                ->filter(fn($s) => (float) ($s['qty'] ?? 0) > 0)
+                ->map(fn($s) => "{$s['type']} ({$s['qty']})")
+                ->values();
+
+            if ($smalls->isNotEmpty()) {
+                $parts[] = "{$large}: " . $smalls->implode(', ');
+            }
+        }
+
+        if ($parts === []) {
+            return $base;
+        }
+
+        return trim($base . ' ' . self::SMALL_DEFECT_MARKER . ' ' . implode('; ', $parts));
     }
 }

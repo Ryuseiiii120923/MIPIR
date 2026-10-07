@@ -75,10 +75,6 @@ class DimensionsService
         ];
     }
 
-    /**
-     * Compute upper/lower limits for a row based on its specType.
-     * Returns null if the spec is incomplete.
-     */
     public function computeLimits(array $row): ?array
     {
         $type = $row['specType'] ?? null;
@@ -123,12 +119,6 @@ class DimensionsService
         ];
     }
 
-    /**
-     * specUpper / specLower for 'tolerance_diff' are RAW absolute limit
-     * values (matching DimensionMaster.UpperLimit / LowerLimit) — not
-     * offsets from the nominal, unlike 'tolerance'. Raw and judging limits
-     * are the same here.
-     */
     private function toleranceDiffLimits(array $row): ?array
     {
         $upper = is_numeric($row['specUpper'] ?? null) ? (float) $row['specUpper'] : null;
@@ -145,11 +135,6 @@ class DimensionsService
             'judgingLowerLimit' => $lower,
         ];
     }
-
-    /**
-     * Judge a row's filled measurements against its computed limits.
-     * Returns 'O', 'X', or '-' (no limits / no measurements yet).
-     */
     public function judgeRow(array $row, ?array $limits): string
     {
         if ($limits === null) {
@@ -176,7 +161,13 @@ class DimensionsService
                 default          => true,
             };
 
-            if (!$ok) {
+             $okCL = match ($row['specType']) {
+                'max'            => (float) $val <= (float) $row['CL'],
+                'min'            => (float) $val >= (float) $row['CL'],
+                default          => true,
+            };
+
+            if (!$ok || !$okCL) {
                 return 'X';
             }
         }
@@ -184,10 +175,6 @@ class DimensionsService
         return 'O';
     }
 
-    /**
-     * Save (insert or update) a row's specification to the DimensionMaster
-     * table. Returns false if the row/part is incomplete and nothing was saved.
-     */
     public function persistSpecification(string $partNo, string $item, array $row): bool
     {
         $item = trim($item);
@@ -214,11 +201,6 @@ class DimensionsService
         return true;
     }
 
-    /**
- * Human-readable spec text saved to MIPIRDimensionMeasure.Specs,
- * e.g. "MAX 0.12", "MIN 0.05", "1.2 ± 0.1", "1.2 (1.15 ~ 1.3)".
- * Returns '' while the spec is incomplete.
- */
 public function formatSpecification(array $row): string
 {
     $limits = $this->computeLimits($row);

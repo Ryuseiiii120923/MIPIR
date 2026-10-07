@@ -128,7 +128,7 @@ new class extends Component
                             <td class="px-4 py-2 text-center">{{ $d->PPFNo }}</td>
                             <td class="px-4 py-2 text-center">{{ $d->PartNo }}</td>
                             <td class="px-4 py-2 text-center">{{ $d->MDNo }}</td>
-                            <td class="px-4 py-2 text-center">{{ $d->created_at }}</td>
+                            <td class="px-4 py-2 text-center">{{ $d->DateJudge }}</td>
                             <td class="px-4 py-2 flex justify-center gap-2">
                                 <button
                                     class="text-white px-4 py-2 rounded {{ $action === 'delete' ? 'bg-red-600' : 'bg-blue-600' }}"

@@ -5,6 +5,7 @@ use App\Inspection\Actions\DeleteInspection;
 use App\Inspection\Actions\DraftAction;
 use App\Inspection\Actions\UpdateInspection;
 use App\Inspection\Repositories\PPFLookUp\PpfLookUpRepository;
+use App\Inspection\Services\Saving\ConfirmationCheckTimeService;
 use App\Traits\HasNotifications;
 use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\On;
@@ -54,6 +55,7 @@ new class extends Component
 
         if ($this->action === 'edit') {
             try {
+                app(ConfirmationCheckTimeService::class)->appendIfRejected($this->selectedPpf);
                 app(UpdateInspection::class)->execute($this->selectedPpf);
                 PpfLookUpRepository::forgetMainData($this->selectedPpf);
                 $this->notifyReload('success', 'Updated Successfully');
@@ -64,6 +66,7 @@ new class extends Component
             }
         }
 
+
         $draft = app(DraftAction::class)->get($this->selectedPpf);
         foreach (['ppfLookup', 'check-time'] as $component) {
             if (!isset($draft[$component])) {
@@ -73,14 +76,14 @@ new class extends Component
         }
 
         if (empty($draft['ppfLookup']['productionLotNo'])) {
-            
+
             $this->dispatch('field-error', field: 'productionLotNo', message: 'Production lot number is required.');
             $this->notifyFail('Validation error', 'Production lot number is required.');
             return;
         }
 
         if (empty($draft['ppfLookup']['machineNo'])) {
-            
+
             $this->notifyFail('Validation error', 'Machine number is required.');
             return;
         }
@@ -90,6 +93,9 @@ new class extends Component
             return;
         }
 
+        if (app(ConfirmationCheckTimeService::class)->appendIfRejected($this->selectedPpf)) {
+            $draft = app(DraftAction::class)->get($this->selectedPpf);
+        }
         try {
             app(CreateInspection::class)->execute($this->selectedPpf, $draft);
 

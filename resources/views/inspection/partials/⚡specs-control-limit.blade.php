@@ -1,11 +1,18 @@
 <?php
 
-use App\Inspection\Repositories\SpecsControlRepository;
+use App\Dashboard\Repositories\SpecsControlRepository;
+use App\Dashboard\Services\DimensionEncodingService;
+use App\Traits\HasNotifications;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
 new class extends Component
 {
+    use HasNotifications;
+
     // X - Specification Limit
     public ?float $CSLx = null;
     public ?float $USLx = null;
@@ -28,8 +35,15 @@ new class extends Component
 
     public string $action = '';
     public int $ppf = 0;
+
+    #[Locked]
     public string $partNo = '';
+
+    #[Locked]
     public string $dimItem = '';
+
+    #[Locked]
+    public bool $standalone = false; // true when used as a modal in dimension-encoding
 
     public int $rowIndex = -1;
 
@@ -53,12 +67,77 @@ new class extends Component
         ]);
     }
 
-    public function mount(string $dimItem = '', string $partNo = '', int $rowIndex = -1)
-    {
+    public function mount(
+        string $dimItem = '',
+        string $partNo = '',
+        int $rowIndex = -1,
+        bool $standalone = false,
+        ?float $USLx = null,
+        ?float $LSLx = null,
+    ) {
         $this->partNo = $partNo;
         $this->dimItem = $dimItem;
         $this->rowIndex = $rowIndex;
+        $this->standalone = $standalone;
+
+        if ($standalone) {
+            // X specification limits come from the DimensionMaster row (Upper/Lower Limit)
+            $this->USLx = $USLx;
+            $this->LSLx = $LSLx;
+            $this->CSLx = ($USLx !== null && $LSLx !== null)
+                ? round(($USLx + $LSLx) / 2, 6)
+                : null;
+        }
+
         $this->resolveLimit();
+    }
+
+    protected function rules(): array
+    {
+        $rules = [];
+
+        foreach (['CCLx', 'UCLx', 'LCLx', 'CSLr', 'USLr', 'LSLr', 'CCLr', 'UCLr', 'LCLr'] as $field) {
+            $rules[$field] = ['nullable', 'numeric'];
+        }
+
+        // Upper must be >= lower, checked only when both are filled in
+        foreach ([['UCLx', 'LCLx'], ['USLr', 'LSLr'], ['UCLr', 'LCLr']] as [$upper, $lower]) {
+            if ($this->{$upper} !== null && $this->{$lower} !== null) {
+                $rules[$upper][] = "gte:{$lower}";
+            }
+        }
+
+        return $rules;
+    }
+
+    public function save(DimensionEncodingService $service): void
+    {
+        $this->validate(); // inline @error messages below
+
+        try {
+            $service->saveControlLimits($this->partNo, $this->dimItem, [
+                'CCLx' => $this->CCLx,
+                'UCLx' => $this->UCLx,
+                'LCLx' => $this->LCLx,
+                'CSLr' => $this->CSLr,
+                'USLr' => $this->USLr,
+                'LSLr' => $this->LSLr,
+                'CCLr' => $this->CCLr,
+                'UCLr' => $this->UCLr,
+                'LCLr' => $this->LCLr,
+            ], Auth::user()->社員CD);
+
+            $this->notifySuccess('Saved', 'Specification and control limit saved');
+            $this->dispatch('limits-saved');
+        } catch (\Throwable $e) {
+            Log::error('Control limit save failed', [
+                'part_no'  => $this->partNo,
+                'dim_item' => $this->dimItem,
+                'error'    => $e->getMessage(),
+            ]);
+
+            $this->notifyFail('Failed', 'Failed to save limits. Please try again.');
+        }
     }
 
     #[On('dimension-spec-limits-changed')]
@@ -103,7 +182,6 @@ new class extends Component
         $this->resolveLimit();
     }
 
-
     #[On('dimension-item-changed')]
     public function onDimItemChanged(string $dimItem): void
     {
@@ -141,7 +219,13 @@ new class extends Component
         </div>
         <div>
             <h2 class="text-lg font-semibold text-gray-900">Specification and Control Limit</h2>
-            <p class="text-sm text-gray-500">Enter the Specification and Control Limit</p>
+            <p class="text-sm text-gray-500">
+                @if ($standalone)
+                {{ $dimItem }} &middot; Part No: {{ $partNo }}
+                @else
+                Enter the Specification and Control Limit
+                @endif
+            </p>
         </div>
     </div>
 
@@ -152,6 +236,7 @@ new class extends Component
     'R - SPECIFICATION LIMIT' => ['CSLr', 'USLr', 'LSLr'],
     'R - CONTROL LIMIT' => ['CCLr', 'UCLr', 'LCLr'],
     ];
+    $xSpecFields = ['CSLx', 'USLx', 'LSLx'];
     @endphp
 
     <div class="flex flex-col gap-3">
@@ -159,6 +244,10 @@ new class extends Component
         <div class="flex items-center gap-3">
             <span class="w-40 text-sm font-medium text-gray-700 shrink-0">{{ $groupLabel }}</span>
             @foreach ($fields as $field)
+            @php
+            // In the modal, X spec limits are derived from the dimension's Upper/Lower Limit (edit them there)
+            $locked = $this->action === 'view' || ($standalone && in_array($field, $xSpecFields, true));
+            @endphp
             <div class="flex-1">
                 <x-ui.input-field
                     id="{{ $field }}"
@@ -167,8 +256,8 @@ new class extends Component
                     wire:model="{{ $field }}"
                     wire:blur="syncDraft"
                     placeholder="Enter {{ $field }}"
-                    :disabled="$this->action === 'view'"
-                    :class="$errors->has('{{ $field }}') ? 'border-red-400 ring-1 ring-red-300' : ($this->action === 'view' ? 'cursor-not-allowed bg-gray-50' : '')" />
+                    :disabled="$locked"
+                    :class="$errors->has($field) ? 'border-red-400 ring-1 ring-red-300' : ($locked ? 'cursor-not-allowed bg-gray-50' : '')" />
                 @error($field)
                 <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p>
                 @enderror
@@ -177,4 +266,22 @@ new class extends Component
         </div>
         @endforeach
     </div>
+
+    @if ($standalone)
+    <div class="mt-6 flex justify-end gap-2">
+        <button type="button"
+            wire:click="$dispatch('limits-closed')"
+            class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+            Cancel
+        </button>
+        <button type="button"
+            wire:click="save"
+            wire:loading.attr="disabled"
+            wire:target="save"
+            class="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50">
+            <span wire:loading.remove wire:target="save">Save</span>
+            <span wire:loading wire:target="save">Saving...</span>
+        </button>
+    </div>
+    @endif
 </div>

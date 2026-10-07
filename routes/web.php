@@ -1,6 +1,7 @@
 <?php
 
 use App\Auth\Controllers\AuthController;
+use App\Http\Controllers\SymbolController;
 use App\Inspection\Actions\GenerateExcel;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
@@ -24,10 +25,7 @@ Route::middleware('auth:web')->group(function () {
 
     Volt::route('/reports', 'inspection::reports-browser')->name('reports.browser');
 
-    Route::get('/symbols/{filename}', function (string $filename) {
-        abort_unless(preg_match('/^[\w\-]+\.(png|jpe?g)$/i', $filename), 404);
-        $path = storage_path('app/Symbol/' . $filename);
-        abort_unless(file_exists($path), 404);
-        return response()->file($path);
-    })->middleware('auth')->name('symbols.show');
+    Route::get('/symbols/{symbol}', SymbolController::class)
+        ->where('symbol', '[0-9]+')
+        ->name('symbols.show');
 });

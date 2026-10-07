@@ -67,6 +67,8 @@ new class extends Component
         ];
 
         foreach ($this->rows as $i => $row) {
+            $this->rows[$i]['forXBar'] ??= false;
+
             if (!array_key_exists('revealed', $row)) {
                 $count = count($row['measurements'] ?? []);
                 $this->rows[$i]['revealed'] = $count > 0;
@@ -189,7 +191,7 @@ new class extends Component
             ->getMasterSpecification($this->partNo, $itemName);
 
         if ($master === null) {
-            $master = app(DimensionMasterRepositoryInterface::class)->getTempMaster($this->partNo, $itemName);
+            unset($this->rows[$i]['specType'], $this->rows[$i]['specNominal'], $this->rows[$i]['specTolerance'], $this->rows[$i]['specUpper'], $this->rows[$i]['specLower']);
         }
 
         $this->applyMasterSpecification($i, $master);
@@ -292,6 +294,7 @@ new class extends Component
         $this->rows[] = [
             'item' => '',
             'editable' => true,
+            'forXBar' => false,
             'specification' => '',
             'CL' => '',
             'judge' => '',
@@ -378,8 +381,8 @@ new class extends Component
 
     <div class="w-full mx-auto mt-3 @if($readonly) opacity-50 cursor-not-allowed @endif">
         @foreach ($rows as $i => $row)
+        @php $isXBar = (bool) ($row['forXBar'] ?? false); @endphp
         <div wire:key="dim-row-{{ $i }}" data-card-index="{{ $i }}" class="w-full mb-4">
-
             @if (!$row['revealed'])
 
             <button
@@ -393,6 +396,9 @@ new class extends Component
                     </div>
                     <div>
                         <p class="font-medium text-base">Dimension entry</p>
+                        @if($isXBar)
+                        <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">X-Bar Table</span>
+                        @endif
                         <p class="text-sm text-gray-500">{{ $row['item'] ?: 'Enter item' }}</p>
                     </div>
                 </div>
@@ -400,40 +406,49 @@ new class extends Component
                     Set up <i class="ti ti-chevron-right"></i>
                 </span>
             </button>
+
             @else
 
             <div class="bg-white border border-gray-200 rounded-2xl p-6 w-full">
-                <div class="flex items-center justify-between mb-5">
+                {{-- Header --}}
+                <div class="flex items-start justify-between mb-5">
                     <div class="flex items-center gap-3">
                         <div class="w-11 h-11 rounded-xl bg-green-100 flex items-center justify-center">
                             <i class="ti ti-ruler-2 text-xl text-green-700"></i>
                         </div>
                         <div>
                             <p class="font-medium text-base">Dimension entry</p>
-                            <p class="text-sm text-gray-500">
-                                {{ $row['item'] ?: 'Enter item' }}
-                                <span class="ml-1 text-xs font-medium px-2 py-0.5 rounded-full {{ $row['mode'] === 'tightened' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700' }}">
+                            <p class="text-sm text-gray-500 flex flex-wrap items-center gap-1">
+                                <span>{{ $row['item'] ?: 'Enter item' }}</span>
+                                @if($isXBar)
+                                <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">X-Bar Table</span>
+                                @endif
+                                <span class="text-xs font-medium px-2 py-0.5 rounded-full {{ $row['mode'] === 'tightened' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700' }}">
                                     {{ $row['mode'] === 'tightened' ? 'Tightened · ' . $row['sets'] . ' set' . ($row['sets'] > 1 ? 's' : '') : 'Normal' }}
                                 </span>
                             </p>
                         </div>
                     </div>
-                    <button type="button" wire:click="reconfigureRow({{ $i }})" @if($readonly) disabled @endif
-                        class="text-sm text-gray-500 hover:text-blue-600 flex items-center gap-1">
-                        <i class="ti ti-settings text-base"></i> Reconfigure
-                    </button>
 
-                    @if($row['editable'])
-                    <button
-                        type="button"
-                        @if($readonly) disabled @endif
-                        @click.prevent="if (confirm('Delete this dimension row?')) $wire.removeDimension({{ $i }})"
-                        class="text-sm text-red-500 hover:text-red-700 flex items-center gap-1 ml-3">
-                        <i class="ti ti-trash text-base"></i> Delete
-                    </button>
-                    @endif
+                    <div class="flex items-center gap-3 shrink-0">
+                        <button type="button" wire:click="reconfigureRow({{ $i }})" @if($readonly) disabled @endif
+                            class="text-sm text-gray-500 hover:text-blue-600 flex items-center gap-1">
+                            <i class="ti ti-settings text-base"></i> Reconfigure
+                        </button>
+
+                        @if($row['editable'])
+                        <button
+                            type="button"
+                            @if($readonly) disabled @endif
+                            @click.prevent="if (confirm('Delete this dimension row?')) $wire.removeDimension({{ $i }})"
+                            class="text-sm text-red-500 hover:text-red-700 flex items-center gap-1">
+                            <i class="ti ti-trash text-base"></i> Delete
+                        </button>
+                        @endif
+                    </div>
                 </div>
 
+                {{-- Item / Device / Specification --}}
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <div>
                         <label class="text-sm font-medium block mb-1.5">Item</label>
@@ -454,35 +469,29 @@ new class extends Component
                         <div class="w-full bg-gray-50 rounded-lg px-3 py-2 font-medium">{{ $row['item'] }}</div>
                         @endif
                     </div>
+
                     <div>
                         <label class="text-sm font-medium block mb-1.5">Measuring Device</label>
                         <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.device"
-                            class="w-50 bg-gray-50 border-0 rounded-lg px-3 py-2 text-center"
+                            class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2 text-center"
                             placeholder="Enter the measuring device use" @if($readonly) disabled @endif>
                     </div>
-                    <div>
-                        @if($row['forXBar'] ?? false)
-                        <livewire:inspection::partials.specs-control-limit
-                            :dimItem="$row['item']"
-                            :partNo="$partNo"
-                            :rowIndex="$i"
-                            :key="'specs-control-limit-'.$i" />
-                        @endif
-                    </div>
-                    <div>
 
+                    <div class="md:col-span-2">
                         <label class="text-sm font-medium block mb-1.5">Specification</label>
                         <div class="flex items-center gap-2">
                             <select wire:model.live.debounce.400ms="rows.{{ $i }}.specType"
                                 class="bg-gray-50 border-0 rounded-lg px-2 py-2 text-sm"
-                                @if($readonly) disabled @endif>
+                                disabled>
+
                                 <option value="">Select</option>
                                 <option value="max">MAX</option>
                                 <option value="min">MIN</option>
                                 <option value="tolerance">±</option>
                                 <option value="tolerance_diff">TOLERANCE DIFF</option>
                             </select>
-
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
                             @if(($row['specType'] ?? '') === 'max')
                             <span class="text-sm text-gray-500 font-medium">MAX</span>
                             <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.specNominal"
@@ -503,7 +512,6 @@ new class extends Component
                             <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.specTolerance"
                                 class="w-20 bg-gray-50 border-0 rounded-lg px-3 py-2 text-center"
                                 placeholder="0.10" @if($readonly) disabled @endif>
-
                             @elseif(($row['specType'] ?? '') === 'tolerance_diff')
                             <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.specNominal"
                                 class="w-20 bg-gray-50 border-0 rounded-lg px-3 py-2 text-center"
@@ -517,27 +525,32 @@ new class extends Component
                                 class="w-20 bg-gray-50 border-0 rounded-lg px-3 py-2 text-center"
                                 placeholder="0.10" @if($readonly) disabled @endif>
                             @endif
-
-                            <button
-                                type="button"
-                                @click.prevent="if (confirm('Are you sure you want to update this dimension?')) $wire.persistSpecification({{ $i }})"
-                                class="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-100 transition">
-                                Update Dimension
-                            </button>
                         </div>
                     </div>
                 </div>
 
+                {{-- X-Bar only: full-width block, no empty grid cell for normal rows --}}
+                @if($isXBar)
+                <div class="mb-4 rounded-xl border border-purple-200 bg-purple-50/40 p-4">
+                    <p class="text-sm font-medium text-purple-700 mb-2">X-Bar Control Limits</p>
+                    <livewire:inspection::partials.specs-control-limit
+                        :dimItem="$row['item']"
+                        :partNo="$partNo"
+                        :rowIndex="$i"
+                        :key="'specs-control-limit-'.$i" />
+                </div>
+                @endif
+
                 <div class="mb-4">
                     <label class="text-sm font-medium block mb-1.5">Control Limit</label>
                     <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.CL"
-                        value=""
                         class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2 text-gray-500"
                         placeholder="Refer to parts WI" @if($readonly) disabled @endif>
                 </div>
 
                 <hr class="border-gray-200 my-4">
 
+                {{-- Measurements --}}
                 <div class="mb-1">
                     <label class="text-sm font-medium block mb-1.5">
                         Measurements
@@ -553,15 +566,12 @@ new class extends Component
                         @endif
                         <div class="flex flex-wrap gap-2">
                             @for ($k = 0; $k < 5; $k++)
-                                @php
-                                $j=$s * 5 + $k;
-                                $isLastOverall=$j===count($row['measurements']) - 1;
-                                @endphp
+                                @php $j=$s * 5 + $k; @endphp
                                 @if($j < count($row['measurements']))
                                 <input @if($readonly) disabled @endif type="text"
                                 wire:model.live.debounce.400ms="rows.{{ $i }}.measurements.{{ $j }}"
                                 wire:key="dim-{{ $i }}-m-{{ $j }}"
-                                 @keydown.enter.prevent="nextMeasurement({{ $i }}, {{ $j }})"
+                                @keydown.enter.prevent="nextMeasurement({{ $i }}, {{ $j }})"
                                 data-measurement-index="{{ $j }}"
                                 @if($j===0) data-first-measurement @endif
                                 class="w-16 bg-gray-50 border-0 rounded-lg text-center py-2"
@@ -572,20 +582,22 @@ new class extends Component
                 </div>
                 @endfor
             </div>
-        </div> {{-- closes "bg-white border border-gray-200 rounded-2xl p-6 w-full" (moved inside @else) --}}
-        @endif
-        <hr class="border-gray-200 my-4">
 
-        <div class="flex items-center justify-between">
-            <div class="w-40">
-                <label class="text-sm font-medium block mb-1.5">Judgement</label>
-                <input type="text" wire:model="rows.{{ $i }}.judge"
-                    class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2 text-gray-500 text-center"
-                    readonly>
+            <hr class="border-gray-200 my-4">
+
+            {{-- Judgement now INSIDE the card --}}
+            <div class="flex items-center justify-between">
+                <div class="w-40">
+                    <label class="text-sm font-medium block mb-1.5">Judgement</label>
+                    <input type="text" wire:model="rows.{{ $i }}.judge"
+                        class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2 text-gray-500 text-center"
+                        readonly>
+                </div>
+                <button @if($readonly) disabled @endif type="button" class="text-sm text-gray-500 hover:text-gray-700">Clear</button>
             </div>
-            <button @if($readonly) disabled @endif type="button" class="text-sm text-gray-500 hover:text-gray-700">Clear</button>
         </div>
-    </div> {{-- closes wire:key="dim-row-{{ $i }}" wrapper --}}
+        @endif
+    </div>
     @endforeach
 </div>
 
