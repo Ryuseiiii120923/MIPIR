@@ -143,14 +143,14 @@ new class extends Component
         @endforeach
     </div>
     <div class="w-full justify-center">
-        <livewire:inspection::partials.table-data />
+        <livewire:inspection::partials.table-data wire:key="encoding-table"/>
     </div>
     <div class="flex flex-col md:flex-row gap-5">
-        <livewire:inspection::partials.ppflookup />
-        <livewire:inspection::partials.process-details />
+        <livewire:inspection::partials.ppflookup wire:key="encoding-ppfLookUp"/>
+        <livewire:inspection::partials.process-details wire:key="encoding-processDetails"/>
     </div>
     <div class="mt-4">
-        <livewire:inspection::partials.check-time />
+        <livewire:inspection::partials.check-time wire:key="encoding-checkTime"/>
     </div>
 
     <div class="flex items-center justify-center mt-4 @if($this->selectedPpf === 0) opacity-50 cursor-not-allowed @endif">
