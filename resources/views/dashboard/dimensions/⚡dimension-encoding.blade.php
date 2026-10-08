@@ -147,10 +147,6 @@ new class extends Component
     {
         $upperRules = ['nullable', 'numeric'];
 
-        if (trim($this->upperLimit) !== '' && trim($this->lowerLimit) !== '') {
-            $upperRules[] = 'gte:lowerLimit';
-        }
-
         // An attached image needs a real symbol number to be named after
         $symbolRules = $this->symbolFile !== null
             ? ['required', 'integer', 'min:0']
@@ -163,7 +159,6 @@ new class extends Component
             'symbolFile'     => ['nullable', 'image', 'mimes:png,jpg,jpeg,gif,bmp', 'max:1024'],
             'dimensionName'  => ['required', 'string', 'max:100'],
             'specification'  => ['required', 'string', 'max:100'],
-            'upperLimit'     => $upperRules,
             'lowerLimit'     => ['nullable', 'numeric'],
             'device'         => ['nullable', 'string', 'max:100'],
             'unit'           => ['nullable', 'string', 'max:20'],
