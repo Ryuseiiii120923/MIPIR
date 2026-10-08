@@ -9,10 +9,15 @@ use Livewire\Attributes\Computed;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Livewire\Attributes\On;
+use Livewire\WithFileUploads;
 
 new class extends Component
 {
-    use HasNotifications, WithPagination;
+
+    // ...
+    use HasNotifications, WithFileUploads, WithPagination;
+
+    public $symbolFile = null;
 
     public string $search = '';
 
@@ -38,6 +43,12 @@ new class extends Component
     public string $limitsDimItem = '';
     public ?float $limitsUpper = null;
     public ?float $limitsLower = null;
+    public bool $showSymbolPicker = false;
+    public string $specType = '';
+    public string $specNominal = '';
+    public string $specTolerance = '';
+    public string $specUpper = '';
+    public string $specLower = '';
 
     public function openLimits(int $recNo, DimensionEncodingService $service): void
     {
@@ -81,6 +92,52 @@ new class extends Component
         return app(DimensionEncodingService::class)->symbolUrl($this->symbol);
     }
 
+    #[Computed]
+    public function symbolExists(): bool
+    {
+        return app(DimensionEncodingService::class)->symbolExists($this->symbol);
+    }
+
+    #[Computed]
+    public function availableSymbols(): array
+    {
+        return app(DimensionEncodingService::class)->listSymbols();
+    }
+
+    public function openSymbolPicker(): void
+    {
+        $this->showSymbolPicker = true;
+    }
+
+    public function closeSymbolPicker(): void
+    {
+        $this->showSymbolPicker = false;
+    }
+
+    public function selectSymbol(int $symbol): void
+    {
+        $this->symbol = (string) $symbol;
+        $this->reset('symbolFile');
+        $this->resetValidation();
+        $this->showSymbolPicker = false;
+    }
+
+    public function updatedSymbol(): void
+    {
+        $this->reset('symbolFile');
+    }
+
+    public function updatedSymbolFile(): void
+    {
+        try {
+            $this->validateOnly('symbolFile');
+        } catch (ValidationException $e) {
+            $this->notifyFail('Invalid Image', $e->validator->errors()->first('symbolFile'));
+            $this->reset('symbolFile');
+            $this->resetValidation();
+        }
+    }
+
     public function updatedSearch(): void
     {
         $this->resetPage();
@@ -90,15 +147,20 @@ new class extends Component
     {
         $upperRules = ['nullable', 'numeric'];
 
-        // Only compare when both limits are filled in
         if (trim($this->upperLimit) !== '' && trim($this->lowerLimit) !== '') {
             $upperRules[] = 'gte:lowerLimit';
         }
 
+        // An attached image needs a real symbol number to be named after
+        $symbolRules = $this->symbolFile !== null
+            ? ['required', 'integer', 'min:0']
+            : ['nullable', 'integer']; // negative = no symbol
+
         return [
             'partNo'         => ['required', 'string', 'max:50'],
             'dimensionNo'    => ['required', 'integer', 'min:1'],
-            'symbol'         => ['nullable', 'integer'], // negative = no symbol
+            'symbol'         => $symbolRules,
+            'symbolFile'     => ['nullable', 'image', 'mimes:png,jpg,jpeg,gif,bmp', 'max:1024'],
             'dimensionName'  => ['required', 'string', 'max:100'],
             'specification'  => ['required', 'string', 'max:100'],
             'upperLimit'     => $upperRules,
@@ -119,7 +181,12 @@ new class extends Component
             'partNo.required'        => 'Part no is required.',
             'dimensionNo.required'   => 'Dimension no is required.',
             'dimensionNo.integer'    => 'Dimension no must be a whole number.',
+            'symbol.required'        => 'Enter a symbol number before attaching an image.',
             'symbol.integer'         => 'Symbol must be a whole number (negative = no symbol).',
+            'symbol.min'             => 'An attached symbol image needs a symbol number of 0 or higher.',
+            'symbolFile.image'       => 'The symbol must be an image file.',
+            'symbolFile.mimes'       => 'The symbol must be a PNG, JPG, GIF or BMP.',
+            'symbolFile.max'         => 'The symbol image must not exceed 1 MB.',
             'dimensionName.required' => 'Dimension name is required.',
             'specification.required' => 'Specification is required.',
             'upperLimit.numeric'     => 'Upper limit must be a number.',
@@ -162,15 +229,36 @@ new class extends Component
             return;
         }
 
+        // Not a DimensionMaster column
+        unset($data['symbolFile']);
+
         try {
             $isEdit = $this->editingId !== null;
 
             $service->save($data, $this->editingId, Auth::user()->社員CD);
 
+            $symbolError = false;
+
+            if ($this->symbolFile !== null) {
+                try {
+                    $service->storeSymbol((int) $data['symbol'], $this->symbolFile);
+                } catch (\Throwable $e) {
+                    $symbolError = true;
+                    Log::warning('Dimension symbol attach failed', [
+                        'symbol' => $data['symbol'],
+                        'error'  => $e->getMessage(),
+                    ]);
+                }
+            }
+
             $this->closeModal();
             unset($this->dimensions);
 
             $this->notifySuccess('Saved', $isEdit ? 'Dimension updated' : 'Dimension created');
+
+            if ($symbolError) {
+                $this->notifyFail('Symbol Not Saved', 'The dimension was saved, but the symbol image could not be stored.');
+            }
         } catch (\DomainException $e) {
             $this->notifyFail('Duplicate', $e->getMessage());
         } catch (\Throwable $e) {
@@ -185,6 +273,7 @@ new class extends Component
 
     public function closeModal(): void
     {
+        $this->showSymbolPicker = false;
         $this->showModal = false;
         $this->resetForm();
     }
@@ -196,6 +285,7 @@ new class extends Component
             'partNo',
             'dimensionNo',
             'symbol',
+            'symbolFile',
             'dimensionName',
             'specification',
             'upperLimit',
@@ -235,6 +325,14 @@ new class extends Component
                         class="block w-full max-w-96 ps-9 pe-3 py-2 border border-blue-500 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"
                         placeholder="Search dimension or part no">
                 </div>
+
+                <button type="button"
+                    wire:click="create"
+                    wire:loading.attr="disabled"
+                    wire:target="create"
+                    class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1">
+                    <i class="ti ti-plus text-base"></i> Add Dimension
+                </button>
             </div>
 
             <table class="w-full text-sm text-left text-gray-700">
@@ -321,7 +419,7 @@ new class extends Component
     {{-- Encoding Modal --}}
     @if ($showModal)
     <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
-        wire:keydown.escape.window="closeModal">
+        @if (! $showSymbolPicker) wire:keydown.escape.window="closeModal" @endif>
         <div class="bg-white rounded-xl w-full max-w-2xl shadow-lg overflow-hidden max-h-full flex flex-col">
             <div class="px-6 py-4 border-b border-gray-200">
                 <h3 class="text-lg font-semibold text-gray-800">
@@ -349,13 +447,21 @@ new class extends Component
                     </div>
 
                     {{-- Symbol with live preview --}}
-                    <div>
+                    <div class="md:col-span-3">
                         <label for="symbol" class="block text-sm font-medium text-gray-700 mb-1">Symbol</label>
                         <div class="flex items-center gap-2">
                             <input type="text" id="symbol"
                                 wire:model.live.debounce.300ms="symbol"
                                 class="w-20 rounded-lg border border-gray-300 text-sm text-center focus:border-indigo-500 focus:ring-indigo-500"
                                 placeholder="0">
+
+                            <button type="button"
+                                wire:click="openSymbolPicker"
+                                wire:loading.attr="disabled"
+                                wire:target="openSymbolPicker"
+                                class="h-10 px-3 inline-flex items-center gap-1 text-xs font-medium text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 disabled:opacity-50">
+                                <i class="ti ti-photo-search text-base"></i> Check symbols
+                            </button>
 
                             <div class="flex-1 h-10 flex items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 px-2">
                                 @if ($this->symbolPreviewUrl)
@@ -367,6 +473,26 @@ new class extends Component
                                 @endif
                             </div>
                         </div>
+
+                        @if ($symbol !== '' && is_numeric($symbol) && (int) $symbol >= 0 && ! $this->symbolExists)
+                        <div class="mt-2">
+                            @if ($symbolFile)
+                            <div class="flex items-center gap-2">
+                                @if ($symbolFile->isPreviewable())
+                                <img src="{{ $symbolFile->temporaryUrl() }}" alt="New symbol" class="h-8 w-auto object-contain rounded border border-gray-200">
+                                @endif
+                                <button type="button" wire:click="$set('symbolFile', null)" class="text-xs text-red-500 hover:text-red-700">Remove</button>
+                            </div>
+                            @else
+                            <label class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 cursor-pointer">
+                                <i class="ti ti-paperclip text-sm"></i> Attach image
+                                <input type="file" wire:model="symbolFile" accept=".png,.jpg,.jpeg,.gif,.bmp" class="hidden">
+                            </label>
+                            <span wire:loading wire:target="symbolFile" class="text-xs text-gray-400 ms-1">Uploading...</span>
+                            @endif
+                            <p class="text-xs text-gray-400 mt-1">Not found in the Symbol folder. Attach it to add it.</p>
+                        </div>
+                        @endif
                     </div>
 
                     <div class="md:col-span-3">
@@ -466,6 +592,58 @@ new class extends Component
     </div>
     @endif
 
+    {{-- Symbol Picker Modal --}}
+    @if ($showSymbolPicker)
+    <div class="fixed inset-0 bg-black/50 flex items-center justify-center p-4"
+        style="z-index: 60;"
+        wire:keydown.escape.window="closeSymbolPicker">
+        <div x-data="{ q: '' }"
+            class="bg-white rounded-xl w-full max-w-3xl shadow-xl overflow-hidden max-h-full flex flex-col">
+
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-4">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-800">Symbols</h3>
+                    <p class="text-sm text-gray-500">
+                        {{ count($this->availableSymbols) }} found in the Symbol folder. Click one to use it.
+                    </p>
+                </div>
+                <input type="text" x-model="q" placeholder="Filter by number"
+                    class="w-40 rounded-lg border border-gray-300 text-sm text-center focus:border-indigo-500 focus:ring-indigo-500">
+            </div>
+
+            <div class="p-6 overflow-y-auto">
+                <div class="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 gap-3">
+                    @forelse ($this->availableSymbols as $item)
+                    <button type="button"
+                        wire:key="symbol-pick-{{ $item['symbol'] }}"
+                        wire:click="selectSymbol({{ $item['symbol'] }})"
+                        x-show="q === '' || '{{ $item['symbol'] }}'.includes(q)"
+                        @class([ 'flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition hover:bg-indigo-50 hover:border-indigo-400' , 'border-indigo-500 bg-indigo-50'=> $symbol === (string) $item['symbol'],
+                        'border-gray-200' => $symbol !== (string) $item['symbol'],
+                        ])>
+                        <span class="h-12 w-full flex items-center justify-center">
+                            <img src="{{ $item['url'] }}" alt="Symbol {{ $item['symbol'] }}" loading="lazy"
+                                class="max-h-12 w-auto object-contain">
+                        </span>
+                        <span class="text-xs font-medium text-gray-600">{{ $item['symbol'] }}</span>
+                    </button>
+                    @empty
+                    <p class="col-span-full py-8 text-center text-sm text-gray-500">
+                        No symbols found in the Symbol folder.
+                    </p>
+                    @endforelse
+                </div>
+            </div>
+
+            <div class="px-6 py-3 border-t border-gray-200 flex justify-end">
+                <button type="button" wire:click="closeSymbolPicker"
+                    class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+    @endif
     @if ($showLimitsModal)
     <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 overflow-y-auto"
         wire:keydown.escape.window="closeLimits">

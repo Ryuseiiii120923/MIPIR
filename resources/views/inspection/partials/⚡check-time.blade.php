@@ -33,6 +33,13 @@ new class extends \Livewire\Component
     public array $touchedThisSession = [];
     public array $controlLimitByTime = [];
 
+    public bool $isMKA = false;
+
+    public function mount(bool $isMKA = false): void
+    {
+        $this->isMKA = $isMKA;
+    }
+
     public function addCheckTime(): void
     {
         $this->validate();
@@ -337,6 +344,15 @@ new class extends \Livewire\Component
 
     {{-- Pressing a check time mounts the defects component, which auto-opens its modal --}}
     @if ($selectedCheckTime)
+    @if($isMKA)
+    <livewire:inspection::partials.mka-otherparts-encoding
+        :key="'dimensions-' . $selectedCheckTime"
+        :selectedCheckTime="$selectedCheckTime"
+        :loaded-rows="$dimensionsByTime[$selectedCheckTime] ?? []"
+        :ppfno="$ppf"
+        :partNo="$partNo"
+        :action="$action" />
+    @else
     <livewire:inspection::partials.defects
         :key="'defects-' . $selectedCheckTime"
         :selectedCheckTime="$selectedCheckTime"
@@ -357,5 +373,6 @@ new class extends \Livewire\Component
         :selectedCheckTime="$selectedCheckTime"
         :loadedRemarks="$remarksByTime[$selectedCheckTime] ?? ''"
         :action="$action" />
+    @endif
     @endif
 </div>

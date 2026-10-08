@@ -150,5 +150,64 @@
             </svg>
         </x-slot:icon>
     </x-ui.sidebar-button>
+
+    <x-ui.sidebar-button
+        page="mka-measuring-encoding"
+        title="MKA Measuring Encoding"
+        @click.stop="desktopExpanded = false; mobileOpen = false"
+          :disabled="true">
+        <x-slot:icon>
+            <svg xmlns="http://www.w3.org/2000/svg"
+                class="w-5 h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2">
+
+                <!-- Machine frame -->
+                <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M4 19h16" />
+
+                <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M6 19V5h4v14" />
+
+                <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M6 5h12" />
+
+                <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M18 5v6" />
+
+                <!-- Measuring arm -->
+                <path stroke-linecap="round"
+                    d="M10 9h8" />
+
+                <path stroke-linecap="round"
+                    d="M14 9v4" />
+
+                <!-- Probe -->
+                <path stroke-linecap="round"
+                    d="M14 13v2" />
+
+                <circle cx="14" cy="16" r="1" />
+
+                <!-- Workpiece -->
+                <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M9 17h10v2H9z" />
+
+                <!-- Measurement indication -->
+                <path stroke-linecap="round"
+                    d="M17 12h2" />
+
+                <path stroke-linecap="round"
+                    d="M17 10.5h2" />
+
+            </svg>
+
+            <path stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0h6" />
+            </svg>
+        </x-slot:icon>
+    </x-ui.sidebar-button>
     @endif
 </nav>

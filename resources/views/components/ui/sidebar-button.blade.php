@@ -1,5 +1,20 @@
+@props([
+    'page',
+    'title',
+    'disabled' => false,
+])
 <button
     type="button"
+    @disabled($disabled)
+
+    @if(!$disabled)
+    @click="
+            mobileOpen = false;
+            desktopExpanded = false;
+            currentPage = @js($page);
+            $dispatch('navigate-to', { page: @js($page) })
+        "
+    @endif
     @click="
     mobileOpen = false;
     desktopExpanded = false;

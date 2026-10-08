@@ -40,10 +40,10 @@ class DimensionEncodingRepository
             ->exists();
     }
 
-    // public function create(array $data): DimensionMaster
-    // {
-    //     return DimensionMaster::create($data);
-    // }
+    public function create(array $data): DimensionMaster
+    {
+        return DimensionMaster::create($data);
+    }
 
     public function update(int $recNo, array $data): void
     {

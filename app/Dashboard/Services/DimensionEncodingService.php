@@ -6,6 +6,8 @@ use App\Dashboard\Repositories\DimensionEncodingRepository;
 use App\Dashboard\Repositories\SpecsControlRepository;
 use DomainException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\File;
 
 class DimensionEncodingService
 {
@@ -56,15 +58,12 @@ class DimensionEncodingService
     }
 
     /**
+     * Creates the dimension when $recNo is null, otherwise updates it.
+     *
      * @throws DomainException when DimensionNo already exists for the part no.
      */
     public function save(array $data, ?int $recNo, string $encoder): void
     {
-        // Create is currently disabled (repository create() is commented out)
-        if ($recNo === null) {
-            throw new DomainException('Creating new dimensions is disabled.');
-        }
-
         $payload = $this->toPayload($data);
 
         if ($this->repo->existsByPartAndDimensionNo($payload['PartNo'], $payload['DimensionNo'], $recNo)) {
@@ -73,6 +72,11 @@ class DimensionEncodingService
 
         $payload['Enc']  = $encoder;
         $payload['DEnc'] = now();
+
+        if ($recNo === null) {
+            $this->repo->create($payload);
+            return;
+        }
 
         $this->repo->update($recNo, $payload);
     }
@@ -166,5 +170,62 @@ class DimensionEncodingService
         $value = $value !== null ? trim($value) : '';
 
         return $value === '' ? null : (int) $value;
+    }
+
+    public function symbolExists(string|int|null $symbol): bool
+    {
+        if (! is_numeric($symbol) || (int) $symbol < 0) {
+            return false;
+        }
+
+        return $this->findSymbolFile((int) $symbol) !== null;
+    }
+
+    private function findSymbolFile(int $symbol): ?string
+    {
+        $matches = glob(storage_path("app/Symbol/{$symbol}.*")) ?: [];
+
+        return $matches[0] ?? null;
+    }
+
+    public function storeSymbol(int $symbol, UploadedFile $file): void
+    {
+        if ($symbol < 0) {
+            throw new \DomainException('A negative symbol number has no image.');
+        }
+
+        // Never overwrite a symbol that already exists
+        if ($this->findSymbolFile($symbol) !== null) {
+            throw new \DomainException("Symbol {$symbol} already exists.");
+        }
+
+        $extension = strtolower($file->guessExtension() ?: $file->getClientOriginalExtension());
+        $extension = $extension === 'jpeg' ? 'jpg' : $extension;
+
+        File::ensureDirectoryExists(storage_path('app/Symbol'));
+        File::put(storage_path("app/Symbol/{$symbol}.{$extension}"), $file->get());
+    }
+
+    /**
+     * Every symbol image in storage/app/Symbol, sorted by symbol number.
+     * Files not named by a number are ignored.
+     *
+     * @return array<int, array{symbol: int, url: string}>
+     */
+    public function listSymbols(): array
+    {
+        return collect(glob(storage_path('app/Symbol/*.*')) ?: [])
+            ->map(fn(string $path) => pathinfo($path, PATHINFO_FILENAME))
+            ->filter(fn(string $name) => ctype_digit($name))
+            ->map(fn(string $name) => (int) $name)
+            ->unique()
+            ->sort()
+            ->map(fn(int $symbol) => [
+                'symbol' => $symbol,
+                'url'    => $this->symbolUrl((string) $symbol),
+            ])
+            ->filter(fn(array $item) => filled($item['url']))
+            ->values()
+            ->all();
     }
 }

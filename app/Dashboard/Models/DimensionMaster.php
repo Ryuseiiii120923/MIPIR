@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class DimensionMaster extends Model
 {
+    protected $connection = 'mipirDB';
     protected $table = 'DimensionMaster';
     protected $primaryKey = 'RecNo';
     public $incrementing = true;
