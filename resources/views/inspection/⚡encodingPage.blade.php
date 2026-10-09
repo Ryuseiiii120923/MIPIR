@@ -87,7 +87,6 @@ new class extends Component
             $this->notifyFail('Validation error', 'Machine number is required.');
             return;
         }
-
         if (empty($draft['check-time']['check-time'])) {
             $this->notifyFail('Validation error', 'At least one check time is required.');
             return;
@@ -96,6 +95,7 @@ new class extends Component
         if (app(ConfirmationCheckTimeService::class)->appendIfRejected($this->selectedPpf)) {
             $draft = app(DraftAction::class)->get($this->selectedPpf);
         }
+
         try {
             app(CreateInspection::class)->execute($this->selectedPpf, $draft);
 
@@ -107,6 +107,7 @@ new class extends Component
             Log::warning('DashboardSave: validation error', [
                 'ppf' => $this->selectedPpf,
                 'message' => $e->getMessage(),
+                'at'      => $e->getFile() . ':' . $e->getLine(),
             ]);
             $this->notifyFail('Validation error', $e->getMessage());
         } catch (\Throwable $e) {
@@ -143,20 +144,20 @@ new class extends Component
         @endforeach
     </div>
     <div class="w-full justify-center">
-        <livewire:inspection::partials.table-data wire:key="encoding-table"/>
+        <livewire:inspection::partials.table-data wire:key="encoding-table" />
     </div>
     <div class="flex flex-col md:flex-row gap-5">
-        <livewire:inspection::partials.ppflookup wire:key="encoding-ppfLookUp"/>
-        <livewire:inspection::partials.process-details wire:key="encoding-processDetails"/>
+        <livewire:inspection::partials.ppflookup wire:key="encoding-ppfLookUp" />
+        <livewire:inspection::partials.process-details wire:key="encoding-processDetails" />
     </div>
     <div class="mt-4">
-        <livewire:inspection::partials.check-time wire:key="encoding-checkTime"/>
+        <livewire:inspection::partials.check-time wire:key="encoding-checkTime" />
     </div>
 
     <div class="flex items-center justify-center mt-4 @if($this->selectedPpf === 0) opacity-50 cursor-not-allowed @endif">
         @if($action !== '' && $action !== 'view')
         <div class="flex justify-center p-6">
-            <button
+           <button wire:key="encoding-button"
                 wire:click="submit"
                 @if($action=='delete' ) @click.prevent="if (confirm('Are you sure you want to delete this ppf?')) $wire.submit()" @endif
                 @class([ 'px-12 py-2.5 rounded-lg text-white text-sm font-medium transition' , 'bg-blue-700 hover:bg-blue-800'=> $action === 'add',

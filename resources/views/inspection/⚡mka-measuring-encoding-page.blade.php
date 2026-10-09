@@ -156,7 +156,7 @@ new class extends Component
     <div class="flex items-center justify-center mt-4 @if($this->selectedPpf === 0) opacity-50 cursor-not-allowed @endif">
         @if($action !== '' && $action !== 'view')
         <div class="flex justify-center p-6">
-            <button
+            <button wire:key="mka-button"
                 wire:click="submit"
                 @if($action=='delete' ) @click.prevent="if (confirm('Are you sure you want to delete this ppf?')) $wire.submit()" @endif
                 @class([ 'px-12 py-2.5 rounded-lg text-white text-sm font-medium transition' , 'bg-blue-700 hover:bg-blue-800'=> $action === 'add',

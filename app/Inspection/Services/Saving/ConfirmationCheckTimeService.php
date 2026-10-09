@@ -26,7 +26,6 @@ class ConfirmationCheckTimeService
     {
         $drafts = app(DraftAction::class);
         $draft  = $drafts->get($ppf);
-
         $checkTimeDraft = $draft['check-time'] ?? null;
 
         if (! $checkTimeDraft) {
@@ -42,6 +41,14 @@ class ConfirmationCheckTimeService
         $added      = false;
 
         foreach ($touched as $source) {
+            logger('CS check', [
+                'source'    => $source,
+                'inLabels'  => in_array($source, $labels, true),
+                'judgement' => $judgements[$source] ?? null,
+                'rowJudges' => array_column($dimensions[$source] ?? [], 'judge'),
+                'rejected'  => $this->isRejected($source, $dimensions, $judgements),
+                'followUp'  => $this->hasFollowUp($source, $this->kindOf($source) === self::KIND_REGULAR ? self::KIND_CS : self::KIND_CA, $labels, $dateEncode),
+            ]);
             if (! in_array($source, $labels, true)) {
                 continue; // removed during this session
             }

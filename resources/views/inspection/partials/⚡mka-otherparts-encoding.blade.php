@@ -361,7 +361,7 @@ new class extends Component
     <div class="w-full mx-auto mt-3 @if($readonly) opacity-50 cursor-not-allowed @endif">
         @foreach ($rows as $i => $row)
         @php $isXBar = (bool) ($row['forXBar'] ?? false); @endphp
-        <div wire:key="dim-row-{{ $i }}" data-card-index="{{ $i }}" class="w-full mb-4">
+        <div wire:key="dim-row-mka{{ $i }}" data-card-index="{{ $i }}" class="w-full mb-4">
             @if (!$row['revealed'])
 
             <button
@@ -579,7 +579,7 @@ new class extends Component
                 <div class="flex flex-wrap gap-2 text-sm text-gray-600 mb-4">
                     @foreach($row['measurements'] as $j => $m)
                     @if($m !== '' && $m !== null)
-                    <span wire:key="dim-{{ $i }}-m-{{ $j }}" class="border rounded-lg px-2 py-1">{{ $j + 1 }}: {{ $m }}</span>
+                    <span wire:key="dim-mka{{ $i }}-m-{{ $j }}" class="border rounded-lg px-2 py-1">{{ $j + 1 }}: {{ $m }}</span>
                     @endif
                     @endforeach
                 </div>

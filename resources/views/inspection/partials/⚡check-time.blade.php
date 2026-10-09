@@ -346,7 +346,7 @@ new class extends \Livewire\Component
     @if ($selectedCheckTime)
     @if($isMKA)
     <livewire:inspection::partials.mka-otherparts-encoding
-        :key="'dimensions-' . $selectedCheckTime"
+        :key="'dimensions-otherparts' . $selectedCheckTime"
         :selectedCheckTime="$selectedCheckTime"
         :loaded-rows="$dimensionsByTime[$selectedCheckTime] ?? []"
         :ppfno="$ppf"
