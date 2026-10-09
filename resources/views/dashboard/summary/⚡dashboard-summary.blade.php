@@ -103,17 +103,6 @@ new class extends Component
             </div>
         </div>
 
-        <div>
-            <span class="block text-sm font-medium text-gray-700 mb-1">Judgement</span>
-            <div class="inline-flex rounded-lg border border-gray-300 overflow-hidden text-sm">
-                @foreach (['' => 'All', 'OK' => 'OK', 'NG' => 'NG'] as $value => $label)
-                <button type="button" wire:click="$set('judge', '{{ $value }}')"
-                    @class(['px-3 py-2', 'bg-indigo-600 text-white' => $judge === $value, 'bg-white text-gray-600 hover:bg-gray-50' => $judge !== $value])>
-                    {{ $label }}
-                </button>
-                @endforeach
-            </div>
-        </div>
     </div>
 
     {{-- PPF table --}}
@@ -124,7 +113,6 @@ new class extends Component
                     <th class="px-4 py-3 font-medium">PPF</th>
                     <th class="px-4 py-3 font-medium">Part No</th>
                     <th class="px-4 py-3 font-medium">Date Start</th>
-                    <th class="px-4 py-3 font-medium">Date End</th>
                     <th class="px-4 py-3 font-medium">Check Times</th>
                     <th class="px-4 py-3 font-medium">Inspection</th>
                     <th class="px-4 py-3 font-medium">Action</th>
@@ -136,7 +124,6 @@ new class extends Component
                     <td class="px-4 py-3 font-medium text-gray-900">{{ $ppf->PPFNo }}</td>
                     <td class="px-4 py-3">{{ $ppf->PartNo }}</td>
                     <td class="px-4 py-3">{{ $ppf->dateStart }}</td>
-                    <td class="px-4 py-3">{{ $ppf->dateEnd }}</td>
                     <td class="px-4 py-3">{{ $ppf->checkTimes ?: '-' }}</td>
                     <td class="px-4 py-3">
                         @if ($ppf->mode)

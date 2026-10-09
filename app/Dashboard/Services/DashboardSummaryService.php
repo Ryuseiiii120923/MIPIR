@@ -21,7 +21,7 @@ class DashboardSummaryService
             $s     = $summaries->get($row->PPFNo);
             $total = (int) ($s->total ?? 0);
 
-            $row->dateStart  = $this->date($row->DateStart, 'Y/m/d');
+            $row->dateStart = $this->date($row->DateStart, 'Y/m/d');
             $row->dateEnd    = $this->date($row->DateEnd, 'Y/m/d');
             $row->checkTimes = (int) ($s->check_times ?? 0);
             $row->mode       = $total === 0 ? null : ((int) $s->tightened > 0 ? 'tightened' : 'normal');
