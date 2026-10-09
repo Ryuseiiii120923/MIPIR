@@ -127,7 +127,6 @@ new class extends Component
                     <th class="px-4 py-3 font-medium">Date End</th>
                     <th class="px-4 py-3 font-medium">Check Times</th>
                     <th class="px-4 py-3 font-medium">Inspection</th>
-                    <th class="px-4 py-3 font-medium">Judgement</th>
                     <th class="px-4 py-3 font-medium">Action</th>
                 </tr>
             </thead>
@@ -142,11 +141,6 @@ new class extends Component
                     <td class="px-4 py-3">
                         @if ($ppf->mode)
                         <span class="text-xs font-medium px-2 py-0.5 rounded-full {{ $modeBadge[$ppf->mode] }}">{{ ucfirst($ppf->mode) }}</span>
-                        @else - @endif
-                    </td>
-                    <td class="px-4 py-3">
-                        @if ($ppf->judgement)
-                        <span class="text-xs font-medium px-2 py-0.5 rounded-full {{ $judgeBadge[$ppf->judgement] }}">{{ $ppf->judgement }}</span>
                         @else - @endif
                     </td>
                     <td class="px-4 py-3">
@@ -214,9 +208,6 @@ new class extends Component
             <div class="flex flex-wrap items-center gap-2 mb-4">
                 <h3 class="font-semibold text-gray-800">PPF {{ $selectedPpf }} · {{ $d['checkTime'] }}</h3>
                 <span class="text-xs font-medium px-2 py-0.5 rounded-full {{ $modeBadge[$d['mode']] }}">{{ ucfirst($d['mode']) }}</span>
-                @if ($d['judgement'])
-                <span class="text-xs font-medium px-2 py-0.5 rounded-full {{ $judgeBadge[$d['judgement']] }}">{{ $d['judgement'] }}</span>
-                @endif
             </div>
 
             <dl class="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm mb-5">
