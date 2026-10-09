@@ -228,4 +228,9 @@ class DimensionEncodingService
             ->values()
             ->all();
     }
+
+    public function nextDimensionNo(string $partNo):int
+    {
+        return $this->repo->nextDimensionNo($partNo);
+    }
 }

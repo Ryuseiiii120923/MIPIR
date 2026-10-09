@@ -18,7 +18,7 @@ class DimensionEncodingRepository
 
                 $query->where(function ($w) use ($like) {
                     $w->where('DimensionName', 'like', $like)
-                      ->orWhere('PartNo', 'like', $like);
+                        ->orWhere('PartNo', 'like', $like);
                 });
             })
             ->orderByDesc('DEnc')
@@ -36,7 +36,7 @@ class DimensionEncodingRepository
         return DimensionMaster::query()
             ->where('PartNo', $partNo)
             ->where('DimensionNo', $dimensionNo)
-            ->when($ignoreRecNo !== null, fn ($q) => $q->where('RecNo', '!=', $ignoreRecNo))
+            ->when($ignoreRecNo !== null, fn($q) => $q->where('RecNo', '!=', $ignoreRecNo))
             ->exists();
     }
 
@@ -51,27 +51,36 @@ class DimensionEncodingRepository
     }
 
 
-public function saveLimit(string $partNo, string $dimItem, array $limits): void
-{
-    $now = now();
+    public function saveLimit(string $partNo, string $dimItem, array $limits): void
+    {
+        $now = now();
 
-    $table = fn () => DB::connection('mipirDB')
-        ->table('control_specs_limit')
-        ->where('PartNo', $partNo)
-        ->where('DimItem', $dimItem);
+        $table = fn() => DB::connection('mipirDB')
+            ->table('control_specs_limit')
+            ->where('PartNo', $partNo)
+            ->where('DimItem', $dimItem);
 
-    if ($table()->exists()) {
-        $table()->update($limits + ['updated_at' => $now]);
-        return;
+        if ($table()->exists()) {
+            $table()->update($limits + ['updated_at' => $now]);
+            return;
+        }
+
+        DB::connection('mipirDB')->table('control_specs_limit')->insert(
+            $limits + [
+                'PartNo'     => $partNo,
+                'DimItem'    => $dimItem,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]
+        );
     }
+    public function nextDimensionNo(string $partNo): int
+    {
+        $max = DimensionMaster::query()
+            ->where('PartNo', $partNo)
+            ->selectRaw('MAX(CAST(DimensionNo AS INT)) AS max_no')
+            ->value('max_no');
 
-    DB::connection('mipirDB')->table('control_specs_limit')->insert(
-        $limits + [
-            'PartNo'     => $partNo,
-            'DimItem'    => $dimItem,
-            'created_at' => $now,
-            'updated_at' => $now,
-        ]
-    );
-}
+        return ((int) $max) + 1;
+    }
 }

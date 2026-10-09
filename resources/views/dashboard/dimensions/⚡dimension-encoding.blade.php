@@ -98,6 +98,19 @@ new class extends Component
         return app(DimensionEncodingService::class)->symbolExists($this->symbol);
     }
 
+    public function updatedPartNo(DimensionEncodingService $service): void
+    {
+        if ($this->editingId !== null) {
+            return;
+        }
+
+        $partNo = trim($this->partNo);
+
+        $this->dimensionNo = $partNo === ''
+            ? ''
+            : (string) $service->nextDimensionNo($partNo);
+    }
+
     #[Computed]
     public function availableSymbols(): array
     {
@@ -230,7 +243,9 @@ new class extends Component
 
         try {
             $isEdit = $this->editingId !== null;
-
+            if (! $isEdit) {
+                $data['dimensionNo'] = $service->nextDimensionNo($data['partNo']);
+            }
             $service->save($data, $this->editingId, Auth::user()->社員CD);
 
             $symbolError = false;
@@ -428,18 +443,10 @@ new class extends Component
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                         <label for="partNo" class="block text-sm font-medium text-gray-700 mb-1">Part No</label>
-                        <input type="text" id="partNo" wire:model="partNo"
+                        <input type="text" id="partNo" wire:model.blur="partNo"
                             @if($editingId) readonly @endif
                             class="w-full rounded-lg border border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500 {{ $editingId ? 'bg-gray-100 text-gray-500' : '' }}"
                             placeholder="Part no">
-                    </div>
-
-                    <div>
-                        <label for="dimensionNo" class="block text-sm font-medium text-gray-700 mb-1">Dimension No</label>
-                        <input type="text" id="dimensionNo" wire:model="dimensionNo" inputmode="numeric"
-                            @if($editingId) readonly @endif
-                            class="w-full rounded-lg border border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500 {{ $editingId ? 'bg-gray-100 text-gray-500' : '' }}"
-                            placeholder="1">
                     </div>
 
                     {{-- Symbol with live preview --}}
