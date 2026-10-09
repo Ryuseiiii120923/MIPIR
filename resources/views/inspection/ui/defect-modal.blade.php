@@ -20,6 +20,8 @@
                     <span class="text-blue-600 font-medium">{{ count($staged) }} defect{{ count($staged) > 1 ? 's' : '' }} staged</span> — add more or confirm
                     @elseif($modalSelectedType)
                     <span class="text-blue-600 font-medium">{{ $modalSelectedType }}</span> selected — fill in qty, then stage or confirm
+                    @elseif($mode === 'tightened')
+                    No defects for this shot yet — add some, or confirm to continue
                     @else
                     Select one or more defect types to get started
                     @endif
@@ -36,14 +38,19 @@
             </button>
         </div>
 
+        <div class="px-6 pt-4 space-y-3">
+            @include('inspection.ui.defect-mode')
+            @include('inspection.ui.defect-shots')
+        </div>
+
         <!-- Current defects table -->
-         @unless($readonly)
+        @unless($readonly)
         <div class="px-6 pt-4">
             <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Current Defects</p>
             @include('inspection.ui.defect-table')
         </div>
         @endunless
-        
+
         <!-- Body: Three-column layout -->
         <div class="flex flex-1 mt-4 border-t border-gray-100">
             @include('inspection.ui.defect-modal-staged-column')
@@ -60,12 +67,16 @@
                 class="px-5 py-2 rounded-lg border border-gray-300 text-gray-600 text-sm font-medium hover:bg-gray-50 transition">
                 Cancel
             </button>
+            @php
+            $canConfirm = $mode === 'tightened' || count($staged) > 0 || $modalSelectedType;
+            @endphp
+
             <button
                 type="button"
                 wire:click="confirmDefects"
                 x-on:defect-confirmed.window="openAddDefect = false"
-                class="px-5 py-2 rounded-lg bg-[#0F3C89] text-white text-sm font-medium hover:bg-blue-800 transition disabled:opacity-50
-                    {{ (count($staged) === 0 && !$modalSelectedType) ? 'opacity-50 cursor-not-allowed' : '' }}">
+                class="px-5 py-2 rounded-lg bg-[#0F3C89] text-white text-sm font-medium hover:bg-blue-800 transition
+        {{ $canConfirm ? '' : 'opacity-50 cursor-not-allowed' }}">
                 Confirm &amp; Add{{ count($staged) > 0 ? ' (' . count($staged) . ')' : '' }}
             </button>
         </div>

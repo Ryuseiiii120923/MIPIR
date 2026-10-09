@@ -26,6 +26,7 @@ class Defect extends Model
         'Defect',
         'Qty',
         'NGPercent',
-        'Judgement'
+        'Judgement',
+        'Shot'
     ];
 }

@@ -14,6 +14,11 @@
         <p class="text-4xl font-extrabold text-center text-white p-4">Defect</p>
     </div>
 
+    <div class="px-6 mt-5 space-y-3">
+        @include('inspection.ui.defect-mode')
+        @include('inspection.ui.defect-shots')
+    </div>
+
     <!-- ADD DEFECT BUTTON (reopen modal if closed) -->
     @unless($readonly)
     <div class="w-full flex justify-center mb-3 px-3 mt-5">

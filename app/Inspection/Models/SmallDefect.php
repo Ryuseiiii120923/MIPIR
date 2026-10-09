@@ -17,6 +17,7 @@ class SmallDefect extends Model
         'largeDefect',
         'smallDefect',
         'qty',
-        'Checktime'
+        'Checktime',
+        'Shot'
     ];
 }

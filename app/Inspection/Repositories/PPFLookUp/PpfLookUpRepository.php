@@ -150,76 +150,76 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
     }
 
 
-public function getDataforSearchGapOffset(
-    string $search,
-    int|string $encoder, // EmployeeID ng encoder
-    int $perPage = 5,
-    bool $excludeGenerated = false
-) {
-    $conn = MIPIRInspectionRecord::query()->getConnection();
+    public function getDataforSearchGapOffset(
+        string $search,
+        int|string $encoder, // EmployeeID ng encoder
+        int $perPage = 5,
+        bool $excludeGenerated = false
+    ) {
+        $conn = MIPIRInspectionRecord::query()->getConnection();
 
-    // Plant ng encoder
-    $encoderPlant = $conn
-        ->table('DB_MIPIR.dbo.tblUser')
-        ->select('Plant')
-        ->where('EmployeeID', $encoder)
-        ->limit(1);
+        // Plant ng encoder
+        $encoderPlant = $conn
+            ->table('DB_MIPIR.dbo.tblUser')
+            ->select('Plant')
+            ->where('EmployeeID', $encoder)
+            ->limit(1);
 
-    // EmployeeID ng lahat ng nasa parehong plant (ito ang laman ng InspectBy)
-    $plantEmployees = $conn
-        ->table('DB_MIPIR.dbo.tblUser')
-        ->select('EmployeeID')
-        ->where('Plant', '=', $encoderPlant);
+        // EmployeeID ng lahat ng nasa parehong plant (ito ang laman ng InspectBy)
+        $plantEmployees = $conn
+            ->table('DB_MIPIR.dbo.tblUser')
+            ->select('EmployeeID')
+            ->where('Plant', '=', $encoderPlant);
 
-    $dimSub = $conn
-        ->table('DB_MIPIR.dbo.tblDimensionMeasure')
-        ->select(['PPFNo', 'DimItem', 'created_at', 'isRecord'])
-        ->selectRaw('ROW_NUMBER() OVER (PARTITION BY PPFNo ORDER BY created_at DESC) as rn')
-        ->whereIn('DimItem', ['Gap-Offset', 'Gap-Offset (Y)']);
+        $dimSub = $conn
+            ->table('DB_MIPIR.dbo.tblDimensionMeasure')
+            ->select(['PPFNo', 'DimItem', 'created_at', 'isRecord'])
+            ->selectRaw('ROW_NUMBER() OVER (PARTITION BY PPFNo ORDER BY created_at DESC) as rn')
+            ->whereIn('DimItem', ['Gap-Offset', 'Gap-Offset (Y)']);
 
-    $query = MIPIRInspectionRecord::query()
-        ->select([
-            'tblInspectionRecord.PPFNo',
-            'tblInspectionRecord.PartNo',
-            'tblInspectionRecord.MDNo',
-            'tblInspectionRecord.DateJudge',
-            'tblInspectionRecord.MachineNo',
-            'tblInspectionRecord.InspectBy',
-            'dm.DimItem',
-            'dm.created_at',
-        ])
-        ->leftJoinSub($dimSub, 'dm', function ($join) {
-            $join->on('dm.PPFNo', '=', 'tblInspectionRecord.PPFNo')
-                ->where('dm.rn', '=', 1);
-        })
-        ->whereIn('tblInspectionRecord.InspectBy', $plantEmployees)
-        ->when($search !== '', function ($query) use ($search) {
-            $query->where('tblInspectionRecord.PPFNo', 'like', "%{$search}%");
-        });
+        $query = MIPIRInspectionRecord::query()
+            ->select([
+                'tblInspectionRecord.PPFNo',
+                'tblInspectionRecord.PartNo',
+                'tblInspectionRecord.MDNo',
+                'tblInspectionRecord.DateJudge',
+                'tblInspectionRecord.MachineNo',
+                'tblInspectionRecord.InspectBy',
+                'dm.DimItem',
+                'dm.created_at',
+            ])
+            ->leftJoinSub($dimSub, 'dm', function ($join) {
+                $join->on('dm.PPFNo', '=', 'tblInspectionRecord.PPFNo')
+                    ->where('dm.rn', '=', 1);
+            })
+            ->whereIn('tblInspectionRecord.InspectBy', $plantEmployees)
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where('tblInspectionRecord.PPFNo', 'like', "%{$search}%");
+            });
 
-    if ($excludeGenerated) {
-        $query->where(function ($q) {
-            $q->whereNull('dm.DimItem')
-                ->orWhereNull('dm.isRecord');
-        });
-    } else {
-        $query->whereNotNull('dm.DimItem');
+        if ($excludeGenerated) {
+            $query->where(function ($q) {
+                $q->whereNull('dm.DimItem')
+                    ->orWhereNull('dm.isRecord');
+            });
+        } else {
+            $query->whereNotNull('dm.DimItem');
+        }
+
+        return $query
+            ->whereIn(
+                'tblInspectionRecord.RECNO',
+                MIPIRInspectionRecord::query()
+                    ->selectRaw('MAX(RECNO)')
+                    ->whereIn('InspectBy', $plantEmployees)
+                    ->groupBy('PPFNo')
+            )
+            ->orderByDesc('tblInspectionRecord.DateJudge')
+            ->orderByDesc('tblInspectionRecord.PPFNo')
+            ->paginate($perPage);
     }
 
-    return $query
-        ->whereIn(
-            'tblInspectionRecord.RECNO',
-            MIPIRInspectionRecord::query()
-                ->selectRaw('MAX(RECNO)')
-                ->whereIn('InspectBy', $plantEmployees)
-                ->groupBy('PPFNo')
-        )
-        ->orderByDesc('tblInspectionRecord.DateJudge')
-        ->orderByDesc('tblInspectionRecord.PPFNo')
-        ->paginate($perPage);
-}
-   
-   public static function cacheKey(int $ppf): string
+    public static function cacheKey(int $ppf): string
     {
         return "ppf-main-data:{$ppf}";
     }
@@ -277,6 +277,7 @@ public function getDataforSearchGapOffset(
     {
         return SmallDefect::where('PPFNo', $ppf)
             ->where('Checktime', $checkTime)
+            ->whereNull('Shot')
             ->get(['largeDefect', 'smallDefect', 'qty'])
             ->groupBy(fn($d) => trim($d->largeDefect))
             ->map(fn($group) => $group
@@ -374,5 +375,45 @@ public function getDataforSearchGapOffset(
             ->distinct()
             ->pluck('Checktime')
             ->all();
+    }
+    public function getDefectShots(int $ppf, string $checkTime): array
+    {
+        $rows = Defect::where('PPFNo', $ppf)
+            ->where('Checktime', $checkTime)
+            ->whereNotNull('Shot')
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return ['mode' => 'normal', 'shots' => []];
+        }
+
+        $small = SmallDefect::where('PPFNo', $ppf)
+            ->where('Checktime', $checkTime)
+            ->whereNotNull('Shot')
+            ->get();
+
+        $shots = $rows
+            ->groupBy(fn($r) => (int) $r->Shot)
+            ->sortKeys()
+            ->map(fn($group, $shot) => [
+                'shot'    => (int) $shot,
+                'defects' => $group
+                    ->filter(fn($r) => filled($r->Defect))   // alisin ang placeholder
+                    ->map(fn($r) => ['type' => $r->Defect, 'qty' => (int) $r->Qty])
+                    ->values()
+                    ->all(),
+                'smallDefects' => $small
+                    ->filter(fn($s) => (int) $s->Shot === (int) $shot)
+                    ->groupBy('largeDefect')
+                    ->map(fn($g) => $g
+                        ->map(fn($s) => ['type' => $s->smallDefect, 'qty' => (int) $s->qty])
+                        ->values()
+                        ->all())
+                    ->all(),
+            ])
+            ->values()
+            ->all();
+
+        return ['mode' => 'tightened', 'shots' => $shots];
     }
 }

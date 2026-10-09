@@ -69,7 +69,8 @@ class MIPIRInspectionReporsitory
             'Defect' => $data['Defect'],
             'Qty' => $data['Qty'],
             'NGPercent' => $data['NGPercent'],
-            'Judgement' => $data['Judgement']
+            'Judgement' => $data['Judgement'],
+            'Shot' => $data['Shot']
         ]);
     }
 
@@ -81,6 +82,7 @@ class MIPIRInspectionReporsitory
             'largeDefect' => $data['largeDefect'],
             'smallDefect' => $data['smallDefect'],
             'qty' => $data['qty'],
+            'Shot' => $data['shot']
         ]);
     }
 

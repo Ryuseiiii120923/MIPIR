@@ -35,6 +35,8 @@ class CreateInspection
         $touchedCheckTimes = $draft['check-time']['touched'] ?? $checkTimes; // fallback treats all as touched
         $defects = $draft['defects']['defects'] ?? [];
         $smallDefects = $draft['defects']['smallDefects'] ?? [];
+        $modeByTime = $draft['defects']['mode'] ?? [];
+        $shotsByTime = $draft['defects']['shots'] ?? [];
         $ngpercent = $draft['defects']['ngPercent'] ?? null;
         $defectJudge = $draft['defects']['judgement'] ?? null;
         $dimensions = $draft['dimensions'] ?? [];
@@ -43,16 +45,12 @@ class CreateInspection
         $dateJudge = $draft['judgement']['dateOfJudge'] ?? null;
         $inspectorNo = Auth::user()->InspectorNo ?? Null;
 
+        $defectBatches = [];
         $composedRemarks = [];
         foreach ($checkTimes as $time) {
-            $composedRemarks[$time] = $this->composeRemarks(
-                $remarks[$time] ?? '',
-                $defects[$time] ?? [],
-                $smallDefects[$time] ?? []
-            );
+            $defectBatches[$time] = $this->defectBatchesFor($time, $defects, $smallDefects, $modeByTime, $shotsByTime);
+            $composedRemarks[$time] = $this->composeRemarks($remarks[$time] ?? '', $defectBatches[$time]);
         }
-
-
 
         if (empty($ppfLookUp['productionLotNo']) || empty($ppfLookUp['machineNo'])) {
             throw new \InvalidArgumentException('Process details are required to create an inspection.');
@@ -62,7 +60,7 @@ class CreateInspection
             throw new \InvalidArgumentException('At least one check time is required to create an inspection.');
         }
 
-        DB::transaction(function () use ($composedRemarks, $dateEncodeCheck, $defectJudge, $inspectorNo, $ngpercent, $ppf, $ppfLookUp, $touchedCheckTimes, $defects, $dimensions, $dateJudge, $remarks, $smallDefects) {
+        DB::transaction(function () use ($composedRemarks, $dateEncodeCheck, $defectBatches, $defectJudge, $inspectorNo, $ngpercent, $ppf, $ppfLookUp, $touchedCheckTimes, $dimensions, $dateJudge, $remarks) {
             foreach ($touchedCheckTimes as $checkTime) {
                 $isExistingCheckTime = MIPIRInspectionRecord::where('PPFNo', $ppf)
                     ->where('Checktime', $checkTime)
@@ -76,19 +74,20 @@ class CreateInspection
                     ->where('Checktime', $checkTime)
                     ->first(['Judgement', 'NGPercent']);
 
-
                 $judgementForTime = $defectJudge[$checkTime]
                     ?? ($existingDefect ? ($existingDefect->Judgement ? 'X' : 'O') : null);
 
                 $ngPercentForTime = $ngpercent[$checkTime]
                     ?? $existingDefect?->NGPercent
                     ?? 0;
+
                 MIPIRDimensionMeasure::where('PPFNo', $ppf)->where('Checktime', $checkTime)->delete();
                 Defect::where('PPFNo', $ppf)->where('Checktime', $checkTime)->delete();
                 ChckTRemarks::where('PPFNo', $ppf)->where('CheckTime', $checkTime)->delete();
                 SmallDefect::where('PPFNo', $ppf)->where('Checktime', $checkTime)->delete();
                 CheckTime::where('PPFNo', $ppf)->where('Checktime', $checkTime)->delete();
                 MIPIRInspectionRecord::where('PPFNo', $ppf)->where('Checktime', $checkTime)->delete();
+
                 app(CreateInspectionService::class)->createInspectionRecord([
                     'PPFNo' => $ppf,
                     'PartNo' => $ppfLookUp['partNo'] ?? null,
@@ -104,10 +103,10 @@ class CreateInspection
                     'MoldingOperator' => $ppfLookUp['moldOperator'] ?? null
                 ]);
 
-
                 if ($checkTime === 'E') {
                     app(MIPIRRecordCycleTracker::class)->checkAndRecordLotComplete($ppf, $ppfLookUp['partNo'] ?? '');
                 }
+
                 app(CreateInspectionService::class)->saveCheckTime([
                     'PPFNo' => $ppf,
                     'PartNo' => $ppfLookUp['partNo'] ?? null,
@@ -125,29 +124,44 @@ class CreateInspection
                     'Remarks' => $composedRemarks[$checkTime] ?? '',
                 ]);
 
-                $defectsForThisTime = $defects[$checkTime] ?? [];
-                foreach ($defectsForThisTime as $defect) {
-                    app(CreateInspectionService::class)->createDefect([
-                        'PPFNo' => $ppf,
-                        'PartNo' => $ppfLookUp['partNo'] ?? null,
-                        'MDNo' => $ppfLookUp['moldNo'] ?? null,
-                        'ProdLotNo' => $ppfLookUp['productionLotNo'],
-                        'MachineNo' => $ppfLookUp['machineNo'],
-                        'Checktime' => $checkTime,
-                        'Defect' => $defect['type'] ?? null,
-                        'Qty' => $defect['qty'] ?? null,
-                        'Judgement' => $judgementForTime === 'X' ? 1 : 0,
-                        'NGPercent' => $ngPercentForTime,
-                    ]);
-                    $smallDefectForThisTime = $smallDefects[$checkTime][$defect['type']] ?? [];
-                    foreach ($smallDefectForThisTime as $small) {
-                        app(MIPIRInspectionReporsitory::class)->createSmall([
+                // Normal: one batch (shot = null). Tightened: one batch per shot.
+                foreach ($defectBatches[$checkTime] ?? [] as $batch) {
+                    $defectRows = $batch['defects'];
+
+                    // Tightened shot na walang defect: mag-iwan ng placeholder row para hindi mawala ang shot
+                    if ($batch['shot'] !== null && $defectRows === []) {
+                        $defectRows = [['type' => null, 'qty' => 0]];
+                    }
+
+                    foreach ($defectRows as $defect) {
+                        app(CreateInspectionService::class)->createDefect([
                             'PPFNo' => $ppf,
+                            'PartNo' => $ppfLookUp['partNo'] ?? null,
+                            'MDNo' => $ppfLookUp['moldNo'] ?? null,
+                            'ProdLotNo' => $ppfLookUp['productionLotNo'],
+                            'MachineNo' => $ppfLookUp['machineNo'],
                             'Checktime' => $checkTime,
-                            'largeDefect' => $defect['type'],
-                            'smallDefect' => $small['type'],
-                            'qty' => $small['qty']
+                            'Shot' => $batch['shot'],
+                            'Defect' => $defect['type'] ?? null,
+                            'Qty' => $defect['qty'] ?? 0,
+                            'Judgement' => $judgementForTime === 'X' ? 1 : 0,
+                            'NGPercent' => $ngPercentForTime,
                         ]);
+
+                        $smallRows = $defect['type'] !== null
+                            ? ($batch['smallDefects'][$defect['type']] ?? [])
+                            : [];
+
+                        foreach ($smallRows as $small) {
+                            app(MIPIRInspectionReporsitory::class)->createSmall([
+                                'PPFNo' => $ppf,
+                                'Checktime' => $checkTime,
+                                'shot' => $batch['shot'],
+                                'largeDefect' => $defect['type'],
+                                'smallDefect' => $small['type'],
+                                'qty' => $small['qty']
+                            ]);
+                        }
                     }
                 }
 
@@ -161,7 +175,6 @@ class CreateInspection
                     $forXBar = $row['forXBar'] ?? false;
                     $controlLimit = $row['CL'] ?? "";
                     $isXBarTracked = ! in_array($itemName, ['Flash Thickness', 'Gap-Offset'], true);
-
 
                     $setsCount = (int) ceil(count($measurements) / 5);
 
@@ -204,8 +217,6 @@ class CreateInspection
                             '5' => number_format((float) ($chunk[4] ?? 0), 4, '.', ''),
                             'InspectedBy' => $inspectorNo
                         ]);
-
-
 
                         if ($xbarResult !== null && $xbarResult['shouldGenerate']) {
                             app(XBarCycleTracker::class)->closeCycleAndGenerate(
@@ -521,7 +532,7 @@ class CreateInspection
     }
 
 
-    private function composeRemarks(string $remarks, array $defectsForTime, array $smallDefectsForTime): string
+    private function composeRemarks(string $remarks, array $batches): string
     {
         $base = trim(preg_replace(
             '/\s*' . preg_quote(self::SMALL_DEFECT_MARKER, '/') . '.*$/s',
@@ -531,20 +542,24 @@ class CreateInspection
 
         $parts = [];
 
-        foreach ($defectsForTime as $defect) {
-            $large = $defect['type'] ?? null;
+        foreach ($batches as $batch) {
+            $prefix = $batch['shot'] !== null ? "Shot {$batch['shot']} " : '';
 
-            if ($large === null) {
-                continue;
-            }
+            foreach ($batch['defects'] as $defect) {
+                $large = $defect['type'] ?? null;
 
-            $smalls = collect($smallDefectsForTime[$large] ?? [])
-                ->filter(fn($s) => (float) ($s['qty'] ?? 0) > 0)
-                ->map(fn($s) => "{$s['type']} ({$s['qty']})")
-                ->values();
+                if ($large === null) {
+                    continue;
+                }
 
-            if ($smalls->isNotEmpty()) {
-                $parts[] = "{$large}: " . $smalls->implode(', ');
+                $smalls = collect($batch['smallDefects'][$large] ?? [])
+                    ->filter(fn($s) => (float) ($s['qty'] ?? 0) > 0)
+                    ->map(fn($s) => "{$s['type']} ({$s['qty']})")
+                    ->values();
+
+                if ($smalls->isNotEmpty()) {
+                    $parts[] = "{$prefix}{$large}: " . $smalls->implode(', ');
+                }
             }
         }
 
@@ -553,5 +568,36 @@ class CreateInspection
         }
 
         return trim($base . ' ' . self::SMALL_DEFECT_MARKER . ' ' . implode('; ', $parts));
+    }
+
+    /**
+     * Normal    => one batch with shot = null (the old behaviour).
+     * Tightened => one batch per shot, labelled 1, 5, 10, 15 ...
+     *
+     * @return array<int, array{shot: ?int, defects: array, smallDefects: array}>
+     */
+    private function defectBatchesFor(
+        string $checkTime,
+        array $defects,
+        array $smallDefects,
+        array $modeByTime,
+        array $shotsByTime
+    ): array {
+        if (($modeByTime[$checkTime] ?? 'normal') !== 'tightened') {
+            return [[
+                'shot'         => null,
+                'defects'      => $defects[$checkTime] ?? [],
+                'smallDefects' => $smallDefects[$checkTime] ?? [],
+            ]];
+        }
+
+        return collect($shotsByTime[$checkTime] ?? [])
+            ->map(fn(array $shot) => [
+                'shot'         => isset($shot['shot']) ? (int) $shot['shot'] : null,
+                'defects'      => $shot['defects'] ?? [],
+                'smallDefects' => $shot['smallDefects'] ?? [],
+            ])
+            ->values()
+            ->all();
     }
 }

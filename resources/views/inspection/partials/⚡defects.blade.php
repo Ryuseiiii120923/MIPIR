@@ -59,6 +59,14 @@ new class extends Component
     public int $cavity;
     public float $nqr;
 
+    // Tightened
+    #[Locked]
+    public string $mode = 'normal';      // 'normal' | 'tightened'
+
+    public array $shots = [];            // [['defects' => [], 'smallDefects' => []], ...]
+    public ?int $selectedShot = null;    // index sa $shots
+    public array $shotSummaries = [];
+
     /*
     |--------------------------------------------------------------------------
     | Lifecycle
@@ -72,22 +80,34 @@ new class extends Component
         array $loadedDefects = [],
         array $loadedSmallDefects = [],
         string $action = '',
-        array $fromMaster = []
+        array $fromMaster = [],
+        string $mode = 'normal',
+        array $loadedShots = []
     ): void {
+        $this->mode = in_array($mode, ['normal', 'tightened'], true) ? $mode : 'normal';
         $this->action = $action;
         $this->selectedCheckTime = $selectedCheckTime;
         $this->dispatchPrefix = $dispatchPrefix;
         $this->cavity = $fromMaster['cavity'];
         $this->nqr = $fromMaster['nqr'];
-        $this->readonly = in_array(
-            $action,
-            ['view', 'delete'],
-            true
-        );
+        $this->readonly = in_array($action, ['view', 'delete'], true);
 
         $this->largeDefectMaster = $repository->getLargeDefects();
 
-        $this->loadDefects($loadedDefects, $loadedSmallDefects);
+        if ($this->isTightened()) {
+            $this->shots = collect($loadedShots)
+                ->values()
+                ->map(fn(array $shot, int $i) => [
+                    'shot'         => (int) ($shot['shot'] ?? ($i === 0 ? 1 : $i * 5)),
+                    'defects'      => $shot['defects'] ?? [],
+                    'smallDefects' => $shot['smallDefects'] ?? [],
+                ])
+                ->all() ?: [$this->emptyShot(1)];
+
+            $this->loadShot(0);
+        } else {
+            $this->loadDefects($loadedDefects, $loadedSmallDefects);
+        }
     }
 
 
@@ -211,12 +231,12 @@ new class extends Component
 
     public function computeAndjudge()
     {
-        $this->ngpercent = ($this->totalNg / $this->cavity) * 100;
-        if ($this->ngpercent > $this->nqr) {
-            $this->judgement = 'X';
-        } else {
-            $this->judgement = 'O';
+        if ($this->isTightened()) {
+            return;
         }
+
+        $this->ngpercent = ($this->totalNg / $this->cavity) * 100;
+        $this->judgement = $this->ngpercent > $this->nqr ? 'X' : 'O';
     }
 
     /*
@@ -275,13 +295,19 @@ new class extends Component
         $this->autoStageSelectedDefect();
 
         if (empty($this->staged)) {
+            if ($this->isTightened() && $this->modalSelectedType === null) {
+                $this->resetDefectState();
+                $this->dispatch('defect-confirmed');
+
+                return;
+            }
+
             $this->validateDefectSelection();
 
             return;
         }
 
         $this->commitStagedDefects();
-
 
         $this->resetDefectState();
 
@@ -642,17 +668,23 @@ new class extends Component
         $this->dispatch(
             'defects-synced',
             selectedCheckTime: $this->selectedCheckTime,
-            defects: $this->defects,
-            smallDefects: $this->smallDefects,
+            defects: $this->isTightened() ? [] : $this->defects,
+            smallDefects: $this->isTightened() ? [] : $this->smallDefects,
             ngpercent: $this->ngpercent,
-            judgement: $this->judgement
+            judgement: $this->judgement,
+            mode: $this->mode,
+            shots: $this->isTightened() ? $this->shots : []
         );
     }
 
     private function updateTotalNg(): void
     {
-        $this->totalNg = $this->stagingService()
-            ->calculateTotalNg($this->defects);
+        if ($this->isTightened()) {
+            $this->refreshShotSummary();
+            return;
+        }
+
+        $this->totalNg = $this->stagingService()->calculateTotalNg($this->defects);
     }
 
     private function broadcastNg(): void
@@ -814,6 +846,159 @@ new class extends Component
     private function stagingService(): DefectStagingService
     {
         return app(DefectStagingService::class);
+    }
+
+    //Tightened
+
+    /*
+|--------------------------------------------------------------------------
+| Mode & Shots (tightened)
+|--------------------------------------------------------------------------
+*/
+
+    public function setMode(string $mode): void
+    {
+        if ($this->readonly || $mode === $this->mode || ! in_array($mode, ['normal', 'tightened'], true)) {
+            return;
+        }
+
+        $this->mode = $mode;
+        $this->shots = [];
+        $this->selectedShot = null;
+        $this->shotSummaries = [];
+        $this->defects = [];
+        $this->smallDefects = [];
+        $this->resetDefectState();
+
+        if ($this->isTightened()) {
+            $this->shots = [$this->emptyShot(1)];
+            $this->loadShot(0);
+        } else {
+            $this->updateTotalNg();
+            $this->computeAndjudge();
+        }
+
+        $this->syncToParent();
+    }
+
+    public function addShot(): void
+    {
+        if ($this->readonly || ! $this->isTightened()) {
+            return;
+        }
+
+        $this->commitPendingDefects();
+
+        $this->shots[] = $this->emptyShot($this->nextShotLabel());
+        $this->loadShot(array_key_last($this->shots));
+        $this->syncToParent();
+    }
+
+    public function selectShot(int $index): void
+    {
+        if (! isset($this->shots[$index]) || $index === $this->selectedShot) {
+            return;
+        }
+
+        if (! $this->readonly) {
+            $this->commitPendingDefects();
+        }
+
+        $this->loadShot($index);
+    }
+
+    public function removeShot(int $index): void
+    {
+        if ($this->readonly || ! isset($this->shots[$index]) || count($this->shots) <= 1) {
+            return;
+        }
+
+        unset($this->shots[$index]);
+        $this->shots = array_values($this->shots);
+
+        $this->loadShot(min($index, count($this->shots) - 1));
+        $this->syncToParent();
+    }
+
+    private function isTightened(): bool
+    {
+        return $this->mode === 'tightened';
+    }
+
+    private function emptyShot(int $label): array
+    {
+        return ['shot' => $label, 'defects' => [], 'smallDefects' => []];
+    }
+
+    private function nextShotLabel(): int
+    {
+        if ($this->shots === []) {
+            return 1;
+        }
+
+        $last = (int) collect($this->shots)->max('shot');
+
+        return $last < 5 ? 5 : $last + 5;
+    }
+
+    private function loadShot(int $index): void
+    {
+        $this->selectedShot = $index;
+        $this->defects = $this->shots[$index]['defects'] ?? [];
+        $this->smallDefects = $this->shots[$index]['smallDefects'] ?? [];
+
+        $this->resetDefectState();
+        $this->reviewCommittedDefects();
+        $this->updateTotalNg();
+    }
+
+    private function storeActiveShot(): void
+    {
+        if (! $this->isTightened() || $this->selectedShot === null || ! isset($this->shots[$this->selectedShot])) {
+            return;
+        }
+
+        $this->shots[$this->selectedShot] = [
+            'shot'         => $this->shots[$this->selectedShot]['shot'],
+            'defects'      => $this->defects,
+            'smallDefects' => $this->smallDefects,
+        ];
+    }
+
+    // Kapag nagpalit/nagdagdag ng shot habang bukas ang modal, i-save muna ang nakabinbin
+    private function commitPendingDefects(): void
+    {
+        $this->autoStageSelectedDefect();
+
+        if (! empty($this->staged)) {
+            $this->commitStagedDefects();
+        }
+
+        $this->resetDefectState();
+    }
+
+    private function refreshShotSummary(): void
+    {
+        $this->storeActiveShot();
+
+        $this->shotSummaries = collect($this->shots)
+            ->map(function (array $shot, int $i) {
+                $ng  = $this->stagingService()->calculateTotalNg($shot['defects'] ?? []);
+                $pct = $this->cavity > 0 ? ($ng / $this->cavity) * 100 : 0;
+
+                return [
+                    'shot' => $shot['shot'],
+                    'ng'        => $ng,
+                    'pct'       => $pct,
+                    'judgement' => $pct > $this->nqr ? 'X' : 'O',
+                ];
+            })
+            ->values()
+            ->all();
+
+        $this->totalNg   = (int) collect($this->shotSummaries)->sum('ng');
+        $this->ngpercent = (float) (collect($this->shotSummaries)->max('pct') ?? 0);
+        $this->judgement = collect($this->shotSummaries)->contains('judgement', 'X') ? 'X' : 'O';
     }
 };
 ?>

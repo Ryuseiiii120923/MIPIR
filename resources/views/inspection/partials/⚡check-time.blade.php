@@ -32,6 +32,8 @@ new class extends \Livewire\Component
     public array $endTimeByTime = [];
     public array $touchedThisSession = [];
     public array $controlLimitByTime = [];
+    public array $modeByTime = [];
+    public array $shotsByTime = [];
 
     public bool $isMKA = false;
 
@@ -98,10 +100,12 @@ new class extends \Livewire\Component
         ]);
 
         app(DraftAction::class)->put($this->ppf, 'defects', [
-            'defects'    => $this->defectsByTime,
+            'defects'      => $this->defectsByTime,
             'smallDefects' => $this->smallDefectsByTime,
-            'ngPercent'  => $this->ngpercentByTime,
-            'judgement'  => $this->judgementByTime,
+            'ngPercent'    => $this->ngpercentByTime,
+            'judgement'    => $this->judgementByTime,
+            'mode'         => $this->modeByTime,
+            'shots'        => $this->shotsByTime,
         ]);
 
         app(DraftAction::class)->put($this->ppf, 'dimensions', $this->dimensionsByTime);
@@ -141,12 +145,21 @@ new class extends \Livewire\Component
 
 
     #[On('defects-synced')]
-    public function onDefectsSynced(string $selectedCheckTime, array $defects, float $ngpercent, string $judgement, array $smallDefects): void
-    {
+    public function onDefectsSynced(
+        string $selectedCheckTime,
+        array $defects,
+        float $ngpercent,
+        string $judgement,
+        array $smallDefects,
+        string $mode = 'normal',
+        array $shots = []
+    ): void {
         $this->defectsByTime[$selectedCheckTime] = $defects;
         $this->ngpercentByTime[$selectedCheckTime] = $ngpercent;
         $this->judgementByTime[$selectedCheckTime] = $judgement;
         $this->smallDefectsByTime[$selectedCheckTime] = $smallDefects;
+        $this->modeByTime[$selectedCheckTime] = $mode;
+        $this->shotsByTime[$selectedCheckTime] = $shots;
         $this->endTimeByTime[$selectedCheckTime] = now()->toDateTimeString();
         $this->touchedThisSession[$selectedCheckTime] = true;
         $this->syncDraft();
@@ -227,6 +240,9 @@ new class extends \Livewire\Component
             $this->dateEncodeByTime = $result['dateEncode'] ?? [];
 
             foreach ($this->checkTimes as $time) {
+                $tightened = app(PpfLookUpRepository::class)->getDefectShots($ppf, $time);
+                $this->modeByTime[$time] = $tightened['mode'];
+                $this->shotsByTime[$time] = $tightened['shots'];
                 $this->defectsByTime[$time] = app(PpfLookUpRepository::class)->getDefectbyCheckTime($ppf, $time);
                 $this->smallDefectsByTime[$time] = app(PpfLookUpRepository::class)->getSmallDefectbyCheckTime($ppf, $time);
                 $this->dimensionsByTime[$time] = app(PpfLookUpRepository::class)->getDimensionbyCheckTime($ppf, $time);
@@ -359,7 +375,9 @@ new class extends \Livewire\Component
         :loaded-defects="$defectsByTime[$selectedCheckTime] ?? []"
         :loaded-small-defects="$smallDefectsByTime[$selectedCheckTime] ?? []"
         :action="$action"
-        :fromMaster="$dataFromMaster" />
+        :fromMaster="$dataFromMaster"
+        :mode="$modeByTime[$selectedCheckTime] ?? 'normal'"
+        :loaded-shots="$shotsByTime[$selectedCheckTime] ?? []" />
 
     <livewire:inspection::partials.dimensions
         :key="'dimensions-' . $selectedCheckTime"
