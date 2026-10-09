@@ -66,14 +66,14 @@ new class extends Component
 ?>
 
 @php
-    $judgeBadge = [
-        'OK' => 'bg-green-100 text-green-700',
-        'NG' => 'bg-red-100 text-red-700',
-    ];
-    $modeBadge = [
-        'normal'    => 'bg-blue-100 text-blue-700',
-        'tightened' => 'bg-amber-100 text-amber-700',
-    ];
+$judgeBadge = [
+'OK' => 'bg-green-100 text-green-700',
+'NG' => 'bg-red-100 text-red-700',
+];
+$modeBadge = [
+'normal' => 'bg-blue-100 text-blue-700',
+'tightened' => 'bg-amber-100 text-amber-700',
+];
 @endphp
 
 <div class="w-full mx-auto p-6">
@@ -96,7 +96,7 @@ new class extends Component
             <div class="inline-flex rounded-lg border border-gray-300 overflow-hidden text-sm">
                 @foreach (['' => 'All', 'normal' => 'Normal', 'tightened' => 'Tightened'] as $value => $label)
                 <button type="button" wire:click="$set('mode', '{{ $value }}')"
-                    @class(['px-3 py-2', 'bg-indigo-600 text-white' => $mode === $value, 'bg-white text-gray-600 hover:bg-gray-50' => $mode !== $value])>
+                    @class(['px-3 py-2', 'bg-indigo-600 text-white'=> $mode === $value, 'bg-white text-gray-600 hover:bg-gray-50' => $mode !== $value])>
                     {{ $label }}
                 </button>
                 @endforeach
@@ -120,7 +120,7 @@ new class extends Component
             </thead>
             <tbody class="divide-y divide-gray-200">
                 @forelse ($this->ppfs as $ppf)
-                <tr wire:key="ppf-{{ $ppf->PPFNo }}" @class(['hover:bg-gray-50', 'bg-indigo-50/60' => $selectedPpf === (int) $ppf->PPFNo])>
+                <tr wire:key="ppf-{{ $ppf->PPFNo }}" @class(['hover:bg-gray-50', 'bg-indigo-50/60'=> $selectedPpf === (int) $ppf->PPFNo])>
                     <td class="px-4 py-3 font-medium text-gray-900">{{ $ppf->PPFNo }}</td>
                     <td class="px-4 py-3">{{ $ppf->PartNo }}</td>
                     <td class="px-4 py-3">{{ $ppf->dateStart }}</td>
@@ -148,9 +148,7 @@ new class extends Component
         <div class="px-4 py-3">{{ $this->ppfs->links() }}</div>
     </div>
 
-    {{-- Check times + detail --}}
     <div class="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {{-- Check Time / Date Encode --}}
         <div class="overflow-hidden rounded-xl border border-gray-200 bg-white self-start">
             <table class="w-full text-sm text-left text-gray-700">
                 <thead class="bg-gray-100 border-b border-gray-200">
@@ -164,7 +162,7 @@ new class extends Component
                 <tbody class="divide-y divide-gray-200">
                     @forelse ($this->checkTimes as $ct)
                     <tr wire:key="ct-{{ $ct['checkTime'] }}" wire:click="selectCheckTime('{{ $ct['checkTime'] }}')"
-                        @class(['cursor-pointer hover:bg-gray-50', 'bg-indigo-50/60' => $selectedCheckTime === $ct['checkTime']])>
+                        @class(['cursor-pointer hover:bg-gray-50', 'bg-indigo-50/60'=> $selectedCheckTime === $ct['checkTime']])>
                         <td class="px-4 py-3 font-medium text-gray-900">{{ $ct['checkTime'] }}</td>
                         <td class="px-4 py-3">{{ $ct['dateEnc'] }}</td>
                         <td class="px-4 py-3">
@@ -198,12 +196,30 @@ new class extends Component
             </div>
 
             <dl class="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm mb-5">
-                <div><dt class="text-gray-400">Time Start</dt><dd class="font-medium text-gray-800">{{ $d['timeStart'] }}</dd></div>
-                <div><dt class="text-gray-400">Time End</dt><dd class="font-medium text-gray-800">{{ $d['timeEnd'] }}</dd></div>
-                <div><dt class="text-gray-400">Inspected By</dt><dd class="font-medium text-gray-800">{{ $d['inspector'] }}</dd></div>
-                <div><dt class="text-gray-400">Part No</dt><dd class="font-medium text-gray-800">{{ $d['partNo'] }}</dd></div>
-                <div><dt class="text-gray-400">Lot No</dt><dd class="font-medium text-gray-800">{{ $d['lotNo'] }}</dd></div>
-                <div><dt class="text-gray-400">Machine No</dt><dd class="font-medium text-gray-800">{{ $d['machineNo'] }}</dd></div>
+                <div>
+                    <dt class="text-gray-400">Time Start</dt>
+                    <dd class="font-medium text-gray-800">{{ $d['timeStart'] }}</dd>
+                </div>
+                <div>
+                    <dt class="text-gray-400">Time End</dt>
+                    <dd class="font-medium text-gray-800">{{ $d['timeEnd'] }}</dd>
+                </div>
+                <div>
+                    <dt class="text-gray-400">Inspected By</dt>
+                    <dd class="font-medium text-gray-800">{{ $d['inspector'] }}</dd>
+                </div>
+                <div>
+                    <dt class="text-gray-400">Part No</dt>
+                    <dd class="font-medium text-gray-800">{{ $d['partNo'] }}</dd>
+                </div>
+                <div>
+                    <dt class="text-gray-400">Lot No</dt>
+                    <dd class="font-medium text-gray-800">{{ $d['lotNo'] }}</dd>
+                </div>
+                <div>
+                    <dt class="text-gray-400">Machine No</dt>
+                    <dd class="font-medium text-gray-800">{{ $d['machineNo'] }}</dd>
+                </div>
             </dl>
 
             <div class="space-y-4">
@@ -217,7 +233,8 @@ new class extends Component
                                 <span class="ms-1 text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">X-Bar</span>
                                 @endif
                             </p>
-                            <p class="text-xs text-gray-500">Spec: {{ $dim['specification'] }} · CL: {{ $dim['cl'] }}</p>
+                            <p class="text-xs text-gray-500">Specification: {{ $dim['specification'] }}</p>
+                            <p class="text-xs text-gray-500">Control Limit: {{ $dim['cl'] }}</p>
                         </div>
                         <div class="flex items-center gap-1">
                             <span class="text-xs font-medium px-2 py-0.5 rounded-full {{ $modeBadge[$dim['mode']] }}">{{ ucfirst($dim['mode']) }}</span>
@@ -227,21 +244,29 @@ new class extends Component
                         </div>
                     </div>
 
-                    <div class="space-y-1.5">
+                    <div class="space-y-3">
                         @foreach ($dim['sets'] as $set)
-                        <div class="flex flex-wrap items-center gap-2 text-sm text-gray-600">
+                        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-gray-200 bg-white px-4 py-3 mb-3">
+
                             @if (count($dim['sets']) > 1)
-                            <span class="w-12 text-xs text-gray-400">Set {{ $set['set'] }}</span>
+                            <span class="w-14 shrink-0 text-sm font-medium text-gray-500">Set {{ $set['set'] }}</span>
                             @endif
 
-                            @forelse ($set['values'] as $position => $value)
-                            <span class="border rounded-lg px-2 py-1">{{ $position }}: {{ $value }}</span>
-                            @empty
-                            <span class="text-gray-400">No measurements.</span>
-                            @endforelse
+                            <div class="flex flex-wrap items-center gap-2">
+                                @forelse ($set['values'] as $position => $value)
+                                <div class="flex items-baseline gap-1.5 rounded-lg bg-gray-50 px-3 py-1.5">
+                                    <span class="text-xs text-gray-400">{{ $position }}</span>
+                                    <span class="text-base font-semibold text-gray-900">{{ $value }}</span>
+                                </div>
+                                @empty
+                                <span class="text-sm text-gray-400">No measurements.</span>
+                                @endforelse
+                            </div>
 
                             @if ($set['judgement'])
-                            <span class="ms-auto text-xs font-medium px-2 py-0.5 rounded-full {{ $judgeBadge[$set['judgement']] }}">{{ $set['judgement'] }}</span>
+                            <span class="ms-auto rounded-full px-3 py-1 text-sm font-semibold {{ $judgeBadge[$set['judgement']] ?? 'bg-gray-100 text-gray-700' }}">
+                                {{ $set['judgement'] }}
+                            </span>
                             @endif
                         </div>
                         @endforeach
