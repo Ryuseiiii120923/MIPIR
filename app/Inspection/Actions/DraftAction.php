@@ -26,18 +26,18 @@ class DraftAction
 
     public function put(int $ppf, string $section, array $data): void
     {
-        if ($section === 'check-time') {
-            logger('DRAFT put check-time', [
-                'ppf'    => $ppf,
-                'labels' => $data['check-time'] ?? null,
-                'owner'  => Auth::user()->EmployeeID ?? session()->getId(),
-                'from'   => collect(request('components', []))->map(function ($c) {
-                    $name = data_get(json_decode($c['snapshot'] ?? '{}', true), 'memo.name');
-                    $calls = collect($c['calls'] ?? [])->pluck('method')->join(',');
-                    return "{$name} [{$calls}]";
-                })->all(),
-            ]);
-        }
+        // if ($section === 'check-time') {
+        //     logger('DRAFT put check-time', [
+        //         'ppf'    => $ppf,
+        //         'labels' => $data['check-time'] ?? null,
+        //         'owner'  => Auth::user()->EmployeeID ?? session()->getId(),
+        //         'from'   => collect(request('components', []))->map(function ($c) {
+        //             $name = data_get(json_decode($c['snapshot'] ?? '{}', true), 'memo.name');
+        //             $calls = collect($c['calls'] ?? [])->pluck('method')->join(',');
+        //             return "{$name} [{$calls}]";
+        //         })->all(),
+        //     ]);
+        // }
 
         Cache::put($this->key($ppf, $section), $data, now()->addHours(8));
     }

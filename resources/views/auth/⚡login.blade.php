@@ -23,20 +23,16 @@ new #[Layout('components.layouts.guest')] class extends Component {
     {
         $this->status = null;
         $this->resetValidation('userId');
-
-        Log::info('User logged in', [
-            'inspector_id' => $this->userId,
-        ]);
         if (blank($this->userId)) {
             return;
         }
 
         $inspector = InspectorDb::where('EmployeeID', $this->userId)->first();
         if ($inspector) {
-            Log::info('User logged in', [
-                'inspector_id' => $this->userId,
-                'has_password' => !blank($inspector->Password),
-            ]);
+            // Log::info('User logged in', [
+            //     'inspector_id' => $this->userId,
+            //     'has_password' => !blank($inspector->Password),
+            // ]);
             // Registered inspector with no password yet -> open the creator
             if (blank($inspector->Password)) {
                 $this->showPasswordModal = true;

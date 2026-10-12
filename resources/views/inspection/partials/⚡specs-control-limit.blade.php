@@ -130,7 +130,7 @@ new class extends Component
                 'CCLr' => $this->CCLr,
                 'UCLr' => $this->UCLr,
                 'LCLr' => $this->LCLr,
-            ], Auth::user()->社員CD);
+            ]);
 
             $this->notifySuccess('Saved', 'Specification and control limit saved');
             $this->dispatch('limits-saved');

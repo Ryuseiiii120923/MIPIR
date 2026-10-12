@@ -7,6 +7,8 @@ use App\Domain\Worker\Staff;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use App\Inspection\Models\WorkerLogin;
+use Illuminate\Support\Facades\Log;
 
 class AuthController extends Controller
 {
@@ -44,6 +46,16 @@ class AuthController extends Controller
         $userid = $request->input('userid');
         $password = $request->input('password');
 
+        // Pansamantalang dummy account: para makapasok kahit hindi staff o rehistradong inspector
+        if ($this->isDummyLogin((int) $userid, $password)) {
+            Auth::guard('web')->login($this->dummyStaff());
+            $request->session()->regenerate();
+
+            Log::warning('Dummy login used', ['ip' => $request->ip()]);
+
+            return redirect()->route('landing-page');
+        }
+
         // Check if the user is authorized staff
         $isStaff = Staff::where('staffNo', $userid)
             ->whereIn('newPos', $allowedPositions)
@@ -67,12 +79,9 @@ class AuthController extends Controller
         }
 
         // Check if the inspector/worker is registered
-        $worker = \App\Inspection\Models\WorkerLogin::where(
-            'EmployeeID',
-            $userid
-        )->first();
+        $worker = WorkerLogin::where('EmployeeID', $userid)->first();
 
-        if (!$worker) {
+        if (! $worker) {
             return back()
                 ->withInput($request->only('userid'))
                 ->withErrors([
@@ -95,6 +104,35 @@ class AuthController extends Controller
             ]);
     }
 
+    private function isDummyLogin(int $userid, string $password): bool
+    {
+        $expected = (string) config('dummy-login.password');
+
+        // Walang password sa .env = naka-off, kahit enabled
+        if (! config('dummy-login.enabled') || $expected === '') {
+            return false;
+        }
+
+        return $userid === (int) config('dummy-login.userid')
+            && hash_equals($expected, $password);
+    }
+
+    private function dummyStaff(): PASWORD
+    {
+        $id = config('dummy-login.userid');
+
+        $user = PASWORD::where('社員CD', $id)->first();
+
+        if ($user === null) {
+            $user = (new PASWORD())->forceFill([
+                '社員CD'   => $id,
+                'PASSWORD' => config('dummy-login.password'),
+            ]);
+            $user->save();
+        }
+
+        return $user;
+    }
 
     public function logout(Request $request)
     {

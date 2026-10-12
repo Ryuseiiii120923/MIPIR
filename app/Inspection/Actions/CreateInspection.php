@@ -204,13 +204,6 @@ class CreateInspection
                             );
                             $transactionId = $xbarResult['transactionId'];
                         }
-                        Log::debug('XBar check', [
-                            'item'          => $itemName,
-                            'forXBar'       => $forXBar,
-                            'tracked'       => $isXBarTracked,
-                            'existing'      => $isExistingCheckTime,
-                            'transactionId' => $transactionId,
-                        ]);
 
                         app(CreateInspectionService::class)->createDimensionMeasure([
                             'PPFNo'      => $ppf,
@@ -330,23 +323,10 @@ class CreateInspection
         $this->refreshXBarExcel($xbarJobs, Auth::user()->Plant ?? null);
 
         if ($recordDuration) {
-            Log::info('EncodingDuration: recordDuration block entered', [
-                'PPFNo' => $ppf,
-                'touchedCheckTimes' => $touchedCheckTimes,
-            ]);
-
             foreach ($touchedCheckTimes as $checkTime) {
                 $existing = EncodingDuration::where('PPFNo', $ppf)
                     ->where('Checktime', $checkTime)
                     ->first();
-
-                Log::info('EncodingDuration: processing check time', [
-                    'PPFNo' => $ppf,
-                    'Checktime' => $checkTime,
-                    'existingFound' => $existing !== null,
-                    'startTimeByTime' => $startTimeByTime[$checkTime] ?? null,
-                    'endTimeByTime' => $endTimeByTime[$checkTime] ?? null,
-                ]);
 
                 $record = EncodingDuration::updateOrCreate(
                     [
@@ -361,13 +341,6 @@ class CreateInspection
                         'EndDatetime'   => $endTimeByTime[$checkTime] ?? now(),
                     ]
                 );
-
-                Log::info('EncodingDuration: saved', [
-                    'PPFNo' => $ppf,
-                    'Checktime' => $checkTime,
-                    'RECNO' => $record->getKey() ?? null,
-                    'wasRecentlyCreated' => $record->wasRecentlyCreated,
-                ]);
             }
         } else {
             Log::info('EncodingDuration: skipped, recordDuration is false', ['PPFNo' => $ppf]);
@@ -734,8 +707,6 @@ class CreateInspection
                 );
 
                 XBarCycleLog::where('TransactionId', $job['transactionId'])->update(['FilePath' => $path]);
-
-                Log::info('XBar Excel generated', ['path' => $path]);
             } catch (\Throwable $e) {
                 Log::error('XBar Excel failed', [
                     'dimension'     => $job['dimension'],

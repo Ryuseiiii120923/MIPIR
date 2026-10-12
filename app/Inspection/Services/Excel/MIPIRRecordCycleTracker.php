@@ -16,7 +16,6 @@ class MIPIRRecordCycleTracker
     public function checkAndRecordLotComplete(int $ppf, string $partNo): void
     {
         if (trim($partNo) === '') {
-            Log::debug('first');
             return;
         }
 
@@ -25,7 +24,6 @@ class MIPIRRecordCycleTracker
                 ->where('Checktime', 'E')
                 ->exists();
             if (! $hasE) {
-                Log::debug('second');
                 return;
             }
 
@@ -34,7 +32,6 @@ class MIPIRRecordCycleTracker
                 ->exists();
 
             if (! $hasGapOffset) {
-                Log::debug('third');
                 return;
             }
 
@@ -43,7 +40,6 @@ class MIPIRRecordCycleTracker
                 ->lockForUpdate()
                 ->first();
             if ($completion !== null && $completion->Counted) {
-                Log::debug('fourth');
                 return;
             }
 
@@ -91,14 +87,14 @@ class MIPIRRecordCycleTracker
             $cumulativeSlots += $lotSlotCount;
         }
 
-        if (! $overflowed && $cumulativeSlots < self::MAX_SLOTS_PER_SHEET) {
-            Log::debug('MIPIRRecordCycleTracker: sheet not full yet, waiting for more lots', [
-                'partNo' => $partNo,
-                'cumulativeSlots' => $cumulativeSlots,
-                'lotsAccumulated' => count($fittingLots),
-            ]);
-            return;
-        }
+        // if (! $overflowed && $cumulativeSlots < self::MAX_SLOTS_PER_SHEET) {
+        //     Log::debug('MIPIRRecordCycleTracker: sheet not full yet, waiting for more lots', [
+        //         'partNo' => $partNo,
+        //         'cumulativeSlots' => $cumulativeSlots,
+        //         'lotsAccumulated' => count($fittingLots),
+        //     ]);
+        //     return;
+        // }
 
         $this->generateReport($partNo, $fittingLots);
     }

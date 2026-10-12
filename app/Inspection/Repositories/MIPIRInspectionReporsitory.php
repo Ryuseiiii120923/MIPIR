@@ -8,7 +8,6 @@ use App\Inspection\Models\MIPIRInspectionRecord;
 use App\Inspection\Models\MIPIRDimensionMeasure;
 use App\Inspection\Models\Defect;
 use App\Inspection\Models\SmallDefect;
-use Illuminate\Log\Logger;
 
 class MIPIRInspectionReporsitory
 {
