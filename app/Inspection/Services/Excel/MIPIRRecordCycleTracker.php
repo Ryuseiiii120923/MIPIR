@@ -140,23 +140,25 @@ class MIPIRRecordCycleTracker
         MIPIRDimensionMeasure::whereIn('PPFNo', $allPpfNos)->update(['isRecord' => true]);
     }
 
-    public function resolveDimItems(string $partNo): array
+    public function resolveDimItems(string $partNo, array|int|null $ppfs = null): array
     {
-        $forXBarDim = MIPIRDimensionMeasure::where('PartNo', $partNo)
+        $forXBarDim = $this->dimQuery($partNo, $ppfs)
             ->where('ForXBar', true)
             ->whereNotIn('DimItem', ['Flash Thickness', 'Gap-Offset'])
             ->where('DimItem', 'not like', '% (Y)')
-            ->distinct()
+            ->orderBy('RECNO')
             ->value('DimItem');
 
         if ($forXBarDim === null) {
             return [];
         }
 
-        $otherCustomDims = MIPIRDimensionMeasure::where('PartNo', $partNo)
+        $otherCustomDims = $this->dimQuery($partNo, $ppfs)
             ->whereNotIn('DimItem', ['Flash Thickness', 'Gap-Offset', $forXBarDim])
             ->where('DimItem', 'not like', '% (Y)')
-            ->distinct()
+            ->select('DimItem')
+            ->groupBy('DimItem')
+            ->orderByRaw('MIN(RECNO)')
             ->pluck('DimItem')
             ->all();
 
@@ -165,5 +167,12 @@ class MIPIRRecordCycleTracker
             $otherCustomDims,
             ['Flash Thickness', ['Gap-Offset', 'Gap-Offset (Y)']]
         );
+    }
+
+    private function dimQuery(string $partNo, array|int|null $ppfs)
+    {
+        return MIPIRDimensionMeasure::query()
+            ->where('PartNo', $partNo)
+            ->when($ppfs !== null, fn($q) => $q->whereIn('PPFNo', (array) $ppfs));
     }
 }

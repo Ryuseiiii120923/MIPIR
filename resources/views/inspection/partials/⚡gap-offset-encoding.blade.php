@@ -445,7 +445,6 @@ new class extends Component
                 $this->writeCheckTime($time);
             }
         });
-        app(MIPIRRecordCycleTracker::class)->checkAndRecordLotComplete($this->ppf, $this->partNo);
         app(MipirRecordRefresher::class)->refresh($this->ppf);
         app(PpfLookUpRepository::class)->forgetMainData($this->ppf);
         $this->notifyReload('success', 'Updated Successfully');

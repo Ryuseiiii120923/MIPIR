@@ -117,10 +117,6 @@ class CreateInspection
                     'MoldingOperator' => $ppfLookUp['moldOperator'] ?? null
                 ]);
 
-                if ($checkTime === 'E') {
-                    app(MIPIRRecordCycleTracker::class)->checkAndRecordLotComplete($ppf, $ppfLookUp['partNo'] ?? '');
-                }
-
                 app(CreateInspectionService::class)->saveCheckTime([
                     'PPFNo' => $ppf,
                     'PartNo' => $ppfLookUp['partNo'] ?? null,

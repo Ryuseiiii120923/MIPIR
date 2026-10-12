@@ -31,7 +31,7 @@ class InspectionRecordService
         4 => ['remarks' => 'AK', 'stamp' => 'AM', 'confirmedBy' => 'AP'],
     ];
 
-    public function generate(array $lots, array $dimItems): string
+    public function generate(array $lots, array $dimItems, ?string $outputPath = null): string
     {
         try {
             $variant = count($dimItems);
@@ -63,9 +63,10 @@ class InspectionRecordService
             $allPpfNos = array_unique(array_filter(array_column(array_merge([], ...$plan), 'ppf')));
             $fileTag = implode('-', $allPpfNos);
 
-            File::ensureDirectoryExists(storage_path('app/excel'));
-            $output = storage_path("app/excel/MIPIR_{$fileTag}.xlsx");
-            $tmp    = $output . '.tmp';
+            $output = $outputPath ?? $this->legacyOutputPath($plan);
+
+            File::ensureDirectoryExists(dirname($output));
+            $tmp = $output . '.tmp';
 
             $writer = IOFactory::createWriter($spreadsheet, 'Xlsx');
             $writer->save($tmp);
@@ -85,6 +86,12 @@ class InspectionRecordService
 
             throw $e;
         }
+    }
+    private function legacyOutputPath(array $plan): string
+    {
+        $allPpfNos = array_unique(array_filter(array_column(array_merge([], ...$plan), 'ppf')));
+
+        return storage_path('app/excel/MIPIR_' . implode('-', $allPpfNos) . '.xlsx');
     }
 
     private function firstPpfInPlan(array $plan): ?string
