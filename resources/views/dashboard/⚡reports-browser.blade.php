@@ -12,9 +12,14 @@ new class extends Component
 
     public string $searchMipir = '';
     public string $searchXbar = '';
+    public string $searchTightened = '';
 
     private const PER_PAGE = 5;
 
+    public function updatingSearchTightened(): void
+    {
+        $this->resetPage('tightenedPage');
+    }
     public function updatingSearchMipir(): void
     {
         $this->resetPage('mipirPage');
@@ -28,6 +33,7 @@ new class extends Component
     public function loadFiles(): void
     {
         $this->resetPage('mipirPage');
+        $this->resetPage('tightenedPage');
         $this->resetPage('xbarPage');
     }
 
@@ -86,22 +92,44 @@ new class extends Component
         return $this->paginateCollection($files, 'xbarPage');
     }
 
+    public function getTightenedFilesProperty(): LengthAwarePaginator
+    {
+        $files = $this->listFiles(storage_path('app/defects-tightened'), '*/SAIR_*.xls')
+            ->map(fn(array $f) => $f + [
+                'part'     => basename(dirname($f['path'])),
+                'relative' => basename(dirname($f['path'])) . '/' . $f['name'],
+            ]);
+
+        if ($this->searchTightened !== '') {
+            $files = $files
+                ->filter(fn($f) => str_contains(strtolower($f['relative']), strtolower($this->searchTightened)))
+                ->values();
+        }
+
+        return $this->paginateCollection($files, 'tightenedPage');
+    }
+
     public function download(string $filename, string $type)
     {
-        $directory = $type === 'mipir'
-            ? storage_path('app/excel')
-            : storage_path('app/excel-archive');
-
-        $path = $directory . DIRECTORY_SEPARATOR . $filename;
+        $directory = match ($type) {
+            'mipir'     => storage_path('app/excel'),
+            'tightened' => storage_path('app/defects-tightened'),
+            default     => storage_path('app/excel-archive'),
+        };
 
         $realDirectory = realpath($directory);
-        $realPath = realpath($path);
+        $realPath = realpath($directory . DIRECTORY_SEPARATOR . $filename);
 
-        if ($realPath === false || $realDirectory === false || ! str_starts_with($realPath, $realDirectory)) {
+        if (
+            $realPath === false
+            || $realDirectory === false
+            || ! str_starts_with($realPath, $realDirectory . DIRECTORY_SEPARATOR)
+            || ! File::isFile($realPath)
+        ) {
             abort(404);
         }
 
-        if (! File::exists($realPath)) {
+        if ($type === 'tightened' && strtolower(pathinfo($realPath, PATHINFO_EXTENSION)) !== 'xls') {
             abort(404);
         }
 
@@ -125,8 +153,7 @@ new class extends Component
     <div class="flex items-center justify-between mb-6">
         <div>
             <h2 class="text-lg font-semibold text-gray-900">Generated Reports</h2>
-            <p class="text-sm text-gray-500">MIPIR Excel records and XBar PDF reports</p>
-        </div>
+<p class="text-sm text-gray-500">MIPIR Excel records, tightened defect sheets, and XBar PDF reports</p>        </div>
         <button wire:click="loadFiles" type="button"
             class="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1">
             <i class="ti ti-refresh"></i> Refresh
@@ -168,7 +195,7 @@ new class extends Component
     </div>
 
     {{-- XBar PDF Files --}}
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-6">
         <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between gap-4">
             <h3 class="font-medium text-gray-900">XBar Reports (.pdf)</h3>
             <input type="text" wire:model.live.debounce.400ms="searchXbar" placeholder="Search filename..."
@@ -199,4 +226,40 @@ new class extends Component
         </div>
         @endif
     </div>
+
+    {{-- Tightened Defects (SAIR) --}}
+<div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-6">
+    <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between gap-4">
+        <h3 class="font-medium text-gray-900">Tightened Defects (.xls)</h3>
+        <input type="text" wire:model.live.debounce.400ms="searchTightened" placeholder="Search part number..."
+            class="text-sm rounded-lg border-gray-300 px-3 py-1.5 w-56">
+    </div>
+    <div class="divide-y divide-gray-100">
+        @forelse ($this->tightenedFiles as $file)
+        <div wire:key="tightened-{{ $file['relative'] }}" class="flex items-center justify-between px-6 py-3">
+            <div>
+                <div class="flex items-center gap-2">
+                    <p class="text-sm font-medium text-gray-800">{{ $file['name'] }}</p>
+                    <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">{{ $file['part'] }}</span>
+                </div>
+                <p class="text-xs text-gray-400">
+                    {{ $this->formatSize($file['size']) }} &middot;
+                    {{ \Illuminate\Support\Carbon::createFromTimestamp($file['modified'])->format('Y-m-d H:i') }}
+                </p>
+            </div>
+            <button wire:click="download(@js($file['relative']), 'tightened')" type="button"
+                class="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1">
+                <i class="ti ti-download"></i> Download
+            </button>
+        </div>
+        @empty
+        <p class="px-6 py-6 text-center text-sm text-gray-400">No tightened defect records found</p>
+        @endforelse
+    </div>
+    @if ($this->tightenedFiles->hasPages())
+    <div class="px-6 py-3 border-t border-gray-100">
+        {{ $this->tightenedFiles->links() }}
+    </div>
+    @endif
+</div>
 </div>
