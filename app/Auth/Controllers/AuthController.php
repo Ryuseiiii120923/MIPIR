@@ -3,6 +3,7 @@
 namespace App\Auth\Controllers;
 
 use App\Auth\Models\PASWORD;
+use App\Domain\Worker\Staff;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -16,6 +17,25 @@ class AuthController extends Controller
 
     public function login(Request $request)
     {
+        $allowedPositions = [
+            'Staff',
+            'Officer',
+            'Sr. Engineer',
+            'Jr. Engineer',
+            'Cadet Engineer',
+            'Supervisor',
+            'Coordinator',
+            'Nurse',
+            'GL',
+            'Deputy GL',
+            'Manager',
+            'Deputy Manager',
+            'Head',
+            'Deputy Head',
+            'Sr. Head',
+            'General Manager',
+        ];
+
         $request->validate([
             'userid' => 'required|integer',
             'password' => 'required|string',
@@ -24,20 +44,47 @@ class AuthController extends Controller
         $userid = $request->input('userid');
         $password = $request->input('password');
 
-        $user = PASWORD::where('社員CD', $userid)->first();
+        // Check if the user is authorized staff
+        $isStaff = Staff::where('staffNo', $userid)
+            ->whereIn('newPos', $allowedPositions)
+            ->exists();
 
-        if ($user && $user->PASSWORD === $password) {
-            Auth::guard('web')->login($user);
-            $request->session()->regenerate();
+        if ($isStaff) {
+            $user = PASWORD::where('社員CD', $userid)->first();
 
-            return redirect()->route('landing-page');
+            if ($user && $user->PASSWORD === $password) {
+                Auth::guard('web')->login($user);
+                $request->session()->regenerate();
+
+                return redirect()->route('landing-page');
+            }
+
+            return back()
+                ->withInput($request->only('userid'))
+                ->withErrors([
+                    'credentials' => 'Incorrect credentials',
+                ]);
         }
 
-        $worker = \App\Inspection\Models\WorkerLogin::where('EmployeeID', $userid)->first();
+        // Check if the inspector/worker is registered
+        $worker = \App\Inspection\Models\WorkerLogin::where(
+            'EmployeeID',
+            $userid
+        )->first();
 
-        if ($worker && $worker->Password === $password) {
+        if (!$worker) {
+            return back()
+                ->withInput($request->only('userid'))
+                ->withErrors([
+                    'credentials' => 'This inspector is not registered. Please inform the staff.',
+                ]);
+        }
+
+        // Verify worker credentials
+        if ($worker->Password === $password) {
             Auth::guard('worker')->login($worker);
             $request->session()->regenerate();
+
             return redirect()->route('landing-page');
         }
 
@@ -47,6 +94,7 @@ class AuthController extends Controller
                 'credentials' => 'Incorrect credentials',
             ]);
     }
+
 
     public function logout(Request $request)
     {

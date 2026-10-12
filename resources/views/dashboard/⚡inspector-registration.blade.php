@@ -41,14 +41,27 @@ new class extends Component
         try {
             $encoder = Auth::user()->社員CD;
 
-            $inspectorIdTaken = InspectorID::where('作業員CD', $this->inspectorId)->where('区分', 3)->value('作業員CD');
+            $inspectorId = strtoupper(trim($this->inspectorId));
 
-            if ($inspectorIdTaken === $this->inspectorId) {
-                $this->notifyFail('Taken', 'This Inspector ID ' . $this->inspectorId . ' is already taken. Please choose another one.');
-                return;
+            $existing = InspectorID::where('作業員CD', $inspectorId)
+                ->where('区分', 3)
+                ->first(['作業員CD', '社員CD']);
+
+            if ($existing !== null) {
+                $ownerEmployeeId = (string) $existing->社員CD;
+                $ownerName       = WorkerName::where('社員CD', $ownerEmployeeId)->value('名前');
+
+                $sameOwner = $ownerEmployeeId === (string) $this->employeeID
+                    && trim((string) $ownerName) === trim($this->name);
+
+                if (! $sameOwner) {
+                    $this->notifyFail('Taken', "This Inspector ID {$inspectorId} is already taken. Please choose another one.");
+                    return;
+                }
+                // same employee and same name: continue to register
             }
 
-            $service->registerInspector($this->employeeID, $this->name, $this->plant, $encoder, strtoupper($this->inspectorId));
+            $service->registerInspector($this->employeeID, $this->name, $this->plant, $encoder, $inspectorId);
 
             $this->resetForm();
             unset($this->allInspectors, $this->inspectors);

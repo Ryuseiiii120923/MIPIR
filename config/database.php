@@ -129,6 +129,16 @@ return [
             'trust_server_certificate' => env('MIP_TRUST_SERVER_CERTIFICATE', 'true'),
         ],
 
+         'EML' => [
+            'driver' => 'sqlsrv',
+            'host' => env('EML_DB_HOST'),
+            'database' => env('EML_DB_DATABASE'),
+            'username' => env('EML_DB_USERNAME'),
+            'password' => env('EML_DB_PASSWORD'),
+            'encrypt' => env('DB_ENCRYPT', 'no'),
+            'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'true'),
+        ],
+
     ],
 
     /*
