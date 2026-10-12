@@ -43,23 +43,23 @@ new class extends Component
 
             $inspectorId = strtoupper(trim($this->inspectorId));
 
-            $existing = InspectorID::where('作業員CD', $inspectorId)
-                ->where('区分', 3)
-                ->first(['作業員CD', '社員CD']);
+            // $existing = InspectorID::where('作業員CD', $inspectorId)
+            //     ->where('区分', 3)
+            //     ->first(['作業員CD', '社員CD']);
 
-            if ($existing !== null) {
-                $ownerEmployeeId = (string) $existing->社員CD;
-                $ownerName       = WorkerName::where('社員CD', $ownerEmployeeId)->value('名前');
+            // if ($existing !== null) {
+            //     $ownerEmployeeId = (string) $existing->社員CD;
+            //     $ownerName       = WorkerName::where('社員CD', $ownerEmployeeId)->value('名前');
 
-                $sameOwner = $ownerEmployeeId === (string) $this->employeeID
-                    && trim((string) $ownerName) === trim($this->name);
+            //     $sameOwner = $ownerEmployeeId === (string) $this->employeeID
+            //         && trim((string) $ownerName) === trim($this->name);
 
-                if (! $sameOwner) {
-                    $this->notifyFail('Taken', "This Inspector ID {$inspectorId} is already taken. Please choose another one.");
-                    return;
-                }
-                // same employee and same name: continue to register
-            }
+            //     if (! $sameOwner) {
+            //         $this->notifyFail('Taken', "This Inspector ID {$inspectorId} is already taken. Please choose another one.");
+            //         return;
+            //     }
+            //     // same employee and same name: continue to register
+            // }
 
             $service->registerInspector($this->employeeID, $this->name, $this->plant, $encoder, $inspectorId);
 

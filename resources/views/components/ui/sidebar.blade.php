@@ -154,8 +154,7 @@
     <x-ui.sidebar-button
         page="mka-measuring-encoding"
         title="MKA Measuring Encoding"
-        @click.stop="desktopExpanded = false; mobileOpen = false"
-          :disabled="true">
+        @click.stop="desktopExpanded = false; mobileOpen = false">
         <x-slot:icon>
             <svg xmlns="http://www.w3.org/2000/svg"
                 class="w-5 h-5"
