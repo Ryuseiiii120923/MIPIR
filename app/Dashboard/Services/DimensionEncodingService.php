@@ -13,7 +13,7 @@ class DimensionEncodingService
 {
     private const SYMBOL_EXTENSIONS = ['png', 'bmp']; // checked in this order
 
-    private const LIMIT_FIELDS = ['CCLx', 'UCLx', 'LCLx', 'CSLr', 'USLr', 'LSLr', 'CCLr', 'UCLr', 'LCLr'];
+    private const LIMIT_FIELDS = ['CSLx','USLx','LSLx','CCLx', 'UCLx', 'LCLx', 'CSLr', 'USLr', 'LSLr', 'CCLr', 'UCLr', 'LCLr'];
 
     public function __construct(
         private readonly DimensionEncodingRepository $repo,
@@ -85,7 +85,7 @@ class DimensionEncodingService
     // Specification and control limits (X-Bar dimensions)
     // ------------------------------------------------------------------
 
-    public function saveControlLimits(string $partNo, string $dimItem, array $limits, string $encoder): void
+    public function saveControlLimits(string $partNo, string $dimItem, array $limits): void
     {
         $payload = [];
 
@@ -94,7 +94,7 @@ class DimensionEncodingService
             $payload[$field] = ($value === null || $value === '') ? null : (float) $value;
         }
 
-        $this->specsRepo->saveLimit(trim($partNo), trim($dimItem), $payload, $encoder);
+        $this->specsRepo->saveLimit(trim($partNo), trim($dimItem), $payload);
     }
 
     // ------------------------------------------------------------------

@@ -83,7 +83,7 @@ new class extends Component
 
     public function getXbarFilesProperty(): LengthAwarePaginator
     {
-        $files = $this->listFiles(storage_path('app/excel-archive'), '*.pdf');
+        $files = $this->listFiles(storage_path('app/excel-xbar'), '*.xlsx');
 
         if ($this->searchXbar !== '') {
             $files = $files->filter(fn($f) => str_contains(strtolower($f['name']), strtolower($this->searchXbar)))->values();
@@ -114,7 +114,7 @@ new class extends Component
         $directory = match ($type) {
             'mipir'     => storage_path('app/excel'),
             'tightened' => storage_path('app/defects-tightened'),
-            default     => storage_path('app/excel-archive'),
+            default     => storage_path('app/excel-xbar'),
         };
 
         $realDirectory = realpath($directory);

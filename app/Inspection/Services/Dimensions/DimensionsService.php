@@ -147,9 +147,11 @@ class DimensionsService
         if (count($filled) === 0) {
             return '-';
         }
+        $cl    = $row['CL'] ?? null;
+        $hasCL = is_numeric($cl);
 
         foreach ($filled as $val) {
-            if (!is_numeric($val)) {
+            if (! is_numeric($val)) {
                 continue;
             }
 
@@ -161,13 +163,13 @@ class DimensionsService
                 default          => true,
             };
 
-             $okCL = match ($row['specType']) {
-                'max'            => (float) $val <= (float) $row['CL'],
-                'min'            => (float) $val >= (float) $row['CL'],
-                default          => true,
+            $okCL = ! $hasCL || match ($row['specType']) {
+                'max'   => (float) $val <= (float) $cl,
+                'min'   => (float) $val >= (float) $cl,
+                default => true,
             };
 
-            if (!$ok || !$okCL) {
+            if (! $ok || ! $okCL) {
                 return 'X';
             }
         }
@@ -201,31 +203,31 @@ class DimensionsService
         return true;
     }
 
-public function formatSpecification(array $row): string
-{
-    $limits = $this->computeLimits($row);
+    public function formatSpecification(array $row): string
+    {
+        $limits = $this->computeLimits($row);
 
-    if ($limits === null) {
-        return '';
+        if ($limits === null) {
+            return '';
+        }
+
+        $nominal = $this->trimNumber((float) $row['specNominal']);
+
+        return match ($row['specType']) {
+            'max'            => "MAX {$nominal}",
+            'min'            => "MIN {$nominal}",
+            'tolerance'      => "{$nominal} ± " . $this->trimNumber((float) $row['specTolerance']),
+            'tolerance_diff' => "{$nominal} ("
+                . $this->trimNumber($limits['judgingLowerLimit'])
+                . ' ~ '
+                . $this->trimNumber($limits['judgingUpperLimit'])
+                . ')',
+            default          => '',
+        };
     }
 
-    $nominal = $this->trimNumber((float) $row['specNominal']);
-
-    return match ($row['specType']) {
-        'max'            => "MAX {$nominal}",
-        'min'            => "MIN {$nominal}",
-        'tolerance'      => "{$nominal} ± " . $this->trimNumber((float) $row['specTolerance']),
-        'tolerance_diff' => "{$nominal} ("
-            . $this->trimNumber($limits['judgingLowerLimit'])
-            . ' ~ '
-            . $this->trimNumber($limits['judgingUpperLimit'])
-            . ')',
-        default          => '',
-    };
-}
-
-private function trimNumber(float $value): string
-{
-    return rtrim(rtrim(number_format($value, 4, '.', ''), '0'), '.');
-}
+    private function trimNumber(float $value): string
+    {
+        return rtrim(rtrim(number_format($value, 4, '.', ''), '0'), '.');
+    }
 }
