@@ -35,6 +35,8 @@ new class extends Component
 
     public string $action = '';
     public int $ppf = 0;
+    #[Locked]
+    public string $specification = '';
 
     #[Locked]
     public string $partNo = '';
@@ -74,19 +76,19 @@ new class extends Component
         bool $standalone = false,
         ?float $USLx = null,
         ?float $LSLx = null,
+        ?float $specs = null
     ) {
         $this->partNo = $partNo;
         $this->dimItem = $dimItem;
         $this->rowIndex = $rowIndex;
         $this->standalone = $standalone;
+        $this->specification = (string) $specs;
 
         if ($standalone) {
             // X specification limits come from the DimensionMaster row (Upper/Lower Limit)
-            $this->USLx = $USLx;
-            $this->LSLx = $LSLx;
-            $this->CSLx = ($USLx !== null && $LSLx !== null)
-                ? round(($USLx + $LSLx) / 2, 6)
-                : null;
+            $this->USLx = $this->specification + $USLx;
+            $this->LSLx = $this->specification - $LSLx;
+            $this->CSLx = (float) $this->specification;
         }
 
         $this->resolveLimit();
@@ -96,7 +98,7 @@ new class extends Component
     {
         $rules = [];
 
-        foreach (['CCLx', 'UCLx', 'LCLx', 'CSLr', 'USLr', 'LSLr', 'CCLr', 'UCLr', 'LCLr'] as $field) {
+        foreach (['CSLx', 'USLx', 'LSLx', 'CCLx', 'UCLx', 'LCLx', 'CSLr', 'USLr', 'LSLr', 'CCLr', 'UCLr', 'LCLr'] as $field) {
             $rules[$field] = ['nullable', 'numeric'];
         }
 
@@ -116,6 +118,9 @@ new class extends Component
 
         try {
             $service->saveControlLimits($this->partNo, $this->dimItem, [
+                'CSLx' => $this->CSLx,
+                'USLx' => $this->USLx,
+                'LSLx' => $this->LSLx,
                 'CCLx' => $this->CCLx,
                 'UCLx' => $this->UCLx,
                 'LCLx' => $this->LCLx,
@@ -222,6 +227,7 @@ new class extends Component
             <p class="text-sm text-gray-500">
                 @if ($standalone)
                 {{ $dimItem }} &middot; Part No: {{ $partNo }}
+                @if ($specification !== '') &middot; Spec: {{ $specification }} @endif
                 @else
                 Enter the Specification and Control Limit
                 @endif

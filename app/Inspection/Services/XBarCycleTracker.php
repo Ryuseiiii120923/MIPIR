@@ -16,99 +16,69 @@ class XBarCycleTracker
     private const CYCLE_SIZE = 25;
 
     public function recordSubgroup(string $plant, string $dimensionName, ?string $encodedAt = null): array
-{
-    $encodedAt = $encodedAt ?? now()->toDateTimeString();
-
-    $shouldGenerate = false;
-    $cycleStart = '';
-    $cycleEnd = '';
-    $transactionId = '';
-
-    DB::connection('mipirDB')->transaction(function () use ($plant, $dimensionName, $encodedAt, &$shouldGenerate, &$cycleStart, &$cycleEnd, &$transactionId) {
-        /** @var XBarCycleProgress $progress */
-        $progress = XBarCycleProgress::query()
-            ->where('Plant', $plant)
-            ->where('DimensionName', $dimensionName)
-            ->lockForUpdate()
-            ->firstOrNew([
-                'Plant' => $plant,
-                'DimensionName' => $dimensionName,
-            ], [
-                'Count'      => 0,
-                'CycleStart' => null,
-                'TransactionId' => null,
-            ]);
-
-        if ((int) $progress->Count === 0) {
-            $progress->CycleStart = $encodedAt;
-            $progress->TransactionId = (string) Str::uuid();
-        }
-
-        $transactionId = $progress->TransactionId;
-
-        $progress->Count = (int) $progress->Count + 1;
-
-        if ($progress->Count >= self::CYCLE_SIZE) {
-            $cycleStart = (string) $progress->CycleStart;
-            $cycleEnd = $encodedAt;
-            $shouldGenerate = true;
-
-            $progress->Count = 0;
-            $progress->CycleStart = null;
-            $progress->TransactionId = null;
-        }
-
-        $progress->save();
-    });
-
-
-
-    return [
-        'transactionId'  => $transactionId,
-        'shouldGenerate' => $shouldGenerate,
-        'cycleStart'     => $cycleStart,
-        'cycleEnd'       => $cycleEnd,
-    ];
-}
-
-
-    public function closeCycleAndGenerate(string $plant, string $dimensionName, string $cycleStart, string $cycleEnd, string $transactionId): void
     {
-        $partNos = app(XBarRepository::class)->getPartNumbersForTransaction($transactionId);
+        $encodedAt = $encodedAt ?? now()->toDateTimeString();
 
-        $filePath = null;
+        $shouldGenerate = false;
+        $cycleStart = '';
+        $cycleEnd = '';
+        $transactionId = '';
 
-        try {
-            $generatedPdfPath = app(ExportService::class)->generatePdfXBar($partNos, $dimensionName, $cycleStart, $cycleEnd,$transactionId);
+        DB::connection('mipirDB')->transaction(function () use ($plant, $dimensionName, $encodedAt, &$shouldGenerate, &$cycleStart, &$cycleEnd, &$transactionId) {
+            /** @var XBarCycleProgress $progress */
+            $progress = XBarCycleProgress::query()
+                ->where('Plant', $plant)
+                ->where('DimensionName', $dimensionName)
+                ->lockForUpdate()
+                ->firstOrNew([
+                    'Plant' => $plant,
+                    'DimensionName' => $dimensionName,
+                ], [
+                    'Count'      => 0,
+                    'CycleStart' => null,
+                    'TransactionId' => null,
+                ]);
 
-            $archiveDir = storage_path('app/excel-archive');
-            if (! File::isDirectory($archiveDir)) {
-                File::makeDirectory($archiveDir, 0755, true);
+            if ((int) $progress->Count === 0) {
+                $progress->CycleStart = $encodedAt;
+                $progress->TransactionId = (string) Str::uuid();
             }
 
-            $safeDimension = preg_replace('/[^A-Za-z0-9_-]/', '_', $dimensionName);
-            $safeParts = preg_replace('/[^A-Za-z0-9_-]/', '_', implode('-', $partNos));
-            $timestamp = now()->format('Ymd_His');
+            $transactionId = $progress->TransactionId;
 
-            $filePath = $archiveDir . "/XBar_{$safeParts}_{$safeDimension}_{$timestamp}.pdf";
+            $progress->Count = (int) $progress->Count + 1;
 
-            File::copy($generatedPdfPath, $filePath);
-            @unlink($generatedPdfPath);
-        } catch (\Throwable $e) {
-            Log::error('XBarCycleTracker: failed to auto-generate X-bar report', [
-                'plant'     => $plant,
-                'partNos'   => $partNos,
-                'dimension' => $dimensionName,
-                'error'     => $e->getMessage(),
-            ]);
-        }
+            if ($progress->Count >= self::CYCLE_SIZE) {
+                $cycleStart = (string) $progress->CycleStart;
+                $cycleEnd = $encodedAt;
+                $shouldGenerate = true;
 
+                $progress->Count = 0;
+                $progress->CycleStart = null;
+                $progress->TransactionId = null;
+            }
+
+            $progress->save();
+        });
+
+
+
+        return [
+            'transactionId'  => $transactionId,
+            'shouldGenerate' => $shouldGenerate,
+            'cycleStart'     => $cycleStart,
+            'cycleEnd'       => $cycleEnd,
+        ];
+    }
+
+    public function closeCycle(string $plant, string $dimensionName, string $cycleStart, string $cycleEnd, string $transactionId): void
+    {
         XBarCycleLog::create([
             'Plant'         => $plant,
             'DimensionName' => $dimensionName,
             'StartDatetime' => $cycleStart,
             'EndDatetime'   => $cycleEnd,
-            'FilePath'      => $filePath,
+            'FilePath'      => null,
             'TransactionId' => $transactionId,
         ]);
 
@@ -139,5 +109,23 @@ class XBarCycleTracker
             $progress->Count = $newCount;
             $progress->save();
         });
+    }
+
+    public function cycleWindow(string $plant, string $dimensionName, string $transactionId): ?array
+    {
+        $progress = XBarCycleProgress::where('Plant', $plant)
+            ->where('DimensionName', $dimensionName)
+            ->where('TransactionId', $transactionId)
+            ->first();
+
+        if ($progress !== null && $progress->CycleStart !== null) {
+            return ['start' => (string) $progress->CycleStart, 'end' => now()->toDateTimeString()];
+        }
+
+        $log = XBarCycleLog::where('TransactionId', $transactionId)->first();
+
+        return $log
+            ? ['start' => (string) $log->StartDatetime, 'end' => (string) $log->EndDatetime]
+            : null;
     }
 }

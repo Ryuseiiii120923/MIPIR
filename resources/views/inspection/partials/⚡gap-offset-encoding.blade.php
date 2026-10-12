@@ -19,6 +19,7 @@ use Livewire\Attributes\Validate;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use App\Inspection\Services\Excel\MipirRecordRefresher;
 
 new class extends Component
 {
@@ -364,7 +365,7 @@ new class extends Component
     /** Fires on every wire:model.live update — recomputes limits/judge live, same as dimensions.blade.php. */
     public function updated(string $property): void
     {
-        if (in_array($property, ['specType', 'specNominal', 'specTolerance', 'specUpper', 'specLower'], true)) {
+        if (in_array($property, ['specType', 'specNominal', 'specTolerance', 'specUpper', 'specLower', 'controlLimit'], true)) {
             foreach ($this->checkTimes as $time) {
                 if (! empty($this->measurementsXByTime[$time])) {
                     $this->evaluateJudge($time);
@@ -391,12 +392,13 @@ new class extends Component
     private function evaluateJudge(string $time): void
     {
         $row = [
-            'specType' => $this->specType,
-            'specNominal' => $this->specNominal,
+            'specType'      => $this->specType,
+            'specNominal'   => $this->specNominal,
             'specTolerance' => $this->specTolerance,
-            'specUpper' => $this->specUpper,
-            'specLower' => $this->specLower,
-            'measurements' => $this->measurementsXByTime[$time] ?? [],
+            'specUpper'     => $this->specUpper,
+            'specLower'     => $this->specLower,
+            'CL'            => $this->controlLimit,
+            'measurements'  => $this->measurementsXByTime[$time] ?? [],
         ];
 
         $service = app(DimensionsService::class);
@@ -444,6 +446,7 @@ new class extends Component
             }
         });
         app(MIPIRRecordCycleTracker::class)->checkAndRecordLotComplete($this->ppf, $this->partNo);
+        app(MipirRecordRefresher::class)->refresh($this->ppf);
         app(PpfLookUpRepository::class)->forgetMainData($this->ppf);
         $this->notifyReload('success', 'Updated Successfully');
 
@@ -471,6 +474,7 @@ new class extends Component
                 app(DeleteInspection::class)->executeGapOffset($this->ppf);
             });
 
+            app(MipirRecordRefresher::class)->refresh($this->ppf);
             app(PpfLookUpRepository::class)->forgetMainData($this->ppf);
 
             $this->notifyReload('success', 'Gap-Offset measurements deleted successfully.');

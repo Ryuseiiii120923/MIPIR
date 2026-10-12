@@ -41,6 +41,7 @@ new class extends Component
     public bool $showLimitsModal = false;
     public string $limitsPartNo = '';
     public string $limitsDimItem = '';
+    public string $limitsSpecification = '';
     public ?float $limitsUpper = null;
     public ?float $limitsLower = null;
     public bool $showSymbolPicker = false;
@@ -67,6 +68,7 @@ new class extends Component
 
         $this->limitsPartNo    = $dim['partNo'];
         $this->limitsDimItem   = $dim['dimensionName'];
+        $this->limitsSpecification = (string) ($dim['specification'] ?? '');
         $this->limitsUpper     = is_numeric($dim['upperLimit']) ? (float) $dim['upperLimit'] : null;
         $this->limitsLower     = is_numeric($dim['lowerLimit']) ? (float) $dim['lowerLimit'] : null;
         $this->showLimitsModal = true;
@@ -77,7 +79,7 @@ new class extends Component
     public function closeLimits(): void
     {
         $this->showLimitsModal = false;
-        $this->reset(['limitsPartNo', 'limitsDimItem', 'limitsUpper', 'limitsLower']);
+        $this->reset(['limitsPartNo', 'limitsDimItem', 'limitsSpecification', 'limitsUpper', 'limitsLower']);
     }
 
     #[Computed]
@@ -654,6 +656,7 @@ new class extends Component
             <livewire:inspection::partials.specs-control-limit
                 :partNo="$limitsPartNo"
                 :dimItem="$limitsDimItem"
+                :specs="$limitsSpecification"
                 :standalone="true"
                 :USLx="$limitsUpper"
                 :LSLx="$limitsLower"

@@ -2,6 +2,7 @@
 
 namespace App\Inspection\Actions;
 
+use App\Domain\XBar\Repositories\XBarRepository;
 use App\Inspection\Models\ChckTRemarks;
 use App\Inspection\Models\CheckTime;
 use App\Inspection\Models\Defect;
@@ -9,23 +10,26 @@ use App\Inspection\Models\EncodingDuration;
 use App\Inspection\Models\MIPIRDimensionMeasure;
 use App\Inspection\Models\MIPIRInspectionRecord;
 use App\Inspection\Models\SmallDefect;
-use App\Inspection\Models\XBar\ControlSpecsLimit;
+use App\Inspection\Models\XBarCycleLog;
 use App\Inspection\Repositories\MIPIRInspectionReporsitory;
 use App\Inspection\Services\Excel\InsertTightenedDefects;
 use App\Inspection\Services\Excel\InsertTightenedFlash;
 use App\Inspection\Services\Excel\InsertTightenedGapF00VE;
 use App\Inspection\Services\Excel\InsertTightenedGapOring;
-use App\Inspection\Services\Excel\InsertTightenedRecord;
+use App\Inspection\Services\Excel\InspectionXBarService;
+use App\Inspection\Services\Excel\MipirRecordRefresher;
 use App\Inspection\Services\Excel\MIPIRRecordCycleTracker;
-use App\Inspection\Services\XBarCycleTracker;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Auth;
 use App\Inspection\Services\Saving\CreateInspectionService;
+use App\Inspection\Services\XBarCycleTracker;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class CreateInspection
 {
     private const SMALL_DEFECT_MARKER = '[Small Defects]';
+
     public function execute(int $ppf, array $draft, bool $recordDuration = true): void
     {
         $ppfLookUp = $draft['ppfLookup'] ?? null;
@@ -44,7 +48,8 @@ class CreateInspection
         $remarks = $draft['remarks'] ?? [];
         $deletedCheckTimes = $draft['check-time']['deleted'] ?? [];
         $dateJudge = $draft['judgement']['dateOfJudge'] ?? null;
-        $inspectorNo = Auth::user()->InspectorNo ?? Null;
+        $inspectorNo = Auth::user()->InspectorNo ?? null;
+        $xbarJobs = [];
 
         $defectBatches = [];
         $composedRemarks = [];
@@ -61,7 +66,7 @@ class CreateInspection
             throw new \InvalidArgumentException('At least one check time is required to create an inspection.');
         }
 
-        DB::transaction(function () use ($composedRemarks, $dateEncodeCheck, $defectBatches, $defectJudge, $inspectorNo, $ngpercent, $ppf, $ppfLookUp, $touchedCheckTimes, $dimensions, $dateJudge, $remarks) {
+        DB::transaction(function () use ($composedRemarks, $dateEncodeCheck, $defectBatches, $defectJudge, $inspectorNo, $ngpercent, $ppf, $ppfLookUp, $touchedCheckTimes, $dimensions, $dateJudge, $remarks, &$xbarJobs) {
             foreach ($touchedCheckTimes as $checkTime) {
                 $isExistingCheckTime = MIPIRInspectionRecord::where('PPFNo', $ppf)
                     ->where('Checktime', $checkTime)
@@ -82,7 +87,15 @@ class CreateInspection
                     ?? $existingDefect?->NGPercent
                     ?? 0;
 
-                MIPIRDimensionMeasure::where('PPFNo', $ppf)->where('Checktime', $checkTime)->delete();
+                // Ang Gap-Offset ay sa ibang page ine-encode. Kapag wala ito sa draft na ito,
+                // huwag burahin ang Gap-Offset rows na nai-save na ng gap-offset page.
+                $draftItems = collect($dimensions[$checkTime] ?? [])->pluck('item')->filter()->all();
+                $keepGapOffset = ! in_array('Gap-Offset', $draftItems, true);
+
+                MIPIRDimensionMeasure::where('PPFNo', $ppf)
+                    ->where('Checktime', $checkTime)
+                    ->when($keepGapOffset, fn($q) => $q->where('DimItem', 'not like', 'Gap-Offset%'))
+                    ->delete();
                 Defect::where('PPFNo', $ppf)->where('Checktime', $checkTime)->delete();
                 ChckTRemarks::where('PPFNo', $ppf)->where('CheckTime', $checkTime)->delete();
                 SmallDefect::where('PPFNo', $ppf)->where('Checktime', $checkTime)->delete();
@@ -195,6 +208,13 @@ class CreateInspection
                             );
                             $transactionId = $xbarResult['transactionId'];
                         }
+                        Log::debug('XBar check', [
+                            'item'          => $itemName,
+                            'forXBar'       => $forXBar,
+                            'tracked'       => $isXBarTracked,
+                            'existing'      => $isExistingCheckTime,
+                            'transactionId' => $transactionId,
+                        ]);
 
                         app(CreateInspectionService::class)->createDimensionMeasure([
                             'PPFNo'      => $ppf,
@@ -219,14 +239,22 @@ class CreateInspection
                             'InspectedBy' => $inspectorNo
                         ]);
 
-                        if ($xbarResult !== null && $xbarResult['shouldGenerate']) {
-                            app(XBarCycleTracker::class)->closeCycleAndGenerate(
-                                Auth::user()->Plant,
-                                $itemName,
-                                $xbarResult['cycleStart'],
-                                $xbarResult['cycleEnd'],
-                                $transactionId
-                            );
+                        if ($isXBarTracked && $itemName && $forXBar && $transactionId) {
+                            if ($xbarResult !== null && $xbarResult['shouldGenerate']) {
+                                app(XBarCycleTracker::class)->closeCycle(
+                                    Auth::user()->Plant,
+                                    $itemName,
+                                    $xbarResult['cycleStart'],
+                                    $xbarResult['cycleEnd'],
+                                    $transactionId
+                                );
+                            }
+
+                            // Isang Excel bawat cycle, kahit ilang set o check time ang nasa loob
+                            $xbarJobs["{$itemName}|{$transactionId}"] = [
+                                'dimension'     => $itemName,
+                                'transactionId' => $transactionId,
+                            ];
                         }
                     }
 
@@ -298,10 +326,12 @@ class CreateInspection
             }
         });
 
-
+        // Excel: isang beses na lang gagawin bawat save, galing sa laman ng database
         $this->refreshTightenedFlashExcel($ppf, $ppfLookUp, $inspectorNo, $checkTimes, $touchedCheckTimes, $dimensions, $composedRemarks, $deletedCheckTimes);
         $this->refreshTightenedGapOffsetExcel($ppf, $ppfLookUp, $inspectorNo, $checkTimes, $touchedCheckTimes, $dimensions, $composedRemarks, $deletedCheckTimes);
         $this->refreshTightenedDefectsExcel($ppf, $ppfLookUp, $inspectorNo, $checkTimes, $modeByTime, $shotsByTime);
+        app(MipirRecordRefresher::class)->refresh($ppf);
+        $this->refreshXBarExcel($xbarJobs, Auth::user()->Plant ?? null);
 
         if ($recordDuration) {
             Log::info('EncodingDuration: recordDuration block entered', [
@@ -534,7 +564,6 @@ class CreateInspection
         }
     }
 
-
     private function composeRemarks(string $remarks, array $batches): string
     {
         $base = trim(preg_replace(
@@ -607,7 +636,7 @@ class CreateInspection
     private function refreshTightenedDefectsExcel(
         int $ppf,
         array $ppfLookUp,
-        string $inspectorNo,
+        $inspectorNo,
         array $checkTimes,
         array $modeByTime,
         array $shotsByTime
@@ -641,8 +670,10 @@ class CreateInspection
 
         ksort($judgements);
 
+        // May check time ba sa PPF na ito na naka-tightened? Kung oo, siguraduhing may file na.
         $hasTightened = collect($checkTimes)
             ->contains(fn($t) => ($modeByTime[$t] ?? 'normal') === 'tightened');
+
         try {
             app(InsertTightenedDefects::class)->sync([
                 'partNo'    => $ppfLookUp['partNo'] ?? '',
@@ -657,6 +688,66 @@ class CreateInspection
                 'PPFNo' => $ppf,
                 'error' => $e->getMessage(),
             ]);
+        }
+    }
+
+    private function refreshXBarExcel(array $jobs, ?string $plant): void
+    {
+        Log::info('XBar refresh', ['plant' => $plant, 'jobs' => array_values($jobs)]);
+
+        if ($plant === null) {
+            Log::warning('XBar Excel skipped: user has no Plant');
+            return;
+        }
+
+        $safe = fn(string $v) => preg_replace('/[^A-Za-z0-9_-]/', '_', $v);
+
+        foreach ($jobs as $job) {
+            try {
+                $window = app(XBarCycleTracker::class)
+                    ->cycleWindow($plant, $job['dimension'], $job['transactionId']);
+
+                if ($window === null) {
+                    Log::warning('XBar Excel skipped: cycle window not found', $job);
+                    continue;
+                }
+
+                $partNos = collect(app(XBarRepository::class)->getPartNumbersForTransaction($job['transactionId']))
+                    ->values()
+                    ->all();
+
+                if ($partNos === []) {
+                    Log::warning('XBar Excel skipped: no part numbers for transaction', $job);
+                    continue;
+                }
+
+                $name = sprintf(
+                    'Xbar_%s_%s_%s',
+                    $safe($plant),
+                    $safe($job['dimension']),
+                    Carbon::parse($window['start'])->format('Ymd_His')
+                );
+
+                $path = app(InspectionXBarService::class)->generate(
+                    $partNos,
+                    $job['dimension'],
+                    $window['start'],
+                    $window['end'],
+                    $job['transactionId'],
+                    $name
+                );
+
+                XBarCycleLog::where('TransactionId', $job['transactionId'])->update(['FilePath' => $path]);
+
+                Log::info('XBar Excel generated', ['path' => $path]);
+            } catch (\Throwable $e) {
+                Log::error('XBar Excel failed', [
+                    'dimension'     => $job['dimension'],
+                    'transactionId' => $job['transactionId'],
+                    'error'         => $e->getMessage(),
+                    'at'            => $e->getFile() . ':' . $e->getLine(),
+                ]);
+            }
         }
     }
 }

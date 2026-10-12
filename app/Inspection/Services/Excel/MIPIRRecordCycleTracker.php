@@ -140,7 +140,7 @@ class MIPIRRecordCycleTracker
         MIPIRDimensionMeasure::whereIn('PPFNo', $allPpfNos)->update(['isRecord' => true]);
     }
 
-    private function resolveDimItems(string $partNo): array
+    public function resolveDimItems(string $partNo): array
     {
         $forXBarDim = MIPIRDimensionMeasure::where('PartNo', $partNo)
             ->where('ForXBar', true)

@@ -5,7 +5,7 @@ namespace App\Inspection\Services\Excel;
 use App\Inspection\Models\Defect;
 use App\Inspection\Models\MIPIRInspectionRecord;
 use App\Inspection\Repositories\Excel\ExcelDataRepository;
-use Exception;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -62,10 +62,16 @@ class InspectionRecordService
 
             $allPpfNos = array_unique(array_filter(array_column(array_merge([], ...$plan), 'ppf')));
             $fileTag = implode('-', $allPpfNos);
+
+            File::ensureDirectoryExists(storage_path('app/excel'));
             $output = storage_path("app/excel/MIPIR_{$fileTag}.xlsx");
+            $tmp    = $output . '.tmp';
 
             $writer = IOFactory::createWriter($spreadsheet, 'Xlsx');
-            $writer->save($output);
+            $writer->save($tmp);
+            $spreadsheet->disconnectWorksheets();
+
+            File::move($tmp, $output);
 
             return $output;
         } catch (\Throwable $e) {

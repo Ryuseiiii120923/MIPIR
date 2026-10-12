@@ -5,6 +5,7 @@ namespace App\Inspection\Services\Excel;
 use App\Inspection\Models\XBarCycleLog;
 use App\Inspection\Repositories\Excel\ExcelDataRepository;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\File;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use ZipArchive;
@@ -12,7 +13,11 @@ use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 
 class InspectionXBarService
 {
-    public function generate(array $partNos, string $dimension, string $cycleStart, string $cycleEnd, string $transactionId): string
+
+    private const CHECKTIME_RANK  = ['F' => 0, 'MI' => 1, 'E' => 2];
+    private const CHECKTIME_SLOTS = 3;
+
+    public function generate(array $partNos, string $dimension, string $cycleStart, string $cycleEnd, string $transactionId, ?string $outputName = null): string
     {
         $template = storage_path('app/excel-template/Xbar.xlsx');
 
@@ -40,17 +45,57 @@ class InspectionXBarService
         $drawing->setOffsetY(20);
         $sheet->getDrawingCollection()->append($drawing);
 
-        // Save output
+        File::ensureDirectoryExists(storage_path('app/excel-xbar'));
+        
+
         $fileTag = implode('-', $partNos);
-        $output = storage_path('app/excel/Xbar_' . $fileTag . '.xlsx');
+        $output  = storage_path('app/excel-xbar/' . ($outputName ?? 'Xbar_' . $fileTag) . '.xlsx');
+        $tmp     = $output . '.tmp';
 
         $writer = IOFactory::createWriter($spreadsheet, 'Xlsx');
         $writer->setIncludeCharts(true);
-        $writer->save($output);
+        $writer->save($tmp);
+        $spreadsheet->disconnectWorksheets();
 
-        $this->restoreConnectorLines($template, $output);
+        $this->restoreConnectorLines($template, $tmp);
+
+        File::move($tmp, $output);
 
         return $output;
+    }
+
+    private function assignColumns($groups, int $startColumn): array
+    {
+        // Collect checktimes per PPF, in order of first appearance
+        $blocks = [];
+        foreach ($groups as $key => $group) {
+            $first = $group->first();
+            $blocks[$first->PPFNo][] = [
+                'key' => $key,
+                'ct'  => strtoupper(trim((string) $first->Checktime)),
+            ];
+        }
+
+        $map  = [];
+        $next = $startColumn;
+
+        foreach ($blocks as $items) {
+            $ranks = array_map(fn($i) => self::CHECKTIME_RANK[$i['ct']] ?? null, $items);
+            $known = array_filter($ranks, fn($r) => $r !== null);
+
+            $base   = $known ? min($known) : 0;
+            $cursor = $known ? (max($known) - $base + 1) : 0; // where unknown checktimes go
+
+            foreach ($items as $i => $item) {
+                $offset = $ranks[$i] !== null ? $ranks[$i] - $base : $cursor++;
+                $map[$item['key']] = Coordinate::stringFromColumnIndex($next + $offset);
+            }
+
+            $width = $known ? max(self::CHECKTIME_SLOTS - $base, $cursor) : $cursor;
+            $next += $width;
+        }
+
+        return $map;
     }
 
     public function insertHeader(array $partNos, string $dimension, $sheet, string $cycleStart, string $cycleEnd)
@@ -99,16 +144,10 @@ class InspectionXBarService
             return $measurement->PPFNo . '|' . $measurement->Checktime;
         });
 
-        $startColumn = 3;
-        $columnIndex = 0;
+        $columns = $this->assignColumns($groups, 3);
 
-        foreach ($groups as $group) {
-
-            $column = Coordinate::stringFromColumnIndex(
-                $startColumn + $columnIndex
-            );
-
-            $columnIndex++;
+        foreach ($groups as $key => $group) {
+            $column = $columns[$key];
             $firstMeasurement = $group->first();
 
             $sheet->setCellValue("{$column}57", $firstMeasurement->ProdLotNo);
@@ -144,10 +183,10 @@ class InspectionXBarService
                 $set = (int) $measurement->Set;
                 $startRow = 60 + (($set - 1) * 5);
 
-               foreach ($values as $index => $value) {
+                foreach ($values as $index => $value) {
                     $row = $startRow + $index;
                     $sheet->setCellValue("{$column}{$row}", $value);
-                } 
+                }
             }
 
             $sheet->setCellValue("{$column}92", $trendChartResult);

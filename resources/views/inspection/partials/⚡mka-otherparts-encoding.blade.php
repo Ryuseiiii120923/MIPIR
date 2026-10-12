@@ -79,7 +79,7 @@ new class extends Component
             $this->itemSuggestions = app(DimensionMasterRepositoryInterface::class)->search($value, $this->partNo);
         }
 
-        if (preg_match('/^rows\.(\d+)\.(specType|specNominal|specTolerance|specUpper|specLower|measurements|measurements_y)(\..+)?$/', $property, $matches)) {
+        if (preg_match('/^rows\.(\d+)\.(specType|specNominal|specTolerance|specUpper|specLower|CL|measurements|measurements_y)(\..+)?$/', $property, $matches)) {
             $this->evaluateRow((int) $matches[1]);
         }
         if (str_starts_with($property, 'rows.')) {
