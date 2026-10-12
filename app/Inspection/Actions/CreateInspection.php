@@ -11,6 +11,7 @@ use App\Inspection\Models\MIPIRInspectionRecord;
 use App\Inspection\Models\SmallDefect;
 use App\Inspection\Models\XBar\ControlSpecsLimit;
 use App\Inspection\Repositories\MIPIRInspectionReporsitory;
+use App\Inspection\Services\Excel\InsertTightenedDefects;
 use App\Inspection\Services\Excel\InsertTightenedFlash;
 use App\Inspection\Services\Excel\InsertTightenedGapF00VE;
 use App\Inspection\Services\Excel\InsertTightenedGapOring;
@@ -297,8 +298,10 @@ class CreateInspection
             }
         });
 
+
         $this->refreshTightenedFlashExcel($ppf, $ppfLookUp, $inspectorNo, $checkTimes, $touchedCheckTimes, $dimensions, $composedRemarks, $deletedCheckTimes);
         $this->refreshTightenedGapOffsetExcel($ppf, $ppfLookUp, $inspectorNo, $checkTimes, $touchedCheckTimes, $dimensions, $composedRemarks, $deletedCheckTimes);
+        $this->refreshTightenedDefectsExcel($ppf, $ppfLookUp, $inspectorNo, $checkTimes, $modeByTime, $shotsByTime);
 
         if ($recordDuration) {
             Log::info('EncodingDuration: recordDuration block entered', [
@@ -599,5 +602,61 @@ class CreateInspection
             ])
             ->values()
             ->all();
+    }
+
+    private function refreshTightenedDefectsExcel(
+        int $ppf,
+        array $ppfLookUp,
+        string $inspectorNo,
+        array $checkTimes,
+        array $modeByTime,
+        array $shotsByTime
+    ): void {
+        $cavity = (float) ($ppfLookUp['noOfCavity'] ?? 0);
+        $nqr    = (float) ($ppfLookUp['nqr'] ?? 0);
+
+        // Lahat ng natitirang check time ng PPF, para laging buo ang column ng lot
+        $judgements = [];
+
+        foreach ($checkTimes as $checkTime) {
+            if (($modeByTime[$checkTime] ?? 'normal') !== 'tightened') {
+                continue;
+            }
+
+            foreach ($shotsByTime[$checkTime] ?? [] as $shot) {
+                $label = (int) ($shot['shot'] ?? 0);
+
+                if ($label < 1) {
+                    continue;
+                }
+
+                $ng  = collect($shot['defects'] ?? [])->sum(fn($d) => (float) ($d['qty'] ?? 0));
+                $pct = $cavity > 0 ? ($ng / $cavity) * 100 : 0;
+
+                // Kung pareho ang shot sa dalawang check time, X ang nananaig
+                $judge = $pct > $nqr ? 'X' : 'O';
+                $judgements[$label] = ($judgements[$label] ?? 'O') === 'X' ? 'X' : $judge;
+            }
+        }
+
+        ksort($judgements);
+
+        $hasTightened = collect($checkTimes)
+            ->contains(fn($t) => ($modeByTime[$t] ?? 'normal') === 'tightened');
+        try {
+            app(InsertTightenedDefects::class)->sync([
+                'partNo'    => $ppfLookUp['partNo'] ?? '',
+                'partName'  => $ppfLookUp['partName'] ?? '',
+                'machineNo' => $ppfLookUp['machineNo'] ?? '',
+                'moldNo'    => $ppfLookUp['moldNo'] ?? '',
+                'lotNo'     => $ppfLookUp['productionLotNo'] ?? '',
+                'inspector' => $inspectorNo,
+            ], $judgements, ensureFile: $hasTightened);
+        } catch (\Throwable $e) {
+            Log::error('Tightened defects SAIR Excel failed', [
+                'PPFNo' => $ppf,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }
