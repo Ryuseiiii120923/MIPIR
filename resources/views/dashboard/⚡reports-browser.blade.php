@@ -197,7 +197,7 @@ new class extends Component
     {{-- XBar PDF Files --}}
     <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-6">
         <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between gap-4">
-            <h3 class="font-medium text-gray-900">XBar Reports (.pdf)</h3>
+            <h3 class="font-medium text-gray-900">XBar Reports (.xlsx)</h3>
             <input type="text" wire:model.live.debounce.400ms="searchXbar" placeholder="Search filename..."
                 class="text-sm rounded-lg border-gray-300 px-3 py-1.5 w-56">
         </div>
