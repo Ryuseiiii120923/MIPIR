@@ -19,7 +19,8 @@ new class extends Component
 
     public $symbolFile = null;
 
-    public string $search = '';
+    public string $searchPartNo = '';
+    public string $searchDimension = '';
 
     public bool $showModal = false;
     public ?int $editingId = null; // RecNo
@@ -87,7 +88,11 @@ new class extends Component
     #[Computed]
     public function dimensions()
     {
-        return app(DimensionEncodingService::class)->list($this->search, 10);
+        return app(DimensionEncodingService::class)->list(
+            $this->searchPartNo,
+            $this->searchDimension,
+            10
+        );
     }
 
     #[Computed]
@@ -155,11 +160,15 @@ new class extends Component
         }
     }
 
-    public function updatedSearch(): void
+    public function updatedSearchPartNo(): void
     {
         $this->resetPage();
     }
 
+    public function updatedSearchDimension(): void
+    {
+        $this->resetPage();
+    }
     protected function rules(): array
     {
         $upperRules = ['nullable', 'numeric'];
@@ -328,17 +337,34 @@ new class extends Component
         <div class="relative overflow-x-auto bg-white shadow-xs rounded-md border border-gray-200 mt-3">
             <div class="p-4 flex items-center justify-between space-x-4 rounded-lg">
                 <label for="dimension-search" class="sr-only">Search</label>
-                <div class="relative">
-                    <div class="absolute inset-y-0 start-0 flex items-center ps-3 pointer-events-none">
-                        <svg class="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
-                            <path stroke="currentColor" stroke-linecap="round" stroke-width="2" d="m21 21-3.5-3.5M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
-                        </svg>
+                <div class="flex items-center gap-3">
+                    <div class="relative">
+                        <div class="absolute inset-y-0 start-0 flex items-center ps-3 pointer-events-none">
+                            <svg class="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                                <path stroke="currentColor" stroke-linecap="round" stroke-width="2" d="m21 21-3.5-3.5M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
+                            </svg>
+                        </div>
+                        <label for="search-part-no" class="sr-only">Search part no</label>
+                        <input type="text"
+                            id="search-part-no"
+                            wire:model.live.debounce.400ms="searchPartNo"
+                            class="block w-64 ps-9 pe-3 py-2 border border-blue-500 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="Search part no">
                     </div>
-                    <input type="text"
-                        id="dimension-search"
-                        wire:model.live.debounce.400ms="search"
-                        class="block w-full max-w-96 ps-9 pe-3 py-2 border border-blue-500 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Search dimension or part no">
+
+                    <div class="relative">
+                        <div class="absolute inset-y-0 start-0 flex items-center ps-3 pointer-events-none">
+                            <svg class="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                                <path stroke="currentColor" stroke-linecap="round" stroke-width="2" d="m21 21-3.5-3.5M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
+                            </svg>
+                        </div>
+                        <label for="search-dimension" class="sr-only">Search dimension name</label>
+                        <input type="text"
+                            id="search-dimension"
+                            wire:model.live.debounce.400ms="searchDimension"
+                            class="block w-64 ps-9 pe-3 py-2 border border-blue-500 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="Search dimension name">
+                    </div>
                 </div>
 
                 <button type="button"

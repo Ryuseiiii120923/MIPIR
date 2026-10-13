@@ -9,21 +9,16 @@ use Illuminate\Support\Facades\DB;
 
 class DimensionEncodingRepository
 {
-    public function paginate(?string $search, int $perPage = 10): LengthAwarePaginator
+    public function paginate(?string $partNo, ?string $dimensionName, int $perPage = 10): LengthAwarePaginator
     {
-        $term = $search !== null ? trim($search) : '';
+        $partNo = $partNo !== null ? trim($partNo) : '';
+        $dimensionName = $dimensionName !== null ? trim($dimensionName) : '';
 
         return DimensionMaster::query()
-            ->when($term !== '', function ($query) use ($term) {
-                $like = '%' . $term . '%';
-
-                $query->where(function ($w) use ($like) {
-                    $w->where('DimensionName', 'like', $like)
-                        ->orWhere('PartNo', 'like', $like);
-                });
-            })
+            ->when($partNo !== '', fn($q) => $q->where('PartNo', 'like', '%' . $partNo . '%'))
+            ->when($dimensionName !== '', fn($q) => $q->where('DimensionName', 'like', '%' . $dimensionName . '%'))
             ->orderByDesc('DEnc')
-            ->orderByDesc('RecNo') // stable ORDER BY for SQL Server paging
+            ->orderByDesc('RecNo')
             ->paginate($perPage);
     }
 

@@ -20,9 +20,9 @@ class DimensionEncodingService
         private readonly SpecsControlRepository $specsRepo,
     ) {}
 
-    public function list(?string $search, int $perPage = 10): LengthAwarePaginator
+    public function list(?string $partNo, ?string $dimensionName, int $perPage = 10): LengthAwarePaginator
     {
-        return $this->repo->paginate($search, $perPage)->through(function ($row) {
+        return $this->repo->paginate($partNo, $dimensionName, $perPage)->through(function ($row) {
             $row->symbol_url = $this->symbolUrl($row->Symbol);
             return $row;
         });
