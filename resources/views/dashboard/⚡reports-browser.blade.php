@@ -118,7 +118,7 @@ new class extends Component
         $directory = match ($type) {
             'mipir'     => storage_path('app/excel'),
             'tightened' => storage_path('app/defects-tightened'),
-            'exports'   => storage_path('app/exports'),
+            'exports'   => $this->exportsRoot(),
             default     => storage_path('app/excel-xbar'),
         };
 
@@ -208,7 +208,7 @@ new class extends Component
     }
 
     public function exportsRoot(){
-        return storage_path('app/exports');
+        return storage_path('app/exports/tightened-monitoring');
     }
 
     /** Mga file sa loob ng isang folder, pinakabago muna */
