@@ -3,6 +3,7 @@
 
 use App\Inspection\Actions\DraftAction;
 use App\Inspection\Repositories\PPFLookUp\PpfLookUpRepository;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Validate;
 
@@ -12,6 +13,10 @@ new class extends \Livewire\Component
     public string $checkTime = '';
 
     public array $checkTimes = [];
+
+    // Mga check time na galing sa database (Update): view-only
+    #[Locked]
+    public array $lockedCheckTimes = [];
 
     public ?string $selectedCheckTime = null;
     public array $defectsByTime = [];
@@ -30,7 +35,6 @@ new class extends \Livewire\Component
     public string $lookupTime = '';
     public array $startTimeByTime = [];
     public array $endTimeByTime = [];
-    public array $touchedThisSession = [];
     public array $controlLimitByTime = [];
     public array $modeByTime = [];
     public array $shotsByTime = [];
@@ -53,7 +57,6 @@ new class extends \Livewire\Component
         $this->dateEncodeByTime[$newCheckTime] = now()->toDateTimeString();
         $this->startTimeByTime[$newCheckTime] = $this->lookupTime !== '' ? $this->lookupTime : now()->toDateTimeString();
         $this->endTimeByTime[$newCheckTime] = $this->startTimeByTime[$newCheckTime];
-        $this->touchedThisSession[$newCheckTime] = true;
 
         $this->sortCheckTimesByDateEncode();
 
@@ -88,6 +91,10 @@ new class extends \Livewire\Component
         return $base . $suffix;
     }
 
+    private function isLocked(?string $time): bool
+    {
+        return $time !== null && in_array($time, $this->lockedCheckTimes, true);
+    }
 
     public function syncDraft()
     {
@@ -96,7 +103,8 @@ new class extends \Livewire\Component
             'date-encode' => $this->dateEncodeByTime,
             'start-time' => $this->startTimeByTime,
             'end-time' => $this->endTimeByTime,
-            'touched' => array_keys($this->touchedThisSession),
+            // Ang mga bagong check time lang ang isinasave; ang naka-lock ay hindi ginagalaw
+            'touched' => array_values(array_diff($this->checkTimes, $this->lockedCheckTimes)),
             'deleted' => $this->deletedCheckTime,
         ]);
 
@@ -127,16 +135,19 @@ new class extends \Livewire\Component
             'dimensions' => $this->dimensionsByTime[$time] ?? [],
         ];
         $this->checkTimes = array_values(array_diff($this->checkTimes, [$time]));
+        $this->lockedCheckTimes = array_values(array_diff($this->lockedCheckTimes, [$time]));
         unset($this->defectsByTime[$time]);
+        unset($this->smallDefectsByTime[$time]);
         unset($this->dimensionsByTime[$time]);
         unset($this->controlLimitByTime[$time]);
         unset($this->ngpercentByTime[$time]);
         unset($this->judgementByTime[$time]);
+        unset($this->modeByTime[$time]);
+        unset($this->shotsByTime[$time]);
         unset($this->dateEncodeByTime[$time]);
         unset($this->remarksByTime[$time]);
         unset($this->startTimeByTime[$time]);
         unset($this->endTimeByTime[$time]);
-        unset($this->touchedThisSession[$time]);
         if ($this->selectedCheckTime === $time) {
             $this->selectedCheckTime = null;
         }
@@ -155,6 +166,10 @@ new class extends \Livewire\Component
         string $mode = 'normal',
         array $shots = []
     ): void {
+        if ($this->isLocked($selectedCheckTime)) {
+            return;
+        }
+
         $this->defectsByTime[$selectedCheckTime] = $defects;
         $this->ngpercentByTime[$selectedCheckTime] = $ngpercent;
         $this->judgementByTime[$selectedCheckTime] = $judgement;
@@ -162,22 +177,28 @@ new class extends \Livewire\Component
         $this->modeByTime[$selectedCheckTime] = $mode;
         $this->shotsByTime[$selectedCheckTime] = $shots;
         $this->endTimeByTime[$selectedCheckTime] = now()->toDateTimeString();
-        $this->touchedThisSession[$selectedCheckTime] = true;
         $this->syncDraft();
     }
 
     #[On('dimensions-synced')]
     public function onDimensionsSynced(string $selectedCheckTime, array $rows): void
     {
+        if ($this->isLocked($selectedCheckTime)) {
+            return;
+        }
+
         $this->dimensionsByTime[$selectedCheckTime] = $rows;
         $this->endTimeByTime[$selectedCheckTime] = now()->toDateTimeString();
-        $this->touchedThisSession[$selectedCheckTime] = true;
         $this->syncDraft();
     }
 
     #[On('control-limit-synced')]
     public function onControlLimitSynced(array $draft): void
     {
+        if ($this->selectedCheckTime === null || $this->isLocked($this->selectedCheckTime)) {
+            return;
+        }
+
         $this->controlLimitByTime[$this->selectedCheckTime] = [
             'dimItem' => $draft['dimItem'],
             'partNo'  => $draft['partNo'],
@@ -195,7 +216,18 @@ new class extends \Livewire\Component
             'LCLr'    => $draft['LCLr'],
         ];
         $this->endTimeByTime[$this->selectedCheckTime] = now()->toDateTimeString();
-        $this->touchedThisSession[$this->selectedCheckTime] = true;
+        $this->syncDraft();
+    }
+
+    #[On('remarks-synced')]
+    public function onRemarksSynced(string $selectedCheckTime, string $remarks): void
+    {
+        if ($this->isLocked($selectedCheckTime)) {
+            return;
+        }
+
+        $this->remarksByTime[$selectedCheckTime] = $remarks;
+        $this->endTimeByTime[$selectedCheckTime] = now()->toDateTimeString();
         $this->syncDraft();
     }
 
@@ -204,14 +236,21 @@ new class extends \Livewire\Component
         $this->reset([
             'checkTime',
             'checkTimes',
+            'lockedCheckTimes',
             'selectedCheckTime',
             'defectsByTime',
+            'smallDefectsByTime',
             'dimensionsByTime',
             'controlLimitByTime',
             'ngpercentByTime',
             'judgementByTime',
+            'modeByTime',
+            'shotsByTime',
             'dateEncodeByTime',
-            'remarksByTime'
+            'startTimeByTime',
+            'endTimeByTime',
+            'deletedCheckTime',
+            'remarksByTime',
         ]);
         $this->resetErrorBag();
     }
@@ -250,24 +289,19 @@ new class extends \Livewire\Component
                 $this->remarksByTime[$time] = app(PpfLookUpRepository::class)->getRemarks($ppf, $time);
             }
             $this->sortCheckTimesByDateEncode();
+
+            // Update: ang mga check time na nasa database ay makikita lang, hindi na mae-edit
+            $this->lockedCheckTimes = $this->action === 'edit' ? $this->checkTimes : [];
         }
         $this->syncDraft();
     }
 
-     #[On('passMoldingDie')]
+    #[On('passMoldingDie')]
     public function onMoldingDieChanged(string|int|null $moldingDieNo = null): void
     {
         $this->moldingDieNo = $moldingDieNo;
     }
 
-    #[On('remarks-synced')]
-    public function onRemarksSynced(string $selectedCheckTime, string $remarks): void
-    {
-        $this->remarksByTime[$selectedCheckTime] = $remarks;
-        $this->endTimeByTime[$selectedCheckTime] = now()->toDateTimeString();
-        $this->touchedThisSession[$selectedCheckTime] = true;
-        $this->syncDraft();
-    }
     #[On('fromMaster')]
     public function fromMaster($data)
     {
@@ -340,6 +374,9 @@ new class extends \Livewire\Component
                 @if(count($defectsByTime[$time] ?? []) > 0)
                 <span class="text-xs sm:text-sm text-emerald-600">({{ count($defectsByTime[$time]) }})</span>
                 @endif
+                @if(in_array($time, $lockedCheckTimes, true))
+                <span class="text-xs font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">View only</span>
+                @endif
             </button>
             <button
                 @if($action==='view' || $action==='delete' ) disabled @endif
@@ -366,8 +403,10 @@ new class extends \Livewire\Component
         </button>
     </div>
 
-    {{-- Pressing a check time mounts the defects component, which auto-opens its modal --}}
     @if ($selectedCheckTime)
+    @php
+    $childAction = in_array($selectedCheckTime, $lockedCheckTimes, true) ? 'view' : $action;
+    @endphp
     @if($isMKA)
     <livewire:inspection::partials.mka-otherparts-encoding
         :key="'dimensions-otherparts' . $selectedCheckTime"
@@ -375,14 +414,14 @@ new class extends \Livewire\Component
         :loaded-rows="$dimensionsByTime[$selectedCheckTime] ?? []"
         :ppfno="$ppf"
         :partNo="$partNo"
-        :action="$action" />
+        :action="$childAction" />
     @else
     <livewire:inspection::partials.defects
         :key="'defects-' . $selectedCheckTime"
         :selectedCheckTime="$selectedCheckTime"
         :loaded-defects="$defectsByTime[$selectedCheckTime] ?? []"
         :loaded-small-defects="$smallDefectsByTime[$selectedCheckTime] ?? []"
-        :action="$action"
+        :action="$childAction"
         :fromMaster="$dataFromMaster"
         :mode="$modeByTime[$selectedCheckTime] ?? 'normal'"
         :loaded-shots="$shotsByTime[$selectedCheckTime] ?? []" />
@@ -393,13 +432,13 @@ new class extends \Livewire\Component
         :loaded-rows="$dimensionsByTime[$selectedCheckTime] ?? []"
         :ppfno="$ppf"
         :partNo="$partNo"
-        :action="$action"
+        :action="$childAction"
         :moldingDieNo="$moldingDieNo" />
     <livewire:inspection::partials.remarks
         :key="'remarks-' . $selectedCheckTime"
         :selectedCheckTime="$selectedCheckTime"
         :loadedRemarks="$remarksByTime[$selectedCheckTime] ?? ''"
-        :action="$action" />
+        :action="$childAction" />
     @endif
     @endif
 </div>
