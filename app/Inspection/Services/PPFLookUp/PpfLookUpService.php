@@ -27,11 +27,6 @@ class PpfLookUpService
         if($nqr === null || $nqr === 0) {
             $nqr = $this->repo->getNQRSeihin($result->PartNo, $result->MoldNo);
         } 
-
-        Log::info('User logged in', [
-            'nqr' => $nqr ?? 0,
-        ]);
-
         $ppfLookUpRepo = app(PpfLookUpRepository::class);
         $mainData = $ppfLookUpRepo->getMainData($ppf);
         $checkTimes = $mainData['checkTime'] ?? [];

@@ -34,14 +34,7 @@ new class extends Component
 
     public function submit(): void
     {
-        $requestId = uniqid();
-        Log::debug('DashboardSave: submit() called', [
-            'requestId' => $requestId,
-            'action' => $this->action,
-            'selectedPpf' => $this->selectedPpf,
-        ]);
         if ($this->action === 'view') {
-            Log::debug('DashboardSave: view action, no-op');
             return;
         }
 

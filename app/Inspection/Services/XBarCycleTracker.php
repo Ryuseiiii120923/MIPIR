@@ -1,14 +1,9 @@
 <?php
 
 namespace App\Inspection\Services;
-
-use App\Domain\XBar\Repositories\XBarRepository;
 use App\Inspection\Models\XBarCycleLog;
 use App\Inspection\Models\XBarCycleProgress;
-use App\Inspection\Services\Excel\ExportService;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class XBarCycleTracker
