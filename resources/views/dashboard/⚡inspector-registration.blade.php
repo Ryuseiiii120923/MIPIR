@@ -35,10 +35,16 @@ new class extends Component
     public string $editName = '';
     public string $editPlant = '';
     public string $editEmployeeID = '';
+    public string $currentUser = '';
 
     public function updatingSearch(): void
     {
         $this->resetPage();
+    }
+
+    public function mount()
+    {
+        $this->currentUser = Auth::user()->社員CD;
     }
 
     public function updatingPlantFilter(): void
@@ -57,7 +63,7 @@ new class extends Component
         try {
             $data = $this->validate();
         } catch (ValidationException $e) {
-            $this->resetValidation(); 
+            $this->resetValidation();
             $this->notifyFail('Validation Error', implode(', ', $e->validator->errors()->all()));
             return;
         }
@@ -512,6 +518,9 @@ new class extends Component
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Inspector ID</th>
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Plant</th>
+                        @if($this->currentUser === '2437')
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Password</th>
+                        @endif
                         <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
                 </thead>
@@ -526,6 +535,11 @@ new class extends Component
                                 {{ $inspector->plant }}
                             </span>
                         </td>
+                        @if($this->currentUser === '2437')
+                        <td class="px-6 py-3 text-sm text-gray-700">
+                            {{ $inspector->Password }}
+                        </td>
+                        @endif
                         <td class="px-6 py-3 text-right">
                             <div class="inline-flex items-center gap-2">
                                 <button type="button"
@@ -557,7 +571,7 @@ new class extends Component
                     </tr>
                     @empty
                     <tr>
-                        <td colspan="5" class="px-6 py-8 text-center text-sm text-gray-500">
+                        <td colspan="{{ $this->currentUser === '2437' ? 6 : 5 }}" class="px-6 py-8 text-center text-sm text-gray-500">
                             {{ ($search !== '' || $plantFilter !== '') ? 'No inspectors match your filters.' : 'No inspectors registered yet.' }}
                         </td>
                     </tr>
@@ -663,5 +677,4 @@ new class extends Component
         </div>
     </div>
     @endif
-
 </div>

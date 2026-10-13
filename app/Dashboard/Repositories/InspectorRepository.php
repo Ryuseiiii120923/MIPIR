@@ -11,7 +11,7 @@ class InspectorRepository
     public function fetchInspectors()
     {
         return InspectorDb::query()
-            ->select('InspectorNo as inspector_id', 'Name as name', 'Plant as plant', 'EmployeeID as employee_id')
+            ->select('InspectorNo as inspector_id', 'Name as name', 'Plant as plant', 'EmployeeID as employee_id', 'Password')
             ->orderBy('InspectorNo')
             ->get();
     }
