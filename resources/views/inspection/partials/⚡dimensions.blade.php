@@ -2,11 +2,13 @@
 
 use App\Inspection\Repositories\Contracts\DimensionMasterRepositoryInterface;
 use App\Inspection\Services\Dimensions\DimensionsService;
+use App\Traits\HasNotifications;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
 new class extends Component
 {
+    use HasNotifications;
     public string $ppfNumber = '';
     public array $rows = [];
     public array $itemSuggestions = [];
@@ -81,8 +83,10 @@ new class extends Component
             }
         }
 
-        $this->resolveFixedSpecifications();
         $this->action = $action;
+        $this->readonly = in_array($action, ['view', 'delete'], true);
+
+        $this->resolveFixedSpecifications();
         $this->syncToParent();
 
         if ($this->action === 'view' || $this->action === 'delete') {
@@ -100,6 +104,16 @@ new class extends Component
         if ($this->selectedCheckTime !== null) {
             $this->dispatch('dimensions-synced', selectedCheckTime: $this->selectedCheckTime, rows: $this->rows);
         }
+        $this->reportValidity();
+    }
+
+    private function reportValidity(): void
+    {
+        $this->dispatch(
+            'blocking-errors',
+            source: 'dimensions:' . ($this->selectedCheckTime ?? 'default'),
+            errors: $this->readonly ? [] : array_values($this->service()->missingRequiredFields($this->rows)),
+        );
     }
 
     public function updated(string $property, mixed $value): void
@@ -196,6 +210,10 @@ new class extends Component
 
         if ($master === null) {
             unset($this->rows[$i]['specType'], $this->rows[$i]['specNominal'], $this->rows[$i]['specTolerance'], $this->rows[$i]['specUpper'], $this->rows[$i]['specLower']);
+        }
+
+        if (trim((string) ($master['Specification'] ?? '')) === '') {
+            $this->notifyFail('Empty Specs', 'Please inform Staff or GL to update the Dimension Master');
         }
 
         $this->applyMasterSpecification($i, $master);

@@ -94,7 +94,19 @@ new class extends Component
         $this->measurementsYByTime = $result['measurementsYByTime'] ?? [];
         $this->judgeByTime = $result['judgementByTime'] ?? [];
         $this->resolveSpecification();
+        $this->reportValidity();
     }
+
+    private function reportValidity(): void
+{
+    $blocked = $this->ppf === 0 || in_array($this->action, ['view', 'delete'], true);
+
+    $this->dispatch(
+        'blocking-errors',
+        source: 'gap-offset',
+        errors: $blocked ? [] : array_values($this->requiredFieldErrors()),
+    );
+}
 
     #[On('action-changed-gapoffset')]
     public function onActionChanged(string $action): void

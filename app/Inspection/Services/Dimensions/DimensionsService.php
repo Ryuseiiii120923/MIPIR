@@ -6,6 +6,55 @@ use App\Inspection\Repositories\Contracts\DimensionMasterRepositoryInterface;
 
 class DimensionsService
 {
+    private const CL_REQUIRED_ITEMS = ['flash thickness', 'gap-offset'];
+
+    /** Empty when the type is missing, or a value that type needs is blank. */
+    public function isSpecificationEmpty(array $row): bool
+    {
+        $filled = fn(string $key): bool => trim((string) ($row[$key] ?? '')) !== '';
+
+        return match ($row['specType'] ?? null) {
+            'max', 'min'     => ! $filled('specNominal'),
+            'tolerance'      => ! $filled('specNominal') || ! $filled('specTolerance'),
+            'tolerance_diff' => ! $filled('specNominal') || ! $filled('specUpper') || ! $filled('specLower'),
+            default          => true,
+        };
+    }
+
+
+    public function requiredFieldErrors(array $row): array
+    {
+        // A card that was never set up has nothing to validate
+        if (array_key_exists('revealed', $row) && ! $row['revealed']) {
+            return [];
+        }
+
+        $item  = trim((string) ($row['item'] ?? ''));
+        $label = $item !== '' ? $item : 'Dimension';
+        $errors = [];
+
+        if ($this->isSpecificationEmpty($row)) {
+            $errors['specification'] = "{$label}: specification is empty. Please inform Staff or GL to update the Dimension Master.";
+        }
+
+        // if (
+        //     in_array(mb_strtolower($item), self::CL_REQUIRED_ITEMS, true)
+        //     && trim((string) ($row['CL'] ?? '')) === ''
+        // ) {
+        //     $errors['CL'] = "{$label}: control limit is required.";
+        // }
+
+        return $errors;
+    }
+
+
+    /** Flat list of messages across many rows. */
+    public function missingRequiredFields(array $rows): array
+    {
+        return collect($rows)
+            ->flatMap(fn(array $row) => array_values($this->requiredFieldErrors($row)))
+            ->all();
+    }
     public function __construct(
         private DimensionMasterRepositoryInterface $repo
     ) {}
@@ -16,6 +65,8 @@ class DimensionsService
             'specification' => $this->repo->getMasterSpecification($partNo, $dimensionName),
         ];
     }
+
+
 
     /**
      * Derive a row's specType/specNominal/specTolerance/specUpper/specLower

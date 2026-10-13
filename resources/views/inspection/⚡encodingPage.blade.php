@@ -10,6 +10,8 @@ use App\Traits\HasNotifications;
 use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\On;
 use Livewire\Component;
+use Livewire\Attributes\Computed;
+use App\Inspection\Services\Dimensions\DimensionsService;
 
 new class extends Component
 {
@@ -17,13 +19,46 @@ new class extends Component
     public string $action = '';
     public int $selectedPpf = 0;
     public string $selectedMachine;
+    public array $blocking = [];
+
+    #[On('blocking-errors')]
+    public function onBlockingErrors(string $source, array $errors): void
+    {
+        if ($errors === []) {
+            unset($this->blocking[$source]);
+            return;
+        }
+
+        $this->blocking[$source] = $errors;
+    }
+
+    #[Computed]
+    public function blockingMessages(): array
+    {
+        return \Illuminate\Support\Arr::flatten($this->blocking);
+    }
 
     public function setAction(string $action): void
     {
         $this->action = $action;
         $this->selectedPpf = 0;
+        $this->blocking = [];
         $this->dispatch('action-changed', action: $action);
         // $this->dispatch('read-only', false);
+    }
+
+    private function missingRequiredDimensionFields(array $draft): array
+    {
+        $service  = app(DimensionsService::class);
+        $messages = [];
+
+        foreach ($draft['dimensions'] ?? [] as $checkTime => $rows) {
+            foreach ($service->missingRequiredFields($rows) as $msg) {
+                $messages[] = "[{$checkTime}] {$msg}";
+            }
+        }
+
+        return $messages;
     }
 
     #[On('ppf-checked')]
@@ -46,6 +81,22 @@ new class extends Component
             return;
         }
 
+        if ($this->blockingMessages !== []) {
+            $this->notifyFail('Validation error', implode(' ', $this->blockingMessages));
+            return;
+        }
+
+        if (in_array($this->action, ['add', 'edit'], true)) {
+            $missing = $this->missingRequiredDimensionFields(
+                app(DraftAction::class)->get($this->selectedPpf) ?? []
+            );
+
+            if ($missing !== []) {
+                $this->notifyFail('Validation error', implode(' ', $missing));
+                return;
+            }
+        }
+
         if ($this->action === 'edit') {
             try {
                 app(ConfirmationCheckTimeService::class)->appendIfRejected($this->selectedPpf);
@@ -58,6 +109,7 @@ new class extends Component
                 return;
             }
         }
+
 
 
         $draft = app(DraftAction::class)->get($this->selectedPpf);
@@ -149,11 +201,12 @@ new class extends Component
 
     <div class="flex items-center justify-center mt-4 @if($this->selectedPpf === 0) opacity-50 cursor-not-allowed @endif">
         @if($action !== '' && $action !== 'view')
-        <div class="flex justify-center p-6">
-           <button wire:key="encoding-button"
+        <div class="flex flex-col items-center p-6">
+            <button wire:key="encoding-button"
                 wire:click="submit"
-                @if($action=='delete' ) @click.prevent="if (confirm('Are you sure you want to delete this ppf?')) $wire.submit()" @endif
-                @class([ 'px-12 py-2.5 rounded-lg text-white text-sm font-medium transition' , 'bg-blue-700 hover:bg-blue-800'=> $action === 'add',
+                @disabled($this->blockingMessages !== [])
+                @if($action=='delete') @click.prevent="if (confirm('Are you sure you want to delete this ppf?')) $wire.submit()" @endif
+                @class([ 'px-12 py-2.5 rounded-lg text-white text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed', 'bg-blue-700 hover:bg-blue-800' => $action === 'add',
                 'bg-green-700 hover:bg-green-800' => $action === 'edit',
                 'bg-red-700 hover:bg-red-800' => $action === 'delete',
                 ])>
@@ -164,6 +217,14 @@ new class extends Component
             default  => 'Submit'
         } }}
             </button>
+
+            @if($this->blockingMessages !== [])
+            <ul class="mt-3 text-sm text-red-600 text-center space-y-0.5">
+                @foreach($this->blockingMessages as $msg)
+                <li>{{ $msg }}</li>
+                @endforeach
+            </ul>
+            @endif
         </div>
         @endif
     </div>
