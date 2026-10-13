@@ -61,4 +61,10 @@ class InspectorService
 
         return $inspectorDB || $workerMaster;
     }
+
+    public function removePassword(string $employeeId){
+        return InspectorDb::where('EmployeeID', $employeeId)->update([
+            'Password' => null
+        ]);
+    }
 }
