@@ -50,14 +50,15 @@ class MipirRecordRefresher
                     continue;
                 }
 
-                $dimItems = app(MIPIRRecordCycleTracker::class)->resolveDimItems($partNo, $sheet['ppfs']);
+                $tracker  = app(MIPIRRecordCycleTracker::class);
+                $variant  = $tracker->variantFor($partNo);
+                $dimItems = $tracker->resolveDimItems($partNo, $sheet['ppfs']);
 
-                if (count($dimItems) < 3 || count($dimItems) > 4) {
-                    Log::warning('MIPIR record skipped: unsupported number of dimension items', [
-                        'partNo'   => $partNo,
-                        'sheet'    => $i + 1,
-                        'ppfs'     => $sheet['ppfs'],
-                        'dimItems' => $dimItems,
+                if ($dimItems === []) {
+                    Log::warning('MIPIR record skipped: no dimension items', [
+                        'partNo' => $partNo,
+                        'sheet'  => $i + 1,
+                        'ppfs'   => $sheet['ppfs'],
                     ]);
 
                     continue;
@@ -65,7 +66,7 @@ class MipirRecordRefresher
 
                 $path = $files[$i] ?? $this->newFilePath($dir, $safePart);
 
-                app(InspectionRecordService::class)->generate($sheet['lots'], $dimItems, $path);
+                app(InspectionRecordService::class)->generate($sheet['lots'], $dimItems, $path, $variant);
 
                 $files[$i] = $path;
             }
@@ -88,12 +89,12 @@ class MipirRecordRefresher
     {
         $encoded = CheckTime::where('PartNo', $partNo)
             ->get(['PPFNo', 'Checktime', 'DateEncode'])
-            ->mapWithKeys(fn ($c) => ["{$c->PPFNo}|{$c->Checktime}" => (string) $c->DateEncode])
+            ->mapWithKeys(fn($c) => ["{$c->PPFNo}|{$c->Checktime}" => (string) $c->DateEncode])
             ->all();
 
         $lots = MIPIRInspectionRecord::where('PartNo', $partNo)
             ->get(['PPFNo', 'ProdLotNo', 'Checktime', 'DateJudge'])
-            ->map(fn ($r) => [
+            ->map(fn($r) => [
                 'ppf'       => (string) $r->PPFNo,
                 'checktime' => (string) $r->Checktime,
                 'lot'       => (string) $r->ProdLotNo,
@@ -102,8 +103,8 @@ class MipirRecordRefresher
             ->sortBy('at')
             ->values()
             ->groupBy('lot')
-            ->map(fn ($group) => $group
-                ->map(fn ($r) => ['ppf' => $r['ppf'], 'checktime' => $r['checktime']])
+            ->map(fn($group) => $group
+                ->map(fn($r) => ['ppf' => $r['ppf'], 'checktime' => $r['checktime']])
                 ->values()
                 ->all())
             ->values()
@@ -141,8 +142,8 @@ class MipirRecordRefresher
         $prefix = "MIPIR_{$safePart}_";
 
         $files = collect(File::files($dir))
-            ->filter(fn ($f) => str_starts_with($f->getFilename(), $prefix) && $f->getExtension() === 'xlsx')
-            ->map(fn ($f) => $f->getPathname())
+            ->filter(fn($f) => str_starts_with($f->getFilename(), $prefix) && $f->getExtension() === 'xlsx')
+            ->map(fn($f) => $f->getPathname())
             ->all();
 
         usort($files, 'strnatcasecmp');

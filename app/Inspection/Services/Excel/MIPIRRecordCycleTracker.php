@@ -12,6 +12,12 @@ use Illuminate\Support\Facades\Log;
 class MIPIRRecordCycleTracker
 {
     private const MAX_SLOTS_PER_SHEET = 21; // 7 lots x 3 checktimes — row capacity ng template
+    private const FOUR_COLUMN_PARTS = ['135659-0010'];
+
+    public function variantFor(string $partNo): int
+    {
+        return in_array(strtoupper(trim($partNo)), self::FOUR_COLUMN_PARTS, true) ? 4 : 3;
+    }
 
     public function checkAndRecordLotComplete(int $ppf, string $partNo): void
     {
@@ -122,16 +128,12 @@ class MIPIRRecordCycleTracker
 
         $dimItems = $this->resolveDimItems($partNo);
 
-        if (count($dimItems) < 3 || count($dimItems) > 4) {
-            Log::error('MIPIRRecordCycleTracker: unexpected dimItems count, skipping report generation', [
-                'partNo' => $partNo,
-                'dimItemsCount' => count($dimItems),
-                'dimItems' => $dimItems,
-            ]);
+        if ($dimItems === []) {
+            Log::error('MIPIRRecordCycleTracker: no dimItems, skipping report generation', ['partNo' => $partNo]);
             return;
         }
 
-        app(InspectionRecordService::class)->generate($lots, $dimItems);
+        app(InspectionRecordService::class)->generate($lots, $dimItems, null, $this->variantFor($partNo));
 
         MIPIRDimensionMeasure::whereIn('PPFNo', $allPpfNos)->update(['isRecord' => true]);
     }
@@ -149,18 +151,28 @@ class MIPIRRecordCycleTracker
             return [];
         }
 
-        $otherCustomDims = $this->dimQuery($partNo, $ppfs)
-            ->whereNotIn('DimItem', ['Flash Thickness', 'Gap-Offset', $forXBarDim])
-            ->where('DimItem', 'not like', '% (Y)')
-            ->select('DimItem')
-            ->groupBy('DimItem')
-            ->orderByRaw('MIN(RECNO)')
-            ->pluck('DimItem')
-            ->all();
+        $variant    = $this->variantFor($partNo);
+        $customDims = [$forXBarDim];
+
+        // Sa 4 columns lang kukuha ng dagdag na custom dimension
+        if ($variant === 4) {
+            $others = $this->dimQuery($partNo, $ppfs)
+                ->whereNotIn('DimItem', ['Flash Thickness', 'Gap-Offset', $forXBarDim])
+                ->where('DimItem', 'not like', '% (Y)')
+                ->select('DimItem')
+                ->groupBy('DimItem')
+                ->orderByRaw('MIN(RECNO)')
+                ->pluck('DimItem')
+                ->all();
+
+            $customDims = array_merge($customDims, $others);
+        }
+
+        // 3 columns = 1 custom + Flash + Gap-Offset. 4 columns = 2 custom + Flash + Gap-Offset.
+        $customDims = array_slice($customDims, 0, $variant - 2);
 
         return array_merge(
-            [$forXBarDim],
-            $otherCustomDims,
+            $customDims,
             ['Flash Thickness', ['Gap-Offset', 'Gap-Offset (Y)']]
         );
     }

@@ -26,15 +26,25 @@ class InspectionRecordService
         ],
     ];
 
+
+
+
+
     private const TRAILING_COLUMNS = [
         3 => ['remarks' => 'AE', 'stamp' => 'AG', 'confirmedBy' => 'AJ'],
         4 => ['remarks' => 'AK', 'stamp' => 'AM', 'confirmedBy' => 'AP'],
     ];
 
-    public function generate(array $lots, array $dimItems, ?string $outputPath = null): string
+    public function generate(array $lots, array $dimItems, ?string $outputPath = null, ?int $variant = null): string
     {
         try {
-            $variant = count($dimItems);
+            // Kung walang ibinigay, ang dami ng dimension item ang batayan (dating asal)
+            $variant = $variant ?? count($dimItems);
+
+            if (! isset(self::BLOCK_LAYOUTS[$variant])) {
+                throw new \RuntimeException("Unsupported column variant: {$variant}");
+            }
+
             $sheetName = $variant === 4 ? '4 columns' : '3 Columns';
 
             $template = storage_path('app/excel-template/FQCJ33-D2-14_Molding In-process Inspection Record.xlsx');
@@ -59,9 +69,6 @@ class InspectionRecordService
             $this->insertHeader($firstPpf, $sheet);
             $this->insertDimensionHeaders($dimItems, $blocks, $sheet);
             $this->insertRows($plan, $dimItems, $blocks, $trailing, $sheet);
-
-            $allPpfNos = array_unique(array_filter(array_column(array_merge([], ...$plan), 'ppf')));
-            $fileTag = implode('-', $allPpfNos);
 
             $output = $outputPath ?? $this->legacyOutputPath($plan);
 
