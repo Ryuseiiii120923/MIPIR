@@ -13,7 +13,7 @@ class DimensionEncodingService
 {
     private const SYMBOL_EXTENSIONS = ['png', 'bmp']; // checked in this order
 
-    private const LIMIT_FIELDS = ['CSLx','USLx','LSLx','CCLx', 'UCLx', 'LCLx', 'CSLr', 'USLr', 'LSLr', 'CCLr', 'UCLr', 'LCLr'];
+    private const LIMIT_FIELDS = ['CSLx', 'USLx', 'LSLx', 'CCLx', 'UCLx', 'LCLx', 'CSLr', 'USLr', 'LSLr', 'CCLr', 'UCLr', 'LCLr'];
 
     public function __construct(
         private readonly DimensionEncodingRepository $repo,
@@ -34,10 +34,10 @@ class DimensionEncodingService
     public function find(int $recNo): ?array
     {
         $row = $this->repo->find($recNo);
-
         if ($row === null) {
             return null;
         }
+        $moldingDieNo = $this->repo->fetchMoldingDieNo($row->PartNo);
 
         return [
             'partNo'         => (string) $row->PartNo,
@@ -54,6 +54,7 @@ class DimensionEncodingService
             'samplingQtyIP'  => $row->SamplingQtyIP !== null ? (string) $row->SamplingQtyIP : '',
             'samplingQtyMP'  => $row->SamplingQtyMP !== null ? (string) $row->SamplingQtyMP : '',
             'xBar'           => (bool) $row->XBar,
+            'moldingDieNo'   => $moldingDieNo
         ];
     }
 
@@ -85,7 +86,7 @@ class DimensionEncodingService
     // Specification and control limits (X-Bar dimensions)
     // ------------------------------------------------------------------
 
-    public function saveControlLimits(string $partNo, string $dimItem, array $limits): void
+    public function saveControlLimits(string $partNo, string $dimItem, int $dieNo, array $limits): void
     {
         $payload = [];
 
@@ -94,7 +95,7 @@ class DimensionEncodingService
             $payload[$field] = ($value === null || $value === '') ? null : (float) $value;
         }
 
-        $this->specsRepo->saveLimit(trim($partNo), trim($dimItem), $payload);
+        $this->specsRepo->saveLimit(trim($partNo), trim($dimItem), $dieNo, $payload);
     }
 
     // ------------------------------------------------------------------
@@ -229,7 +230,7 @@ class DimensionEncodingService
             ->all();
     }
 
-    public function nextDimensionNo(string $partNo):int
+    public function nextDimensionNo(string $partNo): int
     {
         return $this->repo->nextDimensionNo($partNo);
     }

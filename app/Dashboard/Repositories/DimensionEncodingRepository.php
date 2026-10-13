@@ -3,6 +3,7 @@
 namespace App\Dashboard\Repositories;
 
 use App\Dashboard\Models\DimensionMaster;
+use App\Domain\Master\MoldingPlan;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 
@@ -29,6 +30,14 @@ class DimensionEncodingRepository
     public function find(int $recNo): ?DimensionMaster
     {
         return DimensionMaster::find($recNo);
+    }
+
+    public function fetchMoldingDieNo(string $partNo): array
+    {
+        return MoldingPlan::where('品番', $partNo)
+            ->distinct()
+            ->pluck('金型NO')
+            ->toArray();
     }
 
     public function existsByPartAndDimensionNo(string $partNo, int $dimensionNo, ?int $ignoreRecNo = null): bool

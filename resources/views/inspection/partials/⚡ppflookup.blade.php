@@ -125,6 +125,8 @@ new class extends Component
             'fetchPartNo',
             partNo: $this->partNumber
         );
+
+        $this->dispatch('passMoldingDie',  moldingDieNo: $this->moldingDieNo);
         $this->dispatch('fetchMachineLotNo', machineNo: $this->machineNo, lotNo: $this->lotNo);
 
 

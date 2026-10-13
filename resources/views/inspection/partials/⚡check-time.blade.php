@@ -34,6 +34,7 @@ new class extends \Livewire\Component
     public array $controlLimitByTime = [];
     public array $modeByTime = [];
     public array $shotsByTime = [];
+    public int $moldingDieNo = 0;
 
     public bool $isMKA = false;
 
@@ -252,6 +253,13 @@ new class extends \Livewire\Component
         }
         $this->syncDraft();
     }
+
+     #[On('passMoldingDie')]
+    public function onMoldingDieChanged(string|int|null $moldingDieNo = null): void
+    {
+        $this->moldingDieNo = $moldingDieNo;
+    }
+
     #[On('remarks-synced')]
     public function onRemarksSynced(string $selectedCheckTime, string $remarks): void
     {
@@ -385,7 +393,8 @@ new class extends \Livewire\Component
         :loaded-rows="$dimensionsByTime[$selectedCheckTime] ?? []"
         :ppfno="$ppf"
         :partNo="$partNo"
-        :action="$action" />
+        :action="$action"
+        :moldingDieNo="$moldingDieNo" />
     <livewire:inspection::partials.remarks
         :key="'remarks-' . $selectedCheckTime"
         :selectedCheckTime="$selectedCheckTime"

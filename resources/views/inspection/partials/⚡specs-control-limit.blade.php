@@ -49,6 +49,11 @@ new class extends Component
 
     public int $rowIndex = -1;
 
+    #[Locked]
+    public array $moldingDieNo = [];
+
+    public string $selectedDie = '';
+
     public function syncDraft()
     {
         $this->dispatch('control-limit-synced', draft: [
@@ -66,18 +71,23 @@ new class extends Component
             'CCLr' => $this->CCLr,
             'UCLr' => $this->UCLr,
             'LCLr' => $this->LCLr,
+            'moldingDieNo' => $this->selectedDie,
         ]);
     }
 
     public function mount(
+        array $moldingDieNo = [],
         string $dimItem = '',
         string $partNo = '',
         int $rowIndex = -1,
         bool $standalone = false,
         ?float $USLx = null,
         ?float $LSLx = null,
-        ?float $specs = null
+        ?float $specs = null,
+        ?int $moldDie = 0
     ) {
+        $this->moldingDieNo = array_values(array_unique(array_map('strval', $moldingDieNo)));
+        $this->selectedDie = $this->moldingDieNo[0] ?? ($moldDie ? (string) $moldDie : '');
         $this->partNo = $partNo;
         $this->dimItem = $dimItem;
         $this->rowIndex = $rowIndex;
@@ -85,12 +95,21 @@ new class extends Component
         $this->specification = (string) $specs;
 
         if ($standalone) {
-            // X specification limits come from the DimensionMaster row (Upper/Lower Limit)
             $this->USLx = $this->specification + $USLx;
             $this->LSLx = $this->specification - $LSLx;
             $this->CSLx = (float) $this->specification;
         }
 
+        $this->resolveLimit();
+    }
+
+    public function updatedSelectedDie(string $value): void
+    {
+        if ($value !== '' && ! in_array($value, $this->moldingDieNo, true)) {
+            $this->selectedDie = $this->moldingDieNo[0] ?? '';
+        }
+
+        $this->resetErrorBag();
         $this->resolveLimit();
     }
 
@@ -111,13 +130,17 @@ new class extends Component
 
         return $rules;
     }
-
     public function save(DimensionEncodingService $service): void
     {
-        $this->validate(); // inline @error messages below
+        $this->validate();
+
+        if ($this->selectedDie === '') {
+            $this->addError('selectedDie', 'Select a molding die no.');
+            return;
+        }
 
         try {
-            $service->saveControlLimits($this->partNo, $this->dimItem, [
+            $service->saveControlLimits($this->partNo, $this->dimItem, (int) $this->selectedDie, [
                 'CSLx' => $this->CSLx,
                 'USLx' => $this->USLx,
                 'LSLx' => $this->LSLx,
@@ -132,19 +155,19 @@ new class extends Component
                 'LCLr' => $this->LCLr,
             ]);
 
-            $this->notifySuccess('Saved', 'Specification and control limit saved');
+            $this->notifySuccess('Saved', "Limits saved for die {$this->selectedDie}");
             $this->dispatch('limits-saved');
         } catch (\Throwable $e) {
             Log::error('Control limit save failed', [
                 'part_no'  => $this->partNo,
                 'dim_item' => $this->dimItem,
+                'die_no'   => $this->selectedDie,
                 'error'    => $e->getMessage(),
             ]);
 
             $this->notifyFail('Failed', 'Failed to save limits. Please try again.');
         }
     }
-
     #[On('dimension-spec-limits-changed')]
     public function onSpecLimitsChanged(int $rowIndex, float $CSLx, float $USLx, float $LSLx): void
     {
@@ -198,7 +221,13 @@ new class extends Component
 
     public function resolveLimit()
     {
-        $record = app(SpecsControlRepository::class)->fetchLimit($this->partNo, $this->dimItem);
+        $record = $this->selectedDie !== ''
+            ? app(SpecsControlRepository::class)->fetchLimit(
+                $this->partNo,
+                $this->dimItem,
+                (int) $this->selectedDie
+            )
+            : null;
 
         $this->CCLx = $record->CCLx ?? null;
         $this->UCLx = $record->UCLx ?? null;
@@ -234,6 +263,69 @@ new class extends Component
             </p>
         </div>
     </div>
+
+    @if (! empty($moldingDieNo))
+    <div class="mb-5"
+        wire:key="die-select-{{ $partNo }}-{{ $dimItem }}"
+        x-data="{
+        open: false,
+        q: '',
+        dies: @js($moldingDieNo),
+        get filtered() {
+            return this.q === ''
+                ? this.dies
+                : this.dies.filter(d => d.toLowerCase().includes(this.q.toLowerCase()));
+        },
+        pick(d) {
+            $wire.$set('selectedDie', d);
+            this.open = false;
+            this.q = '';
+        }
+    }"
+        @click.outside="open = false"
+        @keydown.escape.stop="open = false">
+
+        <label class="block text-sm font-medium text-gray-700 mb-1">Molding Die No</label>
+
+        <div class="relative">
+            <button type="button"
+                @click="open = !open; $nextTick(() => open && $refs.search.focus())"
+                @disabled($action==='view' )
+                class="w-full flex items-center justify-between rounded-lg border bg-white px-3 py-2 text-sm text-left focus:border-emerald-500 focus:ring-emerald-500 {{ $errors->has('selectedDie') ? 'border-red-400 ring-1 ring-red-300' : 'border-gray-300' }}">
+                <span class="{{ $selectedDie === '' ? 'text-gray-400' : 'text-gray-900' }}">
+                    {{ $selectedDie !== '' ? $selectedDie : 'Select molding die no' }}
+                </span>
+                <svg class="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
+                </svg>
+            </button>
+
+            <div x-show="open" x-cloak x-transition.opacity
+                class="absolute z-20 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg">
+                <div class="p-2 border-b border-gray-100">
+                    <input type="text" x-ref="search" x-model="q" placeholder="Search die no"
+                        @keydown.enter.prevent="filtered.length && pick(filtered[0])"
+                        class="w-full rounded-md border border-gray-300 text-sm focus:border-emerald-500 focus:ring-emerald-500">
+                </div>
+                <ul class="max-h-52 overflow-y-auto py-1">
+                    <template x-for="d in filtered" :key="d">
+                        <li>
+                            <button type="button" @click="pick(d)"
+                                class="w-full px-3 py-2 text-sm text-left hover:bg-emerald-50"
+                                :class="d === $wire.selectedDie ? 'bg-emerald-50 font-medium text-emerald-700' : 'text-gray-700'"
+                                x-text="d"></button>
+                        </li>
+                    </template>
+                    <li x-show="filtered.length === 0" class="px-3 py-2 text-sm text-gray-400">No die found.</li>
+                </ul>
+            </div>
+        </div>
+
+        @error('selectedDie')
+        <p class="mt-1.5 text-sm text-red-600">{{ $message }}</p>
+        @enderror
+    </div>
+    @endif
 
     @php
     $fieldGroups = [

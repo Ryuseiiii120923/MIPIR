@@ -2,6 +2,7 @@
 
 use App\Inspection\Repositories\Contracts\DimensionMasterRepositoryInterface;
 use App\Inspection\Services\Dimensions\DimensionsService;
+use Livewire\Attributes\On;
 use Livewire\Component;
 
 new class extends Component
@@ -17,17 +18,20 @@ new class extends Component
     public ?int $activeModalIndex = null;
     public string $modalStep = 'choose';
     public int $pendingSets = 1;
+    public int $moldingDieNo = 0;
 
     public function mount(
         ?string $selectedCheckTime = null,
         array $loadedRows = [],
         string $action,
         int $ppfno,
-        string $partNo
+        string $partNo,
+        int $moldingDieNo
     ): void {
         $this->selectedCheckTime = $selectedCheckTime;
         $this->ppfNumber = $ppfno;
         $this->partNo = $partNo;
+        $this->moldingDieNo = $moldingDieNo;
         $this->rows = !empty($loadedRows) ? $loadedRows : [
             [
                 'item' => '',
@@ -331,6 +335,12 @@ new class extends Component
 
         $this->syncToParent();
     }
+
+    #[On('passMoldingDie')]
+    public function fetchMoldingDie(int $moldingDieNo)
+    {
+        $this->moldingDieNo = $moldingDieNo;
+    }
 }
 ?>
 
@@ -536,6 +546,7 @@ new class extends Component
                     <livewire:inspection::partials.specs-control-limit
                         :dimItem="$row['item']"
                         :partNo="$partNo"
+                        :moldDie="$moldingDieNo"
                         :rowIndex="$i"
                         :key="'specs-control-limit-'.$i" />
                 </div>

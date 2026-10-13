@@ -50,6 +50,7 @@ new class extends Component
     public string $specTolerance = '';
     public string $specUpper = '';
     public string $specLower = '';
+    public array $moldingDieNo = [];
 
     public function openLimits(int $recNo, DimensionEncodingService $service): void
     {
@@ -72,6 +73,7 @@ new class extends Component
         $this->limitsUpper     = is_numeric($dim['upperLimit']) ? (float) $dim['upperLimit'] : null;
         $this->limitsLower     = is_numeric($dim['lowerLimit']) ? (float) $dim['lowerLimit'] : null;
         $this->showLimitsModal = true;
+        $this->moldingDieNo = $dim['moldingDieNo'];
     }
 
     #[On('limits-saved')]
@@ -79,7 +81,7 @@ new class extends Component
     public function closeLimits(): void
     {
         $this->showLimitsModal = false;
-        $this->reset(['limitsPartNo', 'limitsDimItem', 'limitsSpecification', 'limitsUpper', 'limitsLower']);
+        $this->reset(['limitsPartNo', 'limitsDimItem', 'limitsSpecification', 'limitsUpper', 'limitsLower', 'moldingDieNo']);
     }
 
     #[Computed]
@@ -654,6 +656,7 @@ new class extends Component
         wire:keydown.escape.window="closeLimits">
         <div class="w-full max-w-3xl my-auto">
             <livewire:inspection::partials.specs-control-limit
+                :moldingDieNo="$moldingDieNo"
                 :partNo="$limitsPartNo"
                 :dimItem="$limitsDimItem"
                 :specs="$limitsSpecification"
