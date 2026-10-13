@@ -11,10 +11,18 @@ use Livewire\Component;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Livewire\WithPagination;
 
 new class extends Component
 {
     use HasNotifications;
+    use WithPagination;
+
+    private const PER_PAGE = 10;
+
+    public string $search = '';
+    public string $plantFilter = '';
     public string $name = '';
     public string $employeeID = '';
     public string $plant = '';
@@ -28,12 +36,28 @@ new class extends Component
     public string $editPlant = '';
     public string $editEmployeeID = '';
 
+    public function updatingSearch(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatingPlantFilter(): void
+    {
+        $this->resetPage();
+    }
+
+    public function clearFilters(): void
+    {
+        $this->reset(['search', 'plantFilter']);
+        $this->resetPage();
+    }
+
     public function save(InspectorService $service): void
     {
         try {
             $data = $this->validate();
         } catch (ValidationException $e) {
-            $this->resetValidation(); // toast only, no inline @error
+            $this->resetValidation(); 
             $this->notifyFail('Validation Error', implode(', ', $e->validator->errors()->all()));
             return;
         }
@@ -120,11 +144,33 @@ new class extends Component
     }
 
     #[Computed]
-    public function inspectors()
+    public function inspectors(): LengthAwarePaginator
     {
-        return $this->allInspectors
+        $search = mb_strtolower(trim($this->search));
+
+        $rows = $this->allInspectors
             ->reject(fn($row) => (string) $row->employee_id === $this->pendingId)
+            ->when(
+                $this->plantFilter !== '',
+                fn($c) => $c->filter(fn($row) => (string) $row->plant === $this->plantFilter)
+            )
+            ->when(
+                $search !== '',
+                fn($c) => $c->filter(fn($row) => str_contains(mb_strtolower((string) $row->employee_id), $search)
+                    || str_contains(mb_strtolower((string) $row->inspector_id), $search)
+                    || str_contains(mb_strtolower((string) $row->name), $search))
+            )
             ->values();
+        $lastPage = max(1, (int) ceil($rows->count() / self::PER_PAGE));
+        $page = min($this->getPage(), $lastPage);
+
+        return new LengthAwarePaginator(
+            $rows->forPage($page, self::PER_PAGE)->values(),
+            $rows->count(),
+            self::PER_PAGE,
+            $page,
+            ['pageName' => 'page']
+        );
     }
 
     #[Computed]
@@ -432,8 +478,30 @@ new class extends Component
 
     {{-- Registered Inspectors Table --}}
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div class="px-6 py-4 border-b border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <h3 class="text-base font-semibold text-gray-800">Registered Inspectors</h3>
+
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <select wire:model.live="plantFilter"
+                    class="rounded-lg border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <option value="">All plants</option>
+                    @foreach (['P1A', 'P1B', 'P2'] as $option)
+                    <option value="{{ $option }}">{{ $option }}</option>
+                    @endforeach
+                </select>
+
+                <input type="text"
+                    wire:model.live.debounce.300ms="search"
+                    placeholder="Search employee ID, inspector ID, or name"
+                    class="w-full sm:w-72 rounded-lg border border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500">
+
+                @if ($search !== '' || $plantFilter !== '')
+                <button type="button" wire:click="clearFilters"
+                    class="text-sm text-gray-500 hover:text-gray-700 whitespace-nowrap">
+                    Clear filters
+                </button>
+                @endif
+            </div>
         </div>
 
         <div class="overflow-x-auto">
@@ -490,14 +558,26 @@ new class extends Component
                     @empty
                     <tr>
                         <td colspan="5" class="px-6 py-8 text-center text-sm text-gray-500">
-                            No inspectors registered yet.
+                            {{ ($search !== '' || $plantFilter !== '') ? 'No inspectors match your filters.' : 'No inspectors registered yet.' }}
                         </td>
-
                     </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
+
+        @if ($this->inspectors->total() > 0)
+        <div class="px-6 py-3 border-t border-gray-100 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p class="text-sm text-gray-500">
+                Showing {{ $this->inspectors->firstItem() }}–{{ $this->inspectors->lastItem() }}
+                of {{ $this->inspectors->total() }}
+            </p>
+
+            @if ($this->inspectors->hasPages())
+            <div>{{ $this->inspectors->links() }}</div>
+            @endif
+        </div>
+        @endif
     </div>
 
     @if ($editInspector)
