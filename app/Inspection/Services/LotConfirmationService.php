@@ -15,45 +15,10 @@ class LotConfirmationService
 {
     public function __construct(private LotConfirmationRepository $repo) {}
 
-    /** Tawagin pagkatapos ng bawat save ng inspector. Hindi dapat mabigo ang pag-save dahil dito. */
-    public function requestIfReady(int $ppf): void
+
+    public function confirm(int $id,string $inspectorId, string $employeeId): void
     {
-        try {
-            $record = MIPIRInspectionRecord::where('PPFNo', $ppf)->first(['PartNo', 'ProdLotNo', 'MachineNo']);
-
-            if ($record === null || ! $this->isReady((string) $record->PartNo, (string) $record->ProdLotNo)) {
-                return;
-            }
-
-            $lot = LotConfirmation::firstOrNew([
-                'PartNo'    => (string) $record->PartNo,
-                'ProdLotNo' => (string) $record->ProdLotNo,
-            ]);
-
-            // Naghihintay na ng GL: huwag nang gawin ulit
-            if ($lot->exists && $lot->Status === 'pending') {
-                return;
-            }
-
-            // Bago, rejected, o confirmed na may bagong save: balik sa pending
-            $lot->fill([
-                'Plant'        => Auth::user()->Plant ?? $lot->Plant,
-                'MachineNo'    => (string) $record->MachineNo,
-                'Status'       => 'pending',
-                'RequestedAt'  => now(),
-                'ConfirmedBy'  => null,
-                'ConfirmedAt'  => null,
-                'RejectedBy'   => null,
-                'RejectReason' => null,
-            ])->save();
-        } catch (\Throwable $e) {
-            Log::error('Lot confirmation request failed', ['PPFNo' => $ppf, 'error' => $e->getMessage()]);
-        }
-    }
-
-    public function confirm(int $id, string $employeeId): void
-    {
-        $lot = DB::connection('mipirDB')->transaction(function () use ($id, $employeeId) {
+        $lot = DB::connection('mipirDB')->transaction(function () use ($id, $employeeId, $inspectorId) {
             $lot = LotConfirmation::lockForUpdate()->findOrFail($id);
 
             if ($lot->Status !== 'pending') {
@@ -66,7 +31,7 @@ class LotConfirmationService
 
             $lot->update([
                 'Status'      => 'confirmed',
-                'ConfirmedBy' => $employeeId,
+                'ConfirmedBy' => $inspectorId,
                 'ConfirmedAt' => now(),
             ]);
 
@@ -101,25 +66,9 @@ class LotConfirmationService
         });
     }
 
-    // Tapos na ba ang lot: may check time F at may Flash Thickness at Gap-Offset
-    private function isReady(string $partNo, string $lotNo): bool
-    {
-        $ppfs = MIPIRInspectionRecord::where('PartNo', $partNo)
-            ->where('ProdLotNo', $lotNo)
-            ->pluck('PPFNo');
-
-        $hasF = MIPIRInspectionRecord::whereIn('PPFNo', $ppfs)->where('Checktime', 'F')->exists();
-
-        $hasItem = fn (string $item) => MIPIRDimensionMeasure::whereIn('PPFNo', $ppfs)
-            ->where('DimItem', $item)
-            ->exists();
-
-        return $hasF && $hasItem('Flash Thickness') && $hasItem('Gap-Offset');
-    }
 
     private function rebuildExcel(LotConfirmation $lot): void
     {
-        // Nasa iisang sheet ang buong lot, kaya isang refresh ng kahit anong PPF nito ay sapat
         $ppf = MIPIRInspectionRecord::where('PartNo', $lot->PartNo)
             ->where('ProdLotNo', $lot->ProdLotNo)
             ->value('PPFNo');
@@ -127,6 +76,71 @@ class LotConfirmationService
         if ($ppf !== null) {
             app(MipirRecordRefresher::class)->refresh((int) $ppf);
         }
-        // XBar, SAIR at Flash: parehong pattern, kapag handa na ang mga cell nila
+    }
+
+    public function submitForConfirmation(string $partNo, string $lotNo, string $employeeId): void
+    {
+        $record = MIPIRInspectionRecord::where('PartNo', $partNo)
+            ->where('ProdLotNo', $lotNo)
+            ->where('InspectBy', $employeeId)
+            ->first(['MachineNo']);
+
+        if ($record === null) {
+            throw new \DomainException('You have no inspection record for this lot.');
+        }
+
+        $plant = trim((string) (Auth::user()->Plant ?? ''));
+
+        if ($plant === '') {
+            throw new \DomainException('Your account has no plant. Please inform the staff.');
+        }
+
+        DB::connection('mipirDB')->transaction(function () use ($partNo, $lotNo, $record, $plant) {
+            $lot = LotConfirmation::where('PartNo', $partNo)
+                ->where('ProdLotNo', $lotNo)
+                ->lockForUpdate()
+                ->first() ?? new LotConfirmation(['PartNo' => $partNo, 'ProdLotNo' => $lotNo]);
+
+            if ($lot->Status === 'pending') {
+                throw new \DomainException('This lot is already waiting for the GL.');
+            }
+
+            if ($lot->Status === 'confirmed') {
+                throw new \DomainException('This lot is already confirmed.');
+            }
+
+            $lot->fill([
+                'Plant'        => $plant,
+                'MachineNo'    => (string) $record->MachineNo,
+                'Status'       => 'pending',
+                'RequestedAt'  => now(),
+                'ConfirmedBy'  => null,
+                'ConfirmedAt'  => null,
+                'RejectedBy'   => null,
+                'RejectReason' => null,
+            ])->save();
+        });
+    }
+
+    public function invalidateOnEdit(int $ppf): void
+    {
+        try {
+            $record = MIPIRInspectionRecord::where('PPFNo', $ppf)->first(['PartNo', 'ProdLotNo']);
+
+            if ($record === null) {
+                return;
+            }
+
+            LotConfirmation::where('PartNo', $record->PartNo)
+                ->where('ProdLotNo', $record->ProdLotNo)
+                ->whereIn('Status', ['pending', 'confirmed'])
+                ->update([
+                    'Status'      => 'draft',
+                    'ConfirmedBy' => null,
+                    'ConfirmedAt' => null,
+                ]);
+        } catch (\Throwable $e) {
+            Log::error('Lot confirmation invalidate failed', ['PPFNo' => $ppf, 'error' => $e->getMessage()]);
+        }
     }
 }

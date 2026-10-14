@@ -69,7 +69,7 @@ new class extends Component
 
     public function submit(): void
     {
-        if ($this->action === 'view') {
+        if (in_array($this->action, ['view', 'confirm'], true)) {
             return;
         }
 
@@ -174,6 +174,7 @@ new class extends Component
         'edit' => ['ti-edit', 'Update', 'green'],
         'view' => ['ti-eye', 'View', 'yellow'],
         'delete' => ['ti-trash', 'Delete', 'red'],
+        'confirm' => ['ti-checklist', 'Confirm Done', 'purple'],
         ] as $key => [$icon, $label, $color])
         <button
             wire:click="setAction('{{ $key }}')"
@@ -182,6 +183,7 @@ new class extends Component
             'border-green-700 bg-green-50 text-green-700' => $action === $key && $key === 'edit',
             'border-yellow-500 bg-yellow-50 text-yellow-700' => $action === $key && $key === 'view',
             'border-red-700 bg-red-50 text-red-700' => $action === $key && $key === 'delete',
+            'border-purple-600 bg-purple-50 text-purple-700' => $action === $key && $key === 'confirm',
             ])>
             <i class="ti {{ $icon }} text-xl"></i>
             <span>{{ $label }}</span>
@@ -200,7 +202,7 @@ new class extends Component
     </div>
 
     <div class="flex items-center justify-center mt-4 @if($this->selectedPpf === 0) opacity-50 cursor-not-allowed @endif">
-        @if($action !== '' && $action !== 'view')
+        @if(!in_array($action, ['', 'view', 'confirm'], true))
         <div class="flex flex-col items-center p-6">
             <button wire:key="encoding-button"
                 wire:click="submit"

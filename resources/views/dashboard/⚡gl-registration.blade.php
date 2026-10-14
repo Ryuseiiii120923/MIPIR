@@ -2,6 +2,7 @@
 
 use App\Dashboard\Repositories\GroupLeaderRepository;
 use App\Dashboard\Services\GroupLeaderService;
+use App\Domain\Worker\InspectorID;
 use App\Traits\HasNotifications;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
@@ -17,11 +18,13 @@ new class extends Component
     public string $name = '';
     public string $plant = '';
     public string $machineNo = '';
+    public string $inspectorNo = '';
 
     protected function rules(): array
     {
         return [
             'employeeID' => ['required', 'digits_between:3,5'],
+            'inspectorNo' => ['required', 'string'],
             'plant'      => ['required', Rule::in(['P1A', 'P1B', 'P2'])],
             'machineNo'  => ['nullable', 'string', 'max:20'],
         ];
@@ -35,7 +38,27 @@ new class extends Component
 
     public function checkName(GroupLeaderRepository $repository): void
     {
+        if (trim($this->employeeID) === '') {
+            $this->reset('name', 'inspectorNo');
+            return;
+        }
+
         $this->name = $repository->nameOf($this->employeeID);
+        $this->inspectorNo = (string) $this->checkInspectorNo();
+    }
+
+    public function checkInspectorNo(): ?string
+    {
+        $inspector = InspectorID::query()
+            ->where('社員CD', $this->employeeID)
+            ->first(['区分', '作業員CD']);
+
+        if (! $inspector || (string) $inspector->区分 !== '3') {
+
+            return null;
+        }
+
+        return (string) $inspector->作業員CD;
     }
 
     public function save(GroupLeaderService $service): void
@@ -49,7 +72,7 @@ new class extends Component
         }
 
         try {
-            $service->register($this->employeeID, $this->plant, $this->machineNo);
+            $service->register($this->employeeID, $this->plant, $this->machineNo, $this->inspectorNo);
 
             $this->reset(['employeeID', 'name', 'plant', 'machineNo']);
             unset($this->groupLeaders);
@@ -96,6 +119,14 @@ new class extends Component
                     <label for="gl_employee_id" class="block text-sm font-medium text-gray-700 mb-1">Employee ID</label>
                     <input type="text" id="gl_employee_id" wire:model="employeeID" wire:blur="checkName" placeholder="xxxx"
                         class="w-full rounded-lg border border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500">
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <div>
+                        <label for="gl_inspector_no" class="block text-sm font-medium text-gray-700 mb-1">Inspector ID</label>
+                        <input type="text" id="gl_inspector_no" wire:model="inspectorNo"
+                            class="w-full rounded-lg border border-gray-300 bg-gray-50 text-sm text-gray-600">
+                    </div>
                 </div>
 
                 <div>

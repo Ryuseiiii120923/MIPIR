@@ -107,6 +107,13 @@ new class extends Component
         $this->reportValidity();
     }
 
+    private function clearBlockingErrors(array $times): void
+{
+    foreach ($times as $time) {
+        $this->dispatch('blocking-errors', source: 'dimensions:' . $time, errors: []);
+    }
+}
+
     private function reportValidity(): void
     {
         $this->dispatch(

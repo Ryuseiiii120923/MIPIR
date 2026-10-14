@@ -8,7 +8,7 @@ class GroupLeaderService
 {
     public function __construct(private GroupLeaderRepository $repository) {}
 
-    public function register(string $employeeId, string $plant, ?string $machineNo): void
+    public function register(string $employeeId, string $plant, ?string $machineNo, string $inspectorNo): void
     {
         // Kailangan may account sa PASWORD, kung hindi ay hindi makakapag-login
         if (! $this->repository->employeeHasLogin($employeeId)) {
@@ -21,7 +21,8 @@ class GroupLeaderService
             $employeeId,
             $this->repository->nameOf($employeeId),
             $plant,
-            $machineNo
+            $machineNo,
+            $inspectorNo
         );
     }
 

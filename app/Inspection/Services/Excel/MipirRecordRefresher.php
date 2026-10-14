@@ -9,12 +9,9 @@ use Illuminate\Support\Facades\Log;
 
 class MipirRecordRefresher
 {
-    private const MAX_SLOTS_PER_SHEET = 21; // row capacity ng template
+    private const MAX_SLOTS_PER_SHEET = 21; 
 
-    /**
-     * I-rebuild ang MIPIR_{PartNumber}_{petsa}.xlsx ng part number ng PPF na ito.
-     * Ang mga sheet na nauuna sa sheet ng PPF ay hindi ginagalaw.
-     */
+
     public function refresh(int $ppf): void
     {
         try {
@@ -25,8 +22,6 @@ class MipirRecordRefresher
             }
 
             $sheets = $this->buildSheets($partNo);
-
-            // Unang sheet na may PPF na ito
             $from = null;
             foreach ($sheets as $i => $sheet) {
                 if (in_array((string) $ppf, $sheet['ppfs'], true)) {
@@ -71,7 +66,6 @@ class MipirRecordRefresher
                 $files[$i] = $path;
             }
         } catch (\Throwable $e) {
-            // Hindi dapat mabigo ang pag-save dahil sa Excel
             Log::error('MIPIR record refresh failed', [
                 'PPFNo' => $ppf,
                 'error' => $e->getMessage(),
@@ -80,11 +74,6 @@ class MipirRecordRefresher
         }
     }
 
-    /**
-     * Lahat ng lot ng part number, pinakaluma muna, hinati sa mga sheet na 21 rows bawat isa.
-     *
-     * @return array<int, array{lots: array, ppfs: array<int,string>, slots: int}>
-     */
     private function buildSheets(string $partNo): array
     {
         $encoded = CheckTime::where('PartNo', $partNo)
@@ -115,9 +104,7 @@ class MipirRecordRefresher
 
         foreach ($lots as $entries) {
             $count = count($entries);
-
-            // Hindi na kasya sa sheet: magsimula ng bago
-            if ($current['lots'] !== [] && $current['slots'] + $count > self::MAX_SLOTS_PER_SHEET) {
+           if ($current['lots'] !== [] && $current['slots'] + $count > self::MAX_SLOTS_PER_SHEET) {
                 $sheets[] = $current;
                 $current  = ['lots' => [], 'ppfs' => [], 'slots' => 0];
             }
@@ -136,7 +123,6 @@ class MipirRecordRefresher
         return $sheets;
     }
 
-    /** MIPIR_{PartNo}_*.xlsx ng part number, pinakaluma muna */
     private function existingFiles(string $dir, string $safePart): array
     {
         $prefix = "MIPIR_{$safePart}_";
@@ -151,7 +137,6 @@ class MipirRecordRefresher
         return array_values($files);
     }
 
-    /** MIPIR_{PartNo}_{petsa}.xlsx, may suffix kung may kapareho na ngayong araw */
     private function newFilePath(string $dir, string $safePart): string
     {
         $base = sprintf('MIPIR_%s_%s', $safePart, now()->format('Y-m-d'));

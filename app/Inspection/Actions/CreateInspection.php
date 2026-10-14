@@ -316,12 +316,10 @@ class CreateInspection
             }
         });
 
-        // Excel: isang beses na lang gagawin bawat save, galing sa laman ng database
         $this->refreshTightenedFlashExcel($ppf, $ppfLookUp, $inspectorNo, $checkTimes, $touchedCheckTimes, $dimensions, $composedRemarks, $deletedCheckTimes);
         $this->refreshTightenedGapOffsetExcel($ppf, $ppfLookUp, $inspectorNo, $checkTimes, $touchedCheckTimes, $dimensions, $composedRemarks, $deletedCheckTimes);
         $this->refreshTightenedDefectsExcel($ppf, $ppfLookUp, $inspectorNo, $checkTimes, $modeByTime, $shotsByTime);
         app(MipirRecordRefresher::class)->refresh($ppf);
-        app(LotConfirmationService::class)->requestIfReady($ppf);
         $this->refreshXBarExcel($xbarJobs, Auth::user()->Plant ?? null);
 
         if ($recordDuration) {
@@ -363,7 +361,6 @@ class CreateInspection
         $isTightenedFlash = fn($row) => $isFlash($row)
             && strcasecmp((string) ($row['mode'] ?? ''), 'tightened') === 0;
 
-        // Builds the tightened Flash Thickness rows straight from the submitted measurements
         $flashRowsFor = function (array $times) use ($dimensions, $remarks, $isTightenedFlash): array {
             $rows = [];
 
@@ -389,7 +386,6 @@ class CreateInspection
         foreach ($touchedCheckTimes as $checkTime) {
             foreach ($dimensions[$checkTime] ?? [] as $row) {
                 if ($isFlash($row) && ! $isTightenedFlash($row)) {
-                    // Flash row is now Normal: an old tightened row may have to leave the file
                     $needsRebuild = true;
                 }
             }
@@ -407,7 +403,6 @@ class CreateInspection
             return;
         }
 
-        // Every remaining check time, used for a full rebuild of the sheet
         $deletedTimes = array_column($deletedCheckTimes, 'time');
         $allRows = $flashRowsFor(array_values(array_diff($checkTimes, $deletedTimes)));
 

@@ -24,11 +24,11 @@ class GroupLeaderRepository
         return (string) (WorkerName::where('社員CD', $employeeId)->value('名前') ?? '');
     }
 
-    public function register(string $employeeId, string $name, string $plant, ?string $machineNo): GroupLeader
+    public function register(string $employeeId, string $name, string $plant, ?string $machineNo, string $inspectorNo): GroupLeader
     {
         return GroupLeader::updateOrCreate(
             ['EmployeeID' => $employeeId, 'Plant' => $plant, 'MachineNo' => $machineNo],
-            ['Name' => $name, 'IsActive' => true]
+            ['Name' => $name, 'IsActive' => true, 'InspectorNo' => $inspectorNo]
         );
     }
 

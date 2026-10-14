@@ -3,6 +3,7 @@
 namespace App\Inspection\Services\Excel;
 
 use App\Inspection\Models\Defect;
+use App\Inspection\Models\GroupLeader\LotConfirmation;
 use App\Inspection\Models\MIPIRInspectionRecord;
 use App\Inspection\Repositories\Excel\ExcelDataRepository;
 use Illuminate\Support\Facades\File;
@@ -219,6 +220,12 @@ class InspectionRecordService
                     $record = MIPIRInspectionRecord::where('PPFNo', $ppf)
                         ->where('Checktime', $entry['checktime'])
                         ->first();
+                    $confirmedBy = LotConfirmation::query()
+                        ->where('PartNo', $record->PartNo)
+                        ->where('ProdLotNo', $record->ProdLotNo)
+                        ->where('MachineNo', $record->MachineNo)
+                        ->where('Status', 'confirmed')
+                        ->value('ConfirmedBy');
 
                     if (! $record) {
                         $slotIndex++;
@@ -243,7 +250,7 @@ class InspectionRecordService
                             "{$trailing['stamp']}{$groupStartRow}",
                             $record->InspectBy . "\n" . Carbon::parse($record->DateJudge)->format('y.m.d') . "\n" . $record->Judgement
                         );
-                        $sheet->setCellValue("{$trailing['confirmedBy']}{$groupStartRow}", $record->ConfirmedBy);
+                        $sheet->setCellValue("{$trailing['confirmedBy']}{$groupStartRow}", $confirmedBy);
                         $stampWritten = true;
                     }
                 }

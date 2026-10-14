@@ -29,8 +29,6 @@ class AuthController extends Controller
             'Supervisor',
             'Coordinator',
             'Nurse',
-            'GL',
-            'Deputy GL',
             'Manager',
             'Deputy Manager',
             'Head',
