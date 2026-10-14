@@ -53,7 +53,7 @@
 <body class="overflow-x-hidden font-sans">
     <livewire:notification.pop-up-notif />
     <livewire:notification.session-modal-notification />
-
+    @php $hideSidebar = request()->routeIs('lot-confirmation'); @endphp
     <div
         x-data="{
     mobileOpen: false,
@@ -65,6 +65,7 @@
     }
 }"
         @keydown.escape.window="mobileOpen = false; desktopExpanded = false">
+        @unless($hideSidebar)
         <div
             x-show="mobileOpen"
             x-transition:enter="transition ease-out duration-200"
@@ -137,8 +138,11 @@
                 </button>
             </div>
 
+
             <x-ui.sidebar></x-ui.sidebar>
+
         </aside>
+
 
 
         <button
@@ -152,9 +156,9 @@
                 <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
             </svg>
         </button>
-
+        @endunless
         <header class="fixed top-0 right-0 z-20 bg-emerald-600 shadow-md
-                   left-0  @if(request()->input('systemname') !== 'ProcessRecord') lg:left-16 transition-[left] duration-300 @endif">
+           left-0 @if(!$hideSidebar && request()->input('systemname') !== 'ProcessRecord') lg:left-16 transition-[left] duration-300 @endif">
             <div class="w-full px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between" style="height: 72px;">
 
 
@@ -184,7 +188,7 @@
 
             </div>
         </header>
-        <main @click="desktopExpanded = false; mobileOpen = false" class="pt-[72px] lg:pl-16 transition-[padding] duration-300 min-h-screen">
+        <main @click="desktopExpanded = false; mobileOpen = false" class="pt-[72px] {{ $hideSidebar ? '' : 'lg:pl-16' }} lg:pl-16 transition-[padding] duration-300 min-h-screen">
             <div class="px-4 sm:px-6 lg:px-8 py-6">
                 <h1 class="text-2xl sm:text-3xl md:text-4xl font-bold mb-6 text-gray-800 text-center sm:text-left">
                     Welcome, {{

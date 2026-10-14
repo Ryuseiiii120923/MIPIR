@@ -24,8 +24,13 @@ class DimensionsService
 
     public function requiredFieldErrors(array $row): array
     {
-        // A card that was never set up has nothing to validate
+        // Card na hindi pa na-set up: walang ive-validate
         if (array_key_exists('revealed', $row) && ! $row['revealed']) {
+            return [];
+        }
+
+        // Row na galing sa database (wala pang 'revealed') at walang measurement: hindi pa ito ginalaw
+        if (! array_key_exists('revealed', $row) && empty($row['measurements'])) {
             return [];
         }
 
@@ -33,7 +38,10 @@ class DimensionsService
         $label = $item !== '' ? $item : 'Dimension';
         $errors = [];
 
-        if ($this->isSpecificationEmpty($row)) {
+        // Kung may naka-save o nabuo nang specification text, hindi ito empty
+        $hasSpecificationText = trim((string) ($row['specification'] ?? '')) !== '';
+
+        if (! $hasSpecificationText && $this->isSpecificationEmpty($row)) {
             $errors['specification'] = "{$label}: specification is empty. Please inform Staff or GL to update the Dimension Master.";
         }
 

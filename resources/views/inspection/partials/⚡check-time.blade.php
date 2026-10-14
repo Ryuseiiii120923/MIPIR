@@ -128,8 +128,16 @@ new class extends \Livewire\Component
         $this->selectedCheckTime = $this->selectedCheckTime === $time ? null : $time;
     }
 
+     public function clearBlockingErrors(array $times): void
+    {
+        foreach ($times as $time) {
+            $this->dispatch('blocking-errors', source: 'dimensions:' . $time, errors: []);
+        }
+    }
+
     public function removeCheckTime(string $time): void
     {
+        $this->clearBlockingErrors([$time]);
         $this->deletedCheckTime[] = [
             'time' => $time,
             'dimensions' => $this->dimensionsByTime[$time] ?? [],
@@ -233,6 +241,7 @@ new class extends \Livewire\Component
 
     public function clear(): void
     {
+        $this->clearBlockingErrors($this->checkTimes);
         $this->reset([
             'checkTime',
             'checkTimes',
@@ -292,6 +301,7 @@ new class extends \Livewire\Component
 
             // Update: ang mga check time na nasa database ay makikita lang, hindi na mae-edit
             $this->lockedCheckTimes = $this->action === 'edit' ? $this->checkTimes : [];
+            $this->clearBlockingErrors($this->lockedCheckTimes);
         }
         $this->syncDraft();
     }

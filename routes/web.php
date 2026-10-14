@@ -17,15 +17,19 @@ Route::middleware('auth:worker')->group(function () {
     Route::view('/', 'index')->name('landing-page');
 });
 
-Route::middleware('auth:web')->group(function () {
+Route::middleware(['auth:web', 'staff-only'])->group(function () {
     Route::view('/dashboard', 'dashboard')->name('dashboard');
-    Route::post('/logout/web', [AuthController::class, 'logout'])->name('web.logout');
     Route::get('/inspection/xbar/download', GenerateExcel::class)
         ->name('inspection.xbar.download');
-
     Volt::route('/reports', 'inspection::reports-browser')->name('reports.browser');
-
     Route::get('/symbols/{symbol}', SymbolController::class)
         ->where('symbol', '[0-9]+')
         ->name('symbols.show');
 });
+
+Route::middleware('auth:web')->post('/logout/web', [AuthController::class, 'logout'])
+    ->name('web.logout');
+
+Route::middleware(['auth:web', 'can:confirm-lots'])
+    ->get('/lot-confirmation', fn() => view('lot-confirmation'))
+    ->name('lot-confirmation');

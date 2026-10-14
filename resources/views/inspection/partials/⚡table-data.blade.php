@@ -8,6 +8,7 @@ use Livewire\Attributes\On;
 use Livewire\WithPagination;
 use App\Traits\HasNotifications;
 use App\Traits\WithLoading;
+use App\Inspection\Repositories\LotConfirmationRepository;
 
 new class extends Component
 {
@@ -19,6 +20,12 @@ new class extends Component
     public string $action = '';
     public int $encoder = 0;
 
+    public bool $isGl = false;
+    public string $confirmSearch = '';
+    public ?int $rejectingId = null;
+    public string $rejectReason = '';
+
+
     public function mount()
     {
         $this->encoder = Auth::user()->EmployeeID;
@@ -29,13 +36,16 @@ new class extends Component
     public function onActionChanged($action)
     {
         $this->action = $action;
-        if ($this->action != 'add') {
-            $this->isHideTable = false;
-        } else {
-            $this->isHideTable = true;
-        }
+        $this->isHideTable = in_array($action, ['add', 'confirm'], true);
+        $this->reset('confirmSearch');
         $this->resetPage();
+        $this->resetPage('confirmationPage');
         $this->search = '';
+    }
+
+    public function updatedConfirmSearch(): void
+    {
+        $this->resetPage('confirmationPage');
     }
 
     #[Computed]
@@ -48,15 +58,38 @@ new class extends Component
         return app(PpfLookUpRepository::class)->getDataforSearch($this->search, $this->encoder);
     }
 
-    public function confirm_ppf(int $ppf){
-     $this->startLoading('Loading PPF...', 'Please wait while we load the record');
-    
-     $this->dispatch('lookup_ppf', $ppf);
+    public function confirm_ppf(int $ppf)
+    {
+        $this->startLoading('Loading PPF...', 'Please wait while we load the record');
+
+        $this->dispatch('lookup_ppf', $ppf);
     }
 
     #[On('stopLoading')]
-    public function stopLoading(){
+    public function stopLoading()
+    {
         $this->stopLoading();
+    }
+
+
+
+    #[Computed]
+    public function forConfirmation()
+    {
+        return app(LotConfirmationRepository::class)
+            ->getInspectorLots((string) $this->encoder, $this->confirmSearch);
+    }
+
+    public function requestConfirmation(int $ppf): void
+    {
+        $error = app(LotConfirmationRepository::class)
+            ->requestForPpf($ppf, (string) $this->encoder);
+
+        if ($error !== null) {
+            $this->notifyFail('Cannot confirm', $error);
+        }
+
+        unset($this->forConfirmation);
     }
 };
 ?>
@@ -81,7 +114,7 @@ new class extends Component
                     <th class="px-4 py-2">Action</th>
                 </tr>
             </thead>
-            <tbody class = "bg-gray-700">
+            <tbody class="bg-gray-700">
                 @forelse($this->data as $d)
                 <tr>
                     <td class="px-4 py-2 text-center">{{ $d->PPFNo }}</td>
@@ -92,35 +125,32 @@ new class extends Component
                         @if($action === 'edit')
                         <button class="text-white bg-blue-600 px-4 py-2 rounded"
                             wire:loading.attr="disabled"
-                            wire:click.throttle.10000ms="confirm_ppf({{ $d->PPFNo}})"
-                           >
+                            wire:click.throttle.10000ms="confirm_ppf({{ $d->PPFNo}})">
                             Edit
                         </button>
 
                         @elseif($action === 'view')
                         <button class="text-white bg-gray-500 px-4 py-2 rounded"
                             wire:loading.attr="disabled"
-                            wire:click.throttle.10000ms="confirm_ppf({{ $d->PPFNo}})"
-                           >
+                            wire:click.throttle.10000ms="confirm_ppf({{ $d->PPFNo}})">
                             View
                         </button>
 
                         @elseif($action === 'delete')
                         <button class="text-white bg-red-600 px-4 py-2 rounded"
                             wire:loading.attr="disabled"
-                            wire:click.throttle.10000ms="confirm_ppf({{ $d->PPFNo}})"
-                           >
+                            wire:click.throttle.10000ms="confirm_ppf({{ $d->PPFNo}})">
                             Delete
                         </button>
                         @endif
                     </td>
                 </tr>
-             
+
                 @empty
                 <tr>
                     <td colspan="5" class="px-6 py-4 text-center">No record added yet.</td>
                 </tr>
-                   @endforelse
+                @endforelse
 
             </tbody>
         </table>
@@ -129,4 +159,78 @@ new class extends Component
         {{ $this->data->links() }}
     </div>
     @endunless
+
+    @if($action === 'confirm')
+    <div class="w-full flex flex-col gap-3">
+        <div class="w-full flex justify-between items-center">
+            <h2 class="text-lg font-semibold">Confirm Done</h2>
+            <input type="text" wire:model.live.debounce.400ms="confirmSearch"
+                placeholder="Search PPF..."
+                class="px-4 py-2 border rounded-md focus:outline-none focus:ring focus:border-blue-300">
+        </div>
+
+        <div class="w-full overflow-x-auto">
+            <table class="table-auto w-full text-sm text-white bg-gray-800 rounded-lg overflow-hidden">
+                <thead>
+                    <tr class="bg-gray-900 text-center">
+                        <th class="px-4 py-2">PPFNo</th>
+                        <th class="px-4 py-2">PartNo</th>
+                        <th class="px-4 py-2">Molding Die</th>
+                        <th class="px-4 py-2">Prod Lot No</th>
+                        <th class="px-4 py-2">Machine No</th>
+                        <th class="px-4 py-2">Date Judge</th>
+                        <th class="px-4 py-2">Status</th>
+                        <th class="px-4 py-2">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-gray-700">
+                    @forelse($this->forConfirmation as $d)
+                    @php $st = strtolower((string) $d->Status); @endphp
+                    <tr wire:key="fc-{{ $d->PPFNo }}">
+                        <td class="px-4 py-2 text-center">{{ $d->PPFNo }}</td>
+                        <td class="px-4 py-2 text-center">{{ $d->PartNo }}</td>
+                        <td class="px-4 py-2 text-center">{{ $d->MDNo }}</td>
+                        <td class="px-4 py-2 text-center">{{ $d->ProdLotNo }}</td>
+                        <td class="px-4 py-2 text-center">{{ $d->MachineNo }}</td>
+                        <td class="px-4 py-2 text-center">{{ $d->DateJudge }}</td>
+                        <td class="px-4 py-2 text-center">
+                            @if($st === 'pending')
+                            <span class="px-2 py-1 rounded bg-yellow-600">Waiting for GL</span>
+                            @elseif($st === 'confirmed')
+                            <span class="px-2 py-1 rounded bg-green-700">Confirmed</span>
+                            @elseif($st === 'rejected')
+                            <span class="px-2 py-1 rounded bg-red-700">Rejected</span>
+                            <p class="text-xs text-red-300 mt-1">{{ $d->RejectReason }}</p>
+                            @else
+                            <span class="px-2 py-1 rounded bg-gray-500">Not yet confirmed</span>
+                            @endif
+                        </td>
+                        <td class="px-4 py-2 flex justify-center gap-2">
+                            <button class="bg-gray-500 px-3 py-2 rounded"
+                                wire:loading.attr="disabled"
+                                wire:click.throttle.10000ms="confirm_ppf({{ $d->PPFNo }})">View</button>
+
+                            @if($st === '' || $st === 'rejected')
+                            <button class="bg-green-600 px-3 py-2 rounded"
+                                wire:loading.attr="disabled"
+                                wire:click="requestConfirmation({{ $d->PPFNo }})"
+                                wire:confirm="Are you finished with PPF {{ $d->PPFNo }}? It will be sent to your GL for confirmation."> Done
+                            </button>
+                            @endif
+                        </td>
+                    </tr>
+                    @empty
+                    <tr>
+                        <td colspan="8" class="px-6 py-4 text-center">No record found.</td>
+                    </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+
+        <div class="w-full">
+            {{ $this->forConfirmation->links() }}
+        </div>
+    </div>
+    @endif
 </div>

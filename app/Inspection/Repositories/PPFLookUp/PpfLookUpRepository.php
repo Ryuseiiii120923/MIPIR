@@ -416,4 +416,6 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
 
         return ['mode' => 'tightened', 'shots' => $shots];
     }
+
+    
 }
