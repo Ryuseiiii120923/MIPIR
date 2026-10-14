@@ -98,15 +98,45 @@ new class extends Component
     }
 
     private function reportValidity(): void
-{
-    $blocked = $this->ppf === 0 || in_array($this->action, ['view', 'delete'], true);
+    {
+        $blocked = $this->ppf === 0 || in_array($this->action, ['view', 'delete'], true);
 
-    $this->dispatch(
-        'blocking-errors',
-        source: 'gap-offset',
-        errors: $blocked ? [] : array_values($this->requiredFieldErrors()),
-    );
-}
+        $this->dispatch(
+            'blocking-errors',
+            source: 'gap-offset',
+            errors: $blocked ? [] : array_values($this->requiredFieldErrors()),
+        );
+    }
+
+    private function requiredFieldErrors(): array
+    {
+        $errors = [];
+
+        $blank = fn($v) => trim((string) $v) === '';
+
+        if ($blank($this->prodLotNo)) {
+            $errors['prodLotNo'] = 'Production Lot No. is required.';
+        }
+
+        $specComplete = match ($this->specType) {
+            'max', 'min'     => ! $blank($this->specNominal),
+            'tolerance'      => ! $blank($this->specNominal) && ! $blank($this->specTolerance),
+            'tolerance_diff' => ! $blank($this->specNominal)
+                && ! $blank($this->specUpper)
+                && ! $blank($this->specLower),
+            default          => false, // no specType resolved
+        };
+
+        if (! $specComplete) {
+            $errors['specification'] = 'Dimension specification is required.';
+        }
+
+        if ($blank($this->controlLimit)) {
+            $errors['controlLimit'] = 'Control Limit is required.';
+        }
+
+        return $errors;
+    }
 
     #[On('action-changed-gapoffset')]
     public function onActionChanged(string $action): void
@@ -133,6 +163,7 @@ new class extends Component
             ]);
         }
         $this->action = $action;
+         $this->reportValidity();
 
         $this->dispatch('gap-offset-action', action: $action, mode: 'gap-offset');
     }
@@ -383,6 +414,10 @@ new class extends Component
                     $this->evaluateJudge($time);
                 }
             }
+        }
+
+        if (in_array($property, ['prodLotNo', 'specType', 'specNominal', 'specTolerance', 'specUpper', 'specLower', 'controlLimit'], true)) {
+            $this->reportValidity();
         }
     }
 
