@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Inspection\Models\WorkerLogin;
+use App\Inspection\Repositories\LotConfirmationRepository;
 use Illuminate\Support\Facades\Log;
 
 class AuthController extends Controller
@@ -56,19 +57,23 @@ class AuthController extends Controller
             return redirect()->route('landing-page');
         }
 
-        // Check if the user is authorized staff
         $isStaff = Staff::where('staffNo', $userid)
             ->whereIn('newPos', $allowedPositions)
             ->exists();
 
-        if ($isStaff) {
+        $isGl = ! $isStaff && app(LotConfirmationRepository::class)->isGl((string) $userid);
+
+        if ($isStaff || $isGl) {
             $user = PASWORD::where('社員CD', $userid)->first();
 
             if ($user && $user->PASSWORD === $password) {
                 Auth::guard('web')->login($user);
                 $request->session()->regenerate();
 
-                return redirect()->route('landing-page');
+                // 'gl' = pinayagan lang sa GL table; 'staff' = pasok sa position
+                $request->session()->put('access', $isGl ? 'gl' : 'staff');
+
+                return redirect()->route($isGl ? 'lot-confirmation' : 'landing-page');
             }
 
             return back()

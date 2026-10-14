@@ -19,6 +19,7 @@ use App\Inspection\Services\Excel\InsertTightenedGapOring;
 use App\Inspection\Services\Excel\InspectionXBarService;
 use App\Inspection\Services\Excel\MipirRecordRefresher;
 use App\Inspection\Services\Excel\MIPIRRecordCycleTracker;
+use App\Inspection\Services\LotConfirmationService;
 use App\Inspection\Services\Saving\CreateInspectionService;
 use App\Inspection\Services\XBarCycleTracker;
 use Illuminate\Support\Carbon;
@@ -320,6 +321,7 @@ class CreateInspection
         $this->refreshTightenedGapOffsetExcel($ppf, $ppfLookUp, $inspectorNo, $checkTimes, $touchedCheckTimes, $dimensions, $composedRemarks, $deletedCheckTimes);
         $this->refreshTightenedDefectsExcel($ppf, $ppfLookUp, $inspectorNo, $checkTimes, $modeByTime, $shotsByTime);
         app(MipirRecordRefresher::class)->refresh($ppf);
+        app(LotConfirmationService::class)->requestIfReady($ppf);
         $this->refreshXBarExcel($xbarJobs, Auth::user()->Plant ?? null);
 
         if ($recordDuration) {

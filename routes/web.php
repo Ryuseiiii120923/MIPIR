@@ -29,3 +29,7 @@ Route::middleware('auth:web')->group(function () {
         ->where('symbol', '[0-9]+')
         ->name('symbols.show');
 });
+
+Route::middleware(['auth:web', 'can:confirm-lots'])
+    ->get('/lot-confirmation', fn() => view('inspection.lot-confirmation'))
+    ->name('lot-confirmation');
