@@ -2,9 +2,11 @@
 
 namespace App\Providers;
 
+use App\Inspection\Repositories\LotConfirmationRepository;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -39,6 +41,11 @@ class AppServiceProvider extends ServiceProvider
             }
         });
         $this->configureDefaults();
+
+        Gate::define('confirm-lots', function ($user) {
+            return app(LotConfirmationRepository::class)
+                ->isGl((string) $user->{'社員CD'});
+        });
     }
 
     /**
