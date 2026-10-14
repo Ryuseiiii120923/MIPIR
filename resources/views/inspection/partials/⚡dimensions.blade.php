@@ -129,6 +129,9 @@ new class extends Component
         if (preg_match('/^rows\.(\d+)\.(specType|specNominal|specTolerance|specUpper|specLower|CL|measurements|measurements_y)(\..+)?$/', $property, $matches)) {
             $this->evaluateRow((int) $matches[1]);
         }
+        if (preg_match('/^rows\.(\d+)\.item$/', $property, $m) && !empty($this->rows[(int) $m[1]]['editable'])) {
+            $this->itemSuggestions = app(DimensionMasterRepositoryInterface::class)->search($value, $this->partNo);
+        }
         if (str_starts_with($property, 'rows.')) {
             $this->syncToParent();
         }
@@ -232,7 +235,7 @@ new class extends Component
         $this->activeModalIndex = $index;
         $this->modalStep = 'choose';
         $this->pendingSets = 1;
-        $this->initItem();
+        $this->initItem($index);
     }
 
     public function closeDimensionModal(): void
@@ -240,6 +243,24 @@ new class extends Component
         $this->activeModalIndex = null;
         $this->modalStep = 'choose';
         $this->pendingSets = 1;
+    }
+
+    public function cancelDimensionModal(): void
+    {
+        $i = $this->activeModalIndex;
+
+        if ($i !== null && isset($this->rows[$i]) && empty($this->rows[$i]['revealed'])) {
+            $isFixed = empty($this->rows[$i]['editable']);
+            $isBlank = trim($this->rows[$i]['item'] ?? '') === '';
+
+            if ($isFixed || $isBlank) {
+                $this->closeDimensionModal();
+                $this->removeDimension($i);
+                return;
+            }
+        }
+
+        $this->closeDimensionModal();
     }
 
     public function chooseNormal(): void
@@ -332,7 +353,6 @@ new class extends Component
             'device' => ''
         ];
     }
-
     public function removeDimension(int $index): void
     {
         if ($this->readonly) {
@@ -340,11 +360,6 @@ new class extends Component
         }
 
         if (!array_key_exists($index, $this->rows)) {
-            return;
-        }
-
-        if (empty($this->rows[$index]['editable'])) {
-            // Fixed/master rows (e.g. Flash Thickness) can't be removed, only reconfigured.
             return;
         }
 
@@ -413,27 +428,38 @@ new class extends Component
         <div wire:key="dim-row-{{ $i }}" data-card-index="{{ $i }}" class="w-full mb-4">
             @if (!$row['revealed'])
 
-            <button
-                type="button"
-                wire:click="openDimensionModal({{ $i }})"
-                @if($readonly) disabled @endif
-                class="w-full flex items-center justify-between bg-white border border-gray-200 rounded-2xl p-5 hover:border-blue-300 hover:bg-blue-50/40 transition-all text-left">
-                <div class="flex items-center gap-3">
-                    <div class="w-11 h-11 rounded-xl bg-green-100 flex items-center justify-center">
-                        <i class="ti ti-ruler-2 text-xl text-green-700"></i>
+            <div class="w-full flex items-center gap-3 bg-white border border-gray-200 rounded-2xl p-5 hover:border-blue-300 hover:bg-blue-50/40 transition-all">
+                <button
+                    type="button"
+                    wire:click="openDimensionModal({{ $i }})"
+                    @if($readonly) disabled @endif
+                    class="flex-1 flex items-center justify-between text-left">
+                    <div class="flex items-center gap-3">
+                        <div class="w-11 h-11 rounded-xl bg-green-100 flex items-center justify-center">
+                            <i class="ti ti-ruler-2 text-xl text-green-700"></i>
+                        </div>
+                        <div>
+                            <p class="font-medium text-base">Dimension entry</p>
+                            @if($isXBar)
+                            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">X-Bar Table</span>
+                            @endif
+                            <p class="text-sm text-gray-500">{{ $row['item'] ?: 'Enter item' }}</p>
+                        </div>
                     </div>
-                    <div>
-                        <p class="font-medium text-base">Dimension entry</p>
-                        @if($isXBar)
-                        <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">X-Bar Table</span>
-                        @endif
-                        <p class="text-sm text-gray-500">{{ $row['item'] ?: 'Enter item' }}</p>
-                    </div>
-                </div>
-                <span class="text-sm text-blue-600 font-medium flex items-center gap-1">
-                    Set up <i class="ti ti-chevron-right"></i>
-                </span>
-            </button>
+                    <span class="text-sm text-blue-600 font-medium flex items-center gap-1">
+                        Set up <i class="ti ti-chevron-right"></i>
+                    </span>
+                </button>
+
+                @if(!$readonly)
+                <button
+                    type="button"
+                    wire:click="removeDimension({{ $i }})"
+                    class="shrink-0 text-sm text-gray-500 hover:text-red-600 flex items-center gap-1 px-3 py-2">
+                    <i class="ti ti-x text-base"></i> Cancel
+                </button>
+                @endif
+            </div>
 
             @else
 
@@ -464,7 +490,7 @@ new class extends Component
                             <i class="ti ti-settings text-base"></i> Reconfigure
                         </button>
 
-                        @if($row['editable'])
+
                         <button
                             type="button"
                             @if($readonly) disabled @endif
@@ -472,7 +498,6 @@ new class extends Component
                             class="text-sm text-red-500 hover:text-red-700 flex items-center gap-1">
                             <i class="ti ti-trash text-base"></i> Delete
                         </button>
-                        @endif
                     </div>
                 </div>
 
@@ -656,7 +681,7 @@ new class extends Component
         </div>
 
         <div class="flex justify-end mt-5">
-            <button wire:click="closeDimensionModal" type="button" class="px-4 py-2 text-sm text-gray-500">Cancel</button>
+            <button wire:click="cancelDimensionModal" type="button" class="px-4 py-2 text-sm text-gray-500">Cancel</button>
         </div>
         @else
         <h3 class="text-lg font-semibold mb-1">Tightened inspection</h3>
