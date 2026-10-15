@@ -29,7 +29,6 @@ class LotConfirmationRepository
         return GroupLeader::where('EmployeeID', $employeeId)
             ->where('IsActive', true)
             ->where('Plant', $lot->Plant)
-            ->where(fn($q) => $q->whereNull('MachineNo')->orWhere('MachineNo', $lot->MachineNo))
             ->exists();
     }
 
@@ -38,7 +37,7 @@ class LotConfirmationRepository
         $scopes = GroupLeader::query()
             ->where('EmployeeID', $employeeId)
             ->where('IsActive', true)
-            ->get(['Plant', 'MachineNo']);
+            ->get(['Plant']);
 
         $query = LotConfirmation::query()
             ->where('Status', LotConfirmation::PENDING);
@@ -50,8 +49,7 @@ class LotConfirmationRepository
         return $query->where(function ($q) use ($scopes) {
             foreach ($scopes as $scope) {
                 $q->orWhere(function ($w) use ($scope) {
-                    $w->where('Plant', $scope->Plant)
-                        ->when($scope->MachineNo !== null, fn($m) => $m->where('MachineNo', $scope->MachineNo));
+                    $w->where('Plant', $scope->Plant);
                 });
             }
         });
@@ -68,8 +66,7 @@ class LotConfirmationRepository
             ->when($search !== '', function ($q) use ($search) {
                 $q->where(function ($q) use ($search) {
                     $q->where('PartNo', 'like', "%{$search}%")
-                        ->orWhere('ProdLotNo', 'like', "%{$search}%")
-                        ->orWhere('MachineNo', 'like', "%{$search}%");
+                        ->orWhere('ProdLotNo', 'like', "%{$search}%");
                 });
             })
             ->orderBy('RequestedAt')

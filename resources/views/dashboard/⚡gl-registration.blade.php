@@ -70,7 +70,7 @@ new class extends Component
         }
 
         try {
-            $service->register($this->employeeID, $this->plant, $this->machineNo, $this->inspectorNo);
+            $service->register($this->employeeID, $this->plant, $this->inspectorNo);
 
             $this->reset(['employeeID', 'name', 'plant']);
             unset($this->groupLeaders);
