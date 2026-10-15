@@ -17,7 +17,6 @@ new class extends Component
     public string $employeeID = '';
     public string $name = '';
     public string $plant = '';
-    public string $machineNo = '';
     public string $inspectorNo = '';
 
     protected function rules(): array
@@ -26,7 +25,6 @@ new class extends Component
             'employeeID' => ['required', 'digits_between:3,5'],
             'inspectorNo' => ['required', 'string'],
             'plant'      => ['required', Rule::in(['P1A', 'P1B', 'P2'])],
-            'machineNo'  => ['nullable', 'string', 'max:20'],
         ];
     }
 
@@ -74,7 +72,7 @@ new class extends Component
         try {
             $service->register($this->employeeID, $this->plant, $this->machineNo, $this->inspectorNo);
 
-            $this->reset(['employeeID', 'name', 'plant', 'machineNo']);
+            $this->reset(['employeeID', 'name', 'plant']);
             unset($this->groupLeaders);
 
             $this->notifySuccess('Saved', 'GL can now log in and confirm lots');
@@ -144,12 +142,6 @@ new class extends Component
                         <option value="{{ $option }}">{{ $option }}</option>
                         @endforeach
                     </select>
-                </div>
-
-                <div>
-                    <label for="gl_machine" class="block text-sm font-medium text-gray-700 mb-1">Machine (optional)</label>
-                    <input type="text" id="gl_machine" wire:model="machineNo" placeholder="All machines"
-                        class="w-full rounded-lg border border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500">
                 </div>
             </div>
 
