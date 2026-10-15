@@ -12,7 +12,7 @@ class MipirRecordRefresher
     private const MAX_SLOTS_PER_SHEET = 21; 
 
 
-    public function refresh(int $ppf): void
+    public function refresh(int $ppf, ?string $confirmedBy = null): void
     {
         try {
             $partNo = trim((string) MIPIRInspectionRecord::where('PPFNo', $ppf)->value('PartNo'));
@@ -61,7 +61,7 @@ class MipirRecordRefresher
 
                 $path = $files[$i] ?? $this->newFilePath($dir, $safePart);
 
-                app(InspectionRecordService::class)->generate($sheet['lots'], $dimItems, $path, $variant);
+                app(InspectionRecordService::class)->generate($sheet['lots'], $dimItems, $path, $variant, $confirmedBy);
 
                 $files[$i] = $path;
             }

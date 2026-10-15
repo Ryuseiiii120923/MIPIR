@@ -6,65 +6,59 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Synchronizes tightened shot judgements to the SAIR Excel workbook.
+ * Synchronizes tightened shot judgements to the SAIR Excel workbook,
+ * reading everything from DB_MIPIR (tblInspectionRecord + tblDefect).
  */
 class TightenedDefectsRefresher
 {
-    public function refresh(
-        int $ppf,
-        array $ppfLookUp,
-        $inspectorNo,
-        array $checkTimes,
-        array $modeByTime,
-        array $shotsByTime
-    ): void {
-        $cavity = (float) ($ppfLookUp['noOfCavity'] ?? 0);
-        $nqr = (float) ($ppfLookUp['nqr'] ?? 0);
-        $judgements = [];
-
-        foreach ($checkTimes as $checkTime) {
-            if (($modeByTime[$checkTime] ?? 'normal') !== 'tightened') {
-                continue;
-            }
-
-            foreach ($shotsByTime[$checkTime] ?? [] as $shot) {
-                $label = (int) ($shot['shot'] ?? 0);
-
-                if ($label < 1) {
-                    continue;
-                }
-
-                $ng = collect($shot['defects'] ?? [])
-                    ->sum(static fn ($defect) => (float) ($defect['qty'] ?? 0));
-
-                $percentage = $cavity > 0 ? ($ng / $cavity) * 100 : 0;
-                $judge = $percentage > $nqr ? 'X' : 'O';
-
-                // If a shot label appears more than once, X takes precedence.
-                $judgements[$label] = ($judgements[$label] ?? 'O') === 'X'
-                    ? 'X'
-                    : $judge;
-            }
-        }
-
-        ksort($judgements);
-
-        $hasTightened = collect($checkTimes)
-            ->contains(static fn ($time) => ($modeByTime[$time] ?? 'normal') === 'tightened');
-
+    public function refresh(int $ppf, ?string $confirmedBy = null): void
+    {
         try {
+            $source = app(MipirSourceData::class);
+            $header = $source->header($ppf);
+
+            if ($header === null) {
+                return;
+            }
+
+            $cavity = $header['cavity'];
+            $nqr = $header['nqr'];
+
+            // Tightened rows are the ones carrying a shot number.
+            $rows = $source->defects($ppf)
+                ->filter(static fn ($d) => $d->Shot !== null && (int) $d->Shot >= 1);
+
+            $judgements = [];
+
+            foreach ($rows->groupBy(fn ($d) => (string) $d->Checktime) as $byTime) {
+                foreach ($byTime->groupBy(fn ($d) => (int) $d->Shot) as $label => $shotRows) {
+                    $ng = $shotRows->sum(static fn ($d) => (float) ($d->Qty ?? 0));
+                    $percentage = $cavity > 0 ? ($ng / $cavity) * 100 : 0;
+                    $judge = $percentage > $nqr ? 'X' : 'O';
+
+                    // If a shot label appears more than once, X takes precedence.
+                    $judgements[(int) $label] = ($judgements[(int) $label] ?? 'O') === 'X'
+                        ? 'X'
+                        : $judge;
+                }
+            }
+
+            ksort($judgements);
+
             app(InsertTightenedDefects::class)->sync([
-                'partNo' => $ppfLookUp['partNo'] ?? '',
-                'partName' => $ppfLookUp['partName'] ?? '',
-                'machineNo' => $ppfLookUp['machineNo'] ?? '',
-                'moldNo' => $ppfLookUp['moldNo'] ?? '',
-                'lotNo' => $ppfLookUp['productionLotNo'] ?? '',
-                'inspector' => $inspectorNo,
-            ], $judgements, ensureFile: $hasTightened);
+                'partNo' => $header['partNo'],
+                'partName' => $header['partName'],
+                'machineNo' => $header['machineNo'],
+                'moldNo' => $header['moldNo'],
+                'lotNo' => $header['lotNo'],
+                'inspector' => $header['inspector'],
+                'confirmedBy' => $confirmedBy
+            ], $judgements, ensureFile: $judgements !== []);
         } catch (Throwable $e) {
             Log::error('Tightened defects SAIR Excel failed', [
                 'PPFNo' => $ppf,
                 'error' => $e->getMessage(),
+                'at' => $e->getFile() . ':' . $e->getLine(),
             ]);
         }
     }

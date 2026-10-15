@@ -18,8 +18,6 @@ use App\Inspection\Services\Excel\InsertTightenedGapF00VE;
 use App\Inspection\Services\Excel\InsertTightenedGapOring;
 use App\Inspection\Services\Excel\InspectionXBarService;
 use App\Inspection\Services\Excel\MipirRecordRefresher;
-use App\Inspection\Services\Excel\MIPIRRecordCycleTracker;
-use App\Inspection\Services\LotConfirmationService;
 use App\Inspection\Services\Saving\CreateInspectionService;
 use App\Inspection\Services\XBarCycleTracker;
 use Illuminate\Support\Carbon;
@@ -88,8 +86,6 @@ class CreateInspection
                     ?? $existingDefect?->NGPercent
                     ?? 0;
 
-                // Ang Gap-Offset ay sa ibang page ine-encode. Kapag wala ito sa draft na ito,
-                // huwag burahin ang Gap-Offset rows na nai-save na ng gap-offset page.
                 $draftItems = collect($dimensions[$checkTime] ?? [])->pluck('item')->filter()->all();
                 $keepGapOffset = ! in_array('Gap-Offset', $draftItems, true);
 
@@ -135,11 +131,9 @@ class CreateInspection
                     'Remarks' => $composedRemarks[$checkTime] ?? '',
                 ]);
 
-                // Normal: one batch (shot = null). Tightened: one batch per shot.
                 foreach ($defectBatches[$checkTime] ?? [] as $batch) {
                     $defectRows = $batch['defects'];
 
-                    // Tightened shot na walang defect: mag-iwan ng placeholder row para hindi mawala ang shot
                     if ($batch['shot'] !== null && $defectRows === []) {
                         $defectRows = [['type' => null, 'qty' => 0]];
                     }
@@ -568,12 +562,6 @@ class CreateInspection
         return trim($base . ' ' . self::SMALL_DEFECT_MARKER . ' ' . implode('; ', $parts));
     }
 
-    /**
-     * Normal    => one batch with shot = null (the old behaviour).
-     * Tightened => one batch per shot, labelled 1, 5, 10, 15 ...
-     *
-     * @return array<int, array{shot: ?int, defects: array, smallDefects: array}>
-     */
     private function defectBatchesFor(
         string $checkTime,
         array $defects,

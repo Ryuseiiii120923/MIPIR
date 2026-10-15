@@ -6,122 +6,97 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Refreshes Tightened Gap-Offset Excel workbooks.
+ * Refreshes Tightened Gap-Offset Excel workbooks from the database.
  *
  * F00VE parts use InsertTightenedGapF00VE; other parts use
  * InsertTightenedGapOring.
  */
 class TightenedGapOffsetRefresher
 {
-    public function refresh(
-        int $ppf,
-        array $ppfLookUp,
-        $inspectorNo,
-        array $checkTimes,
-        array $touchedCheckTimes,
-        array $dimensions,
-        array $remarks,
-        array $deletedCheckTimes
-    ): void {
-        $isGap = static fn (array $row): bool =>
-            ($row['item'] ?? null) === 'Gap-Offset';
+    private const DIM_ITEM = 'Gap-Offset';
 
-        $isTightenedGap = static fn (array $row): bool =>
-            $isGap($row)
-            && strcasecmp((string) ($row['mode'] ?? ''), 'tightened') === 0;
-
-        $partNo = (string) ($ppfLookUp['partNo'] ?? '');
-        $isF00VE = str_starts_with(strtoupper(trim($partNo)), 'F00VE');
-
-        $gapRowsFor = static function (array $times) use ($dimensions, $remarks, $isTightenedGap): array {
-            $rows = [];
-
-            foreach ($times as $checkTime) {
-                foreach ($dimensions[$checkTime] ?? [] as $row) {
-                    if ($isTightenedGap($row)) {
-                        $rows[] = [
-                            'checkTime' => $checkTime,
-                            'remarks' => $remarks[$checkTime] ?? '',
-                            'judgement' => $row['judge'] ?? null,
-                            'specification' => $row['specification'] ?? '',
-                            'controlLimit' => $row['CL'] ?? '',
-                            'measurements' => [
-                                '0' => $row['measurements_y'] ?? [],
-                                '90' => $row['measurements'] ?? [],
-                            ],
-                        ];
-                    }
-                }
-            }
-
-            return $rows;
-        };
-
-        $needsRebuild = false;
-
-        foreach ($touchedCheckTimes as $checkTime) {
-            foreach ($dimensions[$checkTime] ?? [] as $row) {
-                if ($isGap($row) && ! $isTightenedGap($row)) {
-                    $needsRebuild = true;
-                    break 2;
-                }
-            }
-        }
-
-        if (! $needsRebuild) {
-            foreach ($deletedCheckTimes as $deleted) {
-                foreach ($deleted['dimensions'] ?? [] as $row) {
-                    if ($isGap($row)) {
-                        $needsRebuild = true;
-                        break 2;
-                    }
-                }
-            }
-        }
-
-        $upserts = $gapRowsFor($touchedCheckTimes);
-
-        if (! $needsRebuild && $upserts === []) {
-            return;
-        }
-
-        $deletedTimes = array_column($deletedCheckTimes, 'time');
-        $allRows = $gapRowsFor(array_values(array_diff($checkTimes, $deletedTimes)));
-
-        $context = [
-            'ppf' => $ppf,
-            'partNo' => $partNo,
-            'moldNo' => $ppfLookUp['moldNo'] ?? '',
-            'machineNo' => $ppfLookUp['machineNo'] ?? '',
-            'lotNo' => $ppfLookUp['productionLotNo'] ?? '',
-            'inspector' => $inspectorNo,
-            'spec' => $allRows[0]['specification'] ?? '',
-            'limit' => $allRows[0]['controlLimit'] ?? '',
-        ];
-
+    public function refresh(int $ppf): void
+    {
         try {
+            $source = app(MipirSourceData::class);
+            $header = $source->header($ppf);
+
+            if ($header === null) {
+                return;
+            }
+
+            $gap = $source->dimensions($ppf, self::DIM_ITEM);
+
+            if ($gap->isEmpty()) {
+                return;
+            }
+
+            $partNo = $header['partNo'];
+            $isF00VE = str_starts_with(strtoupper($partNo), 'F00VE');
+
+            $allRows = [];
+
+            foreach ($gap->filter(fn ($r) => $source->isTightened($r))->groupBy(fn ($r) => (string) $r->Checktime) as $checkTime => $rows) {
+                $measurements = ['0' => [], '90' => []];
+
+                foreach ($rows as $row) {
+                    $angle = $this->angleOf($row);
+                    $measurements[$angle] = array_merge($measurements[$angle], $source->measurements($row));
+                }
+
+                $first = $rows->first();
+
+                $allRows[] = [
+                    'checkTime' => (string) $checkTime,
+                    'remarks' => $header['remarks'][(string) $checkTime] ?? '',
+                    'judgement' => $this->judgementOf($rows),
+                    'specification' => (string) ($first->Specs ?? ''),
+                    'controlLimit' => (string) ($first->CL ?? ''),
+                    'measurements' => $measurements,
+                ];
+            }
+
+            $context = [
+                'ppf' => $ppf,
+                'partNo' => $partNo,
+                'moldNo' => $header['moldNo'],
+                'machineNo' => $header['machineNo'],
+                'lotNo' => $header['lotNo'],
+                'inspector' => $header['inspector'],
+                'spec' => $allRows[0]['specification'] ?? '',
+                'limit' => $allRows[0]['controlLimit'] ?? '',
+            ];
+
             if ($isF00VE) {
-                $service = app(InsertTightenedGapF00VE::class);
-
-                if ($needsRebuild) {
-                    $service->insertGapF00VEToExcel($context, $allRows);
-                } else {
-                    $service->appendGapF00VEToExcel($context, $upserts, $allRows);
-                }
+                app(InsertTightenedGapF00VE::class)->insertGapF00VEToExcel($context, $allRows);
             } else {
-                $service = app(InsertTightenedGapOring::class);
-
-                if ($needsRebuild) {
-                    $service->insertGapOringToExcel($context, $allRows);
-                } else {
-                    $service->appendGapOringToExcel($context, $upserts, $allRows);
-                }
+                app(InsertTightenedGapOring::class)->insertGapOringToExcel($context, $allRows);
             }
         } catch (Throwable $e) {
             Log::error('Tightened Gap-Offset Excel failed', [
                 'PPFNo' => $ppf,
                 'error' => $e->getMessage(),
+                'at' => $e->getFile() . ':' . $e->getLine(),
             ]);
         }
+    }
+
+    /**
+     * ASSUMPTION: tblDimensionMeasure.Set tells the 0 deg (measurements_y)
+     * rows from the 90 deg (measurements) rows. Adjust here if it differs.
+     */
+    private function angleOf($row): string
+    {
+        return in_array(strtoupper(trim((string) $row->Set)), ['0', 'Y'], true) ? '0' : '90';
+    }
+
+    /** Worst judgement wins; otherwise the first non-empty value. */
+    private function judgementOf($rows): ?string
+    {
+        $judges = $rows->map(fn ($r) => trim((string) $r->Judge))->filter(fn ($j) => $j !== '')->values();
+
+        $bad = $judges->first(fn ($j) => in_array(strtoupper($j), ['X', 'NG'], true));
+
+        return $bad ?? $judges->first();
     }
 }

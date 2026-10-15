@@ -55,13 +55,12 @@ class InsertTightenedDefects
         flock($lock, LOCK_EX);
 
         try {
-            $files = $this->listFiles($dir, $partNo); // pinakaluma -> pinakabago
+            $files = $this->listFiles($dir, $partNo); 
 
             $spreadsheet = null;
             $path = null;
             $slot = null;
 
-            // 1. Hanapin ang lot sa lahat ng file (pinakabago muna), para tama ang edit
             foreach (array_reverse($files) as $file) {
                 $book  = IOFactory::load($file);
                 $found = $this->findLotSlot($book->getActiveSheet(), $lotNo);
@@ -74,13 +73,11 @@ class InsertTightenedDefects
                 $book->disconnectWorksheets();
             }
 
-            // 2. Bagong lot
             if ($slot === null) {
                 if (! $create) {
                     return null;
                 }
 
-                // 2a. Gamitin ang pinakabagong file kung may bakante pa
                 if ($files !== []) {
                     $latest = $files[array_key_last($files)];
                     $book   = IOFactory::load($latest);
@@ -93,7 +90,6 @@ class InsertTightenedDefects
                     }
                 }
 
-                // 2b. Walang file pa, o puno na lahat: gumawa ng bago mula sa template
                 if ($slot === null) {
                     $path        = $this->newFilePath($dir, $partNo);
                     $spreadsheet = IOFactory::load(storage_path(self::TEMPLATE));
@@ -108,6 +104,14 @@ class InsertTightenedDefects
             [$labelCol, $judgeCol] = $slot;
 
             $sheet->setCellValue($labelCol . self::LOT_ROW, 'Lot No.: ' . $lotNo);
+
+            // fillHeader() only runs for a brand-new file, so write it here for existing files too.
+            // R1 is one cell for the whole file: the first lot's confirmer owns it, others only fill it if empty.
+            $confirmedBy = trim((string) ($context['confirmedBy'] ?? ''));
+
+            if ($confirmedBy !== '' && ($slot === self::SLOTS[0] || trim((string) $sheet->getCell('R1')->getValue()) === '')) {
+                $sheet->setCellValue('R1', $confirmedBy);
+            }
 
             $inspector = trim((string) ($context['inspector'] ?? ''));
 
@@ -262,6 +266,7 @@ class InsertTightenedDefects
         $sheet->setCellValue('I4', 'Part Number: ' . ($context['partNo'] ?? ''));
         $sheet->setCellValue('I5', 'Machine No. ' . ($context['machineNo'] ?? ''));
         $sheet->setCellValue('I6', 'Molding Die Number: ' . ($context['moldNo'] ?? ''));
+        $sheet->setCellValue('R1', $context['confirmedBy'] ?? '');
     }
 
 

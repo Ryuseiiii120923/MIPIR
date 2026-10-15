@@ -9,6 +9,7 @@ use App\Domain\Master\SEIHIN;
 use App\Inspection\Models\ChckTRemarks;
 use App\Inspection\Models\CheckTime;
 use App\Inspection\Models\Defect;
+use App\Inspection\Models\GroupLeader\LotConfirmation;
 use App\Inspection\Models\MIPIRDimensionMeasure;
 use App\Inspection\Models\MIPIRInspectionRecord;
 use App\Inspection\Models\SmallDefect;
@@ -122,8 +123,10 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
     public function getDataforSearch(
         string $search,
         int $encoder,
-        int $perPage = 5
+        int $perPage = 5,
+        bool $excludeConfirmed = true
     ) {
+        $record = (new MIPIRInspectionRecord())->getTable();
         return MIPIRInspectionRecord::query()
             ->select([
                 'PPFNo',
@@ -142,9 +145,18 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
                 MIPIRInspectionRecord::query()
                     ->selectRaw('MAX(RECNO)')
                     ->where('InspectBy', $encoder)
-
                     ->groupBy('PPFNo')
             )
+            ->when($excludeConfirmed, function ($query) use ($record) {
+                $query->whereNotExists(function ($q) use ($record) {
+                    $q->selectRaw('1')
+                        ->from('DB_MIPIR.dbo.LotConfirmation as lc')
+                        ->whereColumn('lc.PartNo', "{$record}.PartNo")
+                        ->whereColumn('lc.ProdLotNo', "{$record}.ProdLotNo")
+                        ->whereColumn('lc.MachineNo', "{$record}.MachineNo")
+                        ->where('lc.Status', LotConfirmation::CONFIRMED);
+                });
+            })
             ->orderByDesc('DateJudge')
             ->paginate($perPage);
     }
@@ -416,6 +428,4 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
 
         return ['mode' => 'tightened', 'shots' => $shots];
     }
-
-    
 }

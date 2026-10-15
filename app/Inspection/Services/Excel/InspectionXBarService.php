@@ -17,7 +17,7 @@ class InspectionXBarService
     private const CHECKTIME_RANK  = ['F' => 0, 'MI' => 1, 'E' => 2];
     private const CHECKTIME_SLOTS = 3;
 
-    public function generate(array $partNos, string $dimension, string $cycleStart, string $cycleEnd, string $transactionId, ?string $outputName = null): string
+    public function generate(array $partNos, string $dimension, string $cycleStart, string $cycleEnd, string $transactionId, ?string $outputName = null, ?string $confirmedBy = null): string
     {
         $template = storage_path('app/excel-template/Xbar.xlsx');
 
@@ -27,7 +27,7 @@ class InspectionXBarService
         $sheet = $spreadsheet->getSheet(0);
 
         $this->insertHeader($partNos, $dimension, $sheet, $cycleStart, $cycleEnd);
-        $this->insertMeasurement($partNos, $dimension, $sheet, $transactionId);
+        $this->insertMeasurement($partNos, $dimension, $sheet, $transactionId, $confirmedBy);
         $this->insertLimit($dimension, $sheet);
 
 
@@ -129,7 +129,7 @@ class InspectionXBarService
         $sheet->setCellValue('Y3', $formattedEnd);
     }
 
-    public function insertMeasurement(array $partNos, string $dimension, $sheet, $transactionId)
+    public function insertMeasurement(array $partNos, string $dimension, $sheet, $transactionId,?string $confirmedBy)
     {
         $repository = app(ExcelDataRepository::class);
         $measurements = $repository
@@ -155,6 +155,7 @@ class InspectionXBarService
             $sheet->setCellValue("{$column}59", $firstMeasurement->Checktime);
             $sheet->setCellValue("{$column}93", Carbon::parse($firstMeasurement->created_at)->format('y.m.d'));
             $sheet->setCellValue("{$column}94", $firstMeasurement->InspectedBy);
+            $sheet->setCellValue("{$column}95", $confirmedBy);
 
             $trendChartResult = 'Ok';
 

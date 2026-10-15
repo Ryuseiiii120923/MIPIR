@@ -2,11 +2,18 @@
 
 namespace App\Inspection\Services;
 
+use App\Dashboard\Models\InspectorDb;
+use App\Inspection\Models\GroupLeader\GroupLeader;
 use App\Inspection\Models\GroupLeader\LotConfirmation;
 use App\Inspection\Models\MIPIRDimensionMeasure;
 use App\Inspection\Models\MIPIRInspectionRecord;
 use App\Inspection\Repositories\LotConfirmationRepository;
+use App\Inspection\Services\Excel\DefectBatchFormatter;
 use App\Inspection\Services\Excel\MipirRecordRefresher;
+use App\Inspection\Services\Excel\TightenedDefectsRefresher;
+use App\Inspection\Services\Excel\TightenedFlashRefresher;
+use App\Inspection\Services\Excel\TightenedGapOffsetRefresher;
+use App\Inspection\Services\Excel\XBarRecordRefresher;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -16,7 +23,7 @@ class LotConfirmationService
     public function __construct(private LotConfirmationRepository $repo) {}
 
 
-    public function confirm(int $id,string $inspectorId, string $employeeId): void
+    public function confirm(int $id, string $inspectorId, string $employeeId): void
     {
         $lot = DB::connection('mipirDB')->transaction(function () use ($id, $employeeId, $inspectorId) {
             $lot = LotConfirmation::lockForUpdate()->findOrFail($id);
@@ -38,7 +45,7 @@ class LotConfirmationService
             return $lot;
         });
 
-        $this->rebuildExcel($lot);
+        $this->rebuildExcel($lot,$employeeId);
     }
 
     public function reject(int $id, string $employeeId, string $reason): void
@@ -67,14 +74,21 @@ class LotConfirmationService
     }
 
 
-    private function rebuildExcel(LotConfirmation $lot): void
+    private function rebuildExcel(LotConfirmation $lot, int $employeeId): void
     {
         $ppf = MIPIRInspectionRecord::where('PartNo', $lot->PartNo)
             ->where('ProdLotNo', $lot->ProdLotNo)
             ->value('PPFNo');
+        $plant = GroupLeader::where('EmployeeID', $employeeId)->value('Plant');
+        // confirm() just saved this on the lot; no need to look it up again
+        $confimedBy = $lot->ConfirmedBy !== null ? (string) $lot->ConfirmedBy : null;
 
         if ($ppf !== null) {
-            app(MipirRecordRefresher::class)->refresh((int) $ppf);
+            app(MipirRecordRefresher::class)->refresh((int) $ppf, $confimedBy);
+            app(TightenedDefectsRefresher::class)->refresh((int)$ppf, $confimedBy);
+            app(TightenedFlashRefresher::class)->refresh((int)$ppf, $confimedBy);
+            app(TightenedGapOffsetRefresher::class)->refresh((int)$ppf);
+            app(XBarRecordRefresher::class)->refresh((int)$ppf, $plant, $confimedBy);
         }
     }
 

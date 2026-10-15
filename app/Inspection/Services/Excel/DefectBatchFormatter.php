@@ -4,11 +4,11 @@ namespace App\Inspection\Services\Excel;
 
 /**
  * Formats normal/tightened defect batches and adds the small-defect detail
- * marker to remarks.
+ * marker to remarks. Batches are read from tblDefect
+ * and tblSmallDefect.
  *
  * Supply the existing SMALL_DEFECT_MARKER value from the parent component
- * when constructing this formatter; its value was not present in the source
- * excerpt used to create this class.
+ * when constructing this formatter.
  */
 class DefectBatchFormatter
 {
@@ -53,31 +53,57 @@ class DefectBatchFormatter
     }
 
     /**
-     * Normal mode returns one unlabelled batch.
-     * Tightened mode returns one batch per shot.
+     * Rows without a shot number return one unlabelled batch.
+     * Rows with a shot number return one batch per shot.
      *
      * @return array<int, array{shot: ?int, defects: array, smallDefects: array}>
      */
-    public function batchesFor(
-        string $checkTime,
-        array $defects,
-        array $smallDefects,
-        array $modeByTime,
-        array $shotsByTime
-    ): array {
-        if (($modeByTime[$checkTime] ?? 'normal') !== 'tightened') {
+    public function batchesFor(int $ppf, string $checkTime): array
+    {
+        $source = app(MipirSourceData::class);
+
+        $rows = $source->defects($ppf)
+            ->filter(fn ($d) => (string) $d->Checktime === $checkTime)
+            ->filter(fn ($d) => trim((string) $d->Defect) !== '');
+
+        $smalls = $source->smallDefects($ppf)
+            ->filter(fn ($s) => (string) $s->Checktime === $checkTime);
+
+        $hasShot = static fn ($row): bool => $row->Shot !== null && (int) $row->Shot >= 1;
+
+        $toDefect = static fn ($d) => [
+            'type' => (string) $d->Defect,
+            'qty' => (float) ($d->Qty ?? 0),
+        ];
+
+        // large defect => [['type' => small, 'qty' => n], ...]
+        $smallMap = static fn ($group) => $group
+            ->groupBy(fn ($s) => (string) $s->largeDefect)
+            ->map(fn ($g) => $g->map(fn ($s) => [
+                'type' => (string) $s->smallDefect,
+                'qty' => (float) ($s->qty ?? 0),
+            ])->values()->all())
+            ->all();
+
+        $tightened = $rows->filter($hasShot);
+
+        if ($tightened->isEmpty()) {
             return [[
                 'shot' => null,
-                'defects' => $defects[$checkTime] ?? [],
-                'smallDefects' => $smallDefects[$checkTime] ?? [],
+                'defects' => $rows->map($toDefect)->values()->all(),
+                'smallDefects' => $smallMap($smalls->reject($hasShot)),
             ]];
         }
 
-        return collect($shotsByTime[$checkTime] ?? [])
-            ->map(static fn (array $shot) => [
-                'shot' => isset($shot['shot']) ? (int) $shot['shot'] : null,
-                'defects' => $shot['defects'] ?? [],
-                'smallDefects' => $shot['smallDefects'] ?? [],
+        $smallByShot = $smalls->filter($hasShot)->groupBy(fn ($s) => (int) $s->Shot);
+
+        return $tightened
+            ->groupBy(fn ($d) => (int) $d->Shot)
+            ->sortKeys()
+            ->map(fn ($group, $shot) => [
+                'shot' => (int) $shot,
+                'defects' => $group->map($toDefect)->values()->all(),
+                'smallDefects' => $smallMap($smallByShot->get((int) $shot, collect())),
             ])
             ->values()
             ->all();

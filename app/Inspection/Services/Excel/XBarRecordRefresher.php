@@ -2,30 +2,35 @@
 
 namespace App\Inspection\Services\Excel;
 
+use App\Domain\XBar\Repositories\XBarRepository as RepositoriesXBarRepository;
+use App\Inspection\Models\MIPIRDimensionMeasure;
 use App\Inspection\Models\XBarCycleLog;
-use App\Inspection\Repositories\XBarRepository;
-use App\Inspection\Services\InspectionXBarService;
+use App\Inspection\Services\Excel\InspectionXBarService as ExcelInspectionXBarService;
 use App\Inspection\Services\XBarCycleTracker;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Refreshes XBar Excel workbooks for the supplied transaction jobs.
+ * Refreshes XBar Excel workbooks for the (dimension, transaction) pairs
+ * stored against a PPF in tblDimensionMeasure.
  */
 class XBarRecordRefresher
 {
-    public function refresh(array $jobs, ?string $plant): void
+    public function refresh(int $ppf, ?string $plant, ?string $confirmedBy): void
     {
-        Log::info('XBar refresh', [
-            'plant' => $plant,
-            'jobs' => array_values($jobs),
-        ]);
-
         if ($plant === null) {
             Log::warning('XBar Excel skipped: user has no Plant');
             return;
         }
+
+        $jobs = $this->jobsFor($ppf);
+
+        Log::info('XBar refresh', [
+            'PPFNo' => $ppf,
+            'plant' => $plant,
+            'jobs' => $jobs,
+        ]);
 
         $safe = static fn (string $value): string =>
             (string) preg_replace('/[^A-Za-z0-9_-]/', '_', $value);
@@ -44,7 +49,7 @@ class XBarRecordRefresher
                 }
 
                 $partNos = collect(
-                    app(XBarRepository::class)->getPartNumbersForTransaction($job['transactionId'])
+                    app(RepositoriesXBarRepository::class)->getPartNumbersForTransaction($job['transactionId'])
                 )->values()->all();
 
                 if ($partNos === []) {
@@ -59,13 +64,14 @@ class XBarRecordRefresher
                     Carbon::parse($window['start'])->format('Ymd_His')
                 );
 
-                $path = app(InspectionXBarService::class)->generate(
+                $path = app(ExcelInspectionXBarService::class)->generate(
                     $partNos,
                     $job['dimension'],
                     $window['start'],
                     $window['end'],
                     $job['transactionId'],
-                    $name
+                    $name,
+                    $confirmedBy
                 );
 
                 XBarCycleLog::where('TransactionId', $job['transactionId'])
@@ -78,6 +84,34 @@ class XBarRecordRefresher
                     'at' => $e->getFile() . ':' . $e->getLine(),
                 ]);
             }
+        }
+    }
+
+    /**
+     * @return array<int, array{dimension: string, transactionId: mixed}>
+     */
+    private function jobsFor(int $ppf): array
+    {
+        try {
+            return MIPIRDimensionMeasure::where('PPFNo', $ppf)
+                ->where('ForXBar', 1)
+                ->whereNotNull('xbarTransaction')
+                ->where('xbarTransaction', '!=', '')
+                ->get(['DimItem', 'xbarTransaction'])
+                ->unique(fn ($r) => "{$r->DimItem}|{$r->xbarTransaction}")
+                ->map(fn ($r) => [
+                    'dimension' => (string) $r->DimItem,
+                    'transactionId' => $r->xbarTransaction,
+                ])
+                ->values()
+                ->all();
+        } catch (Throwable $e) {
+            Log::error('XBar jobs lookup failed', [
+                'PPFNo' => $ppf,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [];
         }
     }
 }

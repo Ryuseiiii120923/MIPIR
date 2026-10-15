@@ -21,24 +21,24 @@ class InsertTightenedFlash
 
     private const LAYOUTS = [
         2 => [
-            ['part' => 'A2', 'mold' => 'A3', 'limit' => 'D5', 'firstRow' => 9, 'lastRow' => 58, 'firstBlock' => 1, 'blockCount' => 2, 'inspectorCol' => 'N', 'remarksCol' => 'O'],
+            ['part' => 'A2', 'mold' => 'A3', 'limit' => 'D5','checkedBy'=>'J2', 'firstRow' => 9, 'lastRow' => 58, 'firstBlock' => 1, 'blockCount' => 2, 'inspectorCol' => 'N', 'remarksCol' => 'O'],
         ],
         4 => [
-            ['part' => 'A2', 'mold' => 'A3', 'limit' => 'D5', 'firstRow' => 9, 'lastRow' => 35, 'firstBlock' => 1, 'blockCount' => 4, 'inspectorCol' => 'X', 'remarksCol' => 'Y'],
+            ['part' => 'A2', 'mold' => 'A3', 'limit' => 'D5','checkedBy'=>'P2', 'firstRow' => 9, 'lastRow' => 35, 'firstBlock' => 1, 'blockCount' => 4, 'inspectorCol' => 'X', 'remarksCol' => 'Y'],
         ],
         5 => [
-            ['part' => 'A2', 'mold' => 'A3', 'limit' => 'D5', 'firstRow' => 8, 'lastRow' => 41, 'firstBlock' => 1, 'blockCount' => 5, 'inspectorCol' => 'AC', 'remarksCol' => 'AD'],
+            ['part' => 'A2', 'mold' => 'A3', 'limit' => 'D5','checkedBy'=>'U2', 'firstRow' => 8, 'lastRow' => 41, 'firstBlock' => 1, 'blockCount' => 5, 'inspectorCol' => 'AC', 'remarksCol' => 'AD'],
         ],
         6 => [
-            ['part' => 'A2', 'mold' => 'A3', 'limit' => 'A5', 'firstRow' => 9, 'lastRow' => 38, 'firstBlock' => 1, 'blockCount' => 6, 'inspectorCol' => 'AH', 'remarksCol' => 'AI'],
+            ['part' => 'A2', 'mold' => 'A3', 'limit' => 'A5','checkedBy'=>'Z2', 'firstRow' => 9, 'lastRow' => 38, 'firstBlock' => 1, 'blockCount' => 6, 'inspectorCol' => 'AH', 'remarksCol' => 'AI'],
         ],
         10 => [
-            ['part' => 'A2',  'mold' => 'A3',  'limit' => 'D5',  'firstRow' => 8,  'lastRow' => 39, 'firstBlock' => 1, 'blockCount' => 5, 'inspectorCol' => 'AC', 'remarksCol' => 'AD'],
-            ['part' => 'A41', 'mold' => 'A42', 'limit' => 'D44', 'firstRow' => 47, 'lastRow' => 78, 'firstBlock' => 6, 'blockCount' => 5, 'inspectorCol' => 'AC', 'remarksCol' => 'AD'],
+            ['part' => 'A2',  'mold' => 'A3',  'limit' => 'D5','checkedBy'=>'U2', 'firstRow' => 8,  'lastRow' => 39, 'firstBlock' => 1, 'blockCount' => 5, 'inspectorCol' => 'AC', 'remarksCol' => 'AD'],
+            ['part' => 'A41', 'mold' => 'A42', 'limit' => 'D44','checkedBy'=>'U41','firstRow' => 47, 'lastRow' => 78, 'firstBlock' => 6, 'blockCount' => 5, 'inspectorCol' => 'AC', 'remarksCol' => 'AD'],
         ],
         12 => [
-            ['part' => 'A2',  'mold' => 'A3',  'limit' => 'A5',  'firstRow' => 9,  'lastRow' => 38, 'firstBlock' => 1, 'blockCount' => 6, 'inspectorCol' => 'AH', 'remarksCol' => 'AI'],
-            ['part' => 'A40', 'mold' => 'A41', 'limit' => 'A43', 'firstRow' => 47, 'lastRow' => 76, 'firstBlock' => 7, 'blockCount' => 6, 'inspectorCol' => 'AH', 'remarksCol' => 'AI'],
+            ['part' => 'A2',  'mold' => 'A3',  'limit' => 'A5','checkedBy'=>'Z2', 'firstRow' => 9,  'lastRow' => 38, 'firstBlock' => 1, 'blockCount' => 6, 'inspectorCol' => 'AH', 'remarksCol' => 'AI'],
+            ['part' => 'A40', 'mold' => 'A41', 'limit' => 'A43','checkedBy'=>'Z40',  'firstRow' => 47, 'lastRow' => 76, 'firstBlock' => 7, 'blockCount' => 6, 'inspectorCol' => 'AH', 'remarksCol' => 'AI'],
         ],
     ];
 
@@ -168,6 +168,7 @@ class InsertTightenedFlash
         return [
             'partNo'       => (string) $context['partNo'],
             'moldNo'       => (string) ($context['moldNo'] ?? ''),
+            'confirmedBy'  => trim((string) ($context['confirmedBy'] ?? '')),
             // template already prints "max.", so drop it if it was entered with the spec
             'spec'         => trim((string) preg_replace('/^\s*max\.?\s*/i', '', (string) ($firstRow['specification'] ?? ''))),
             'controlLimit' => trim((string) ($firstRow['controlLimit'] ?? '')),
@@ -207,6 +208,7 @@ class InsertTightenedFlash
         }, $text);
 
         $sheet->setCellValue($section['limit'], $text);
+        $sheet->setCellValue($section['checkedBy'], $header['confirmedBy'] ?? '');
     }
 
     private function fillRows(Worksheet $sheet, array $section, Collection $records): void

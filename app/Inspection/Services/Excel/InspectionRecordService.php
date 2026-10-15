@@ -36,7 +36,7 @@ class InspectionRecordService
         4 => ['remarks' => 'AK', 'stamp' => 'AM', 'confirmedBy' => 'AP'],
     ];
 
-    public function generate(array $lots, array $dimItems, ?string $outputPath = null, ?int $variant = null): string
+    public function generate(array $lots, array $dimItems, ?string $outputPath = null, ?int $variant = null, ?string $confirmedBy = null): string
     {
         try {
             // Kung walang ibinigay, ang dami ng dimension item ang batayan (dating asal)
@@ -69,7 +69,7 @@ class InspectionRecordService
 
             $this->insertHeader($firstPpf, $sheet);
             $this->insertDimensionHeaders($dimItems, $blocks, $sheet);
-            $this->insertRows($plan, $dimItems, $blocks, $trailing, $sheet);
+            $this->insertRows($plan, $dimItems, $blocks, $trailing, $sheet,$confirmedBy);
 
             $output = $outputPath ?? $this->legacyOutputPath($plan);
 
@@ -188,7 +188,7 @@ class InspectionRecordService
         return $str;
     }
 
-    public function insertRows(array $plan, array $dimItems, array $blocks, array $trailing, $sheet)
+    public function insertRows(array $plan, array $dimItems, array $blocks, array $trailing, $sheet, ?string $confirmedBy = null)
     {
         $startRow = 9;
         $slotIndex = 0;
@@ -220,13 +220,6 @@ class InspectionRecordService
                     $record = MIPIRInspectionRecord::where('PPFNo', $ppf)
                         ->where('Checktime', $entry['checktime'])
                         ->first();
-                    $confirmedBy = LotConfirmation::query()
-                        ->where('PartNo', $record->PartNo)
-                        ->where('ProdLotNo', $record->ProdLotNo)
-                        ->where('MachineNo', $record->MachineNo)
-                        ->where('Status', 'confirmed')
-                        ->value('ConfirmedBy');
-
                     if (! $record) {
                         $slotIndex++;
                         continue;
