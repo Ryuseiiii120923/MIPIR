@@ -119,12 +119,10 @@ new class extends Component
                         class="w-full rounded-lg border border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500">
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-                    <div>
-                        <label for="gl_inspector_no" class="block text-sm font-medium text-gray-700 mb-1">Inspector ID</label>
-                        <input type="text" id="gl_inspector_no" wire:model="inspectorNo"
-                            class="w-full rounded-lg border border-gray-300 bg-gray-50 text-sm text-gray-600">
-                    </div>
+                <div>
+                    <label for="gl_inspector_no" class="block text-sm font-medium text-gray-700 mb-1">Inspector ID</label>
+                    <input type="text" id="gl_inspector_no" wire:model="inspectorNo"
+                        class="w-full rounded-lg border border-gray-300 bg-gray-50 text-sm text-gray-600">
                 </div>
 
                 <div>
