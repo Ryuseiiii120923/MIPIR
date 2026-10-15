@@ -108,7 +108,7 @@ new class extends Component
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div class="px-6 py-4 border-b border-gray-200">
             <h2 class="text-lg font-semibold text-gray-800">Authorized GL</h2>
-            <p class="text-sm text-gray-500">Allow a GL to log in and confirm lots for a plant or machine.</p>
+            <p class="text-sm text-gray-500">Allow a GL to log in and confirm lots for a plant</p>
         </div>
 
         <form wire:submit="save" class="p-6">
@@ -167,7 +167,6 @@ new class extends Component
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Employee ID</th>
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Plant</th>
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Machine</th>
                         <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
                 </thead>
@@ -177,7 +176,6 @@ new class extends Component
                         <td class="px-6 py-3 text-sm font-medium text-gray-900">{{ $gl->EmployeeID }}</td>
                         <td class="px-6 py-3 text-sm text-gray-700">{{ $gl->Name }}</td>
                         <td class="px-6 py-3 text-sm text-gray-700">{{ $gl->Plant }}</td>
-                        <td class="px-6 py-3 text-sm text-gray-700">{{ $gl->MachineNo ?? 'All machines' }}</td>
                         <td class="px-6 py-3 text-right">
                             <button type="button"
                                 wire:click="remove({{ $gl->Id }})"
