@@ -171,6 +171,8 @@ new class extends Component
 
     private const EXTRA_SMALL_DEFECTS = [
         'Surface Damaged' => ['Flow Mark', 'Surface Dirty'],
+        'Deformation' =>['Burnt'],
+        'PL Damaged' => ['Excessive Trimming']
     ];
 
     public function selectLargeDefect(string $type): void

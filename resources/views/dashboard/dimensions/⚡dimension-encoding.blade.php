@@ -52,6 +52,9 @@ new class extends Component
     public string $specUpper = '';
     public string $specLower = '';
     public array $moldingDieNo = [];
+    public bool $showDeleteModal = false;
+    public ?int $deletingId = null;
+    public string $deletingLabel = '';
 
     public function openLimits(int $recNo, DimensionEncodingService $service): void
     {
@@ -295,6 +298,60 @@ new class extends Component
         }
     }
 
+    public function confirmDelete(int $recNo, DimensionEncodingService $service): void
+    {
+        $dim = $service->find($recNo);
+
+        if ($dim === null) {
+            unset($this->dimensions);
+            $this->notifyFail('Not Found', 'Dimension no longer exists.');
+            return;
+        }
+
+        $this->deletingId    = $recNo;
+        $this->deletingLabel = "{$dim['partNo']} / Dim {$dim['dimensionNo']} - {$dim['dimensionName']}";
+        $this->showDeleteModal = true;
+    }
+
+    public function cancelDelete(): void
+    {
+        $this->showDeleteModal = false;
+        $this->reset(['deletingId', 'deletingLabel']);
+    }
+
+    public function delete(DimensionEncodingService $service): void
+    {
+        if ($this->deletingId === null) {
+            return;
+        }
+
+        try {
+            $service->delete($this->deletingId);
+
+            $this->cancelDelete();
+            unset($this->dimensions);
+
+            // Deleted the last row on the last page -> step back one page
+            if ($this->dimensions->isEmpty() && $this->getPage() > 1) {
+                $this->previousPage();
+                unset($this->dimensions);
+            }
+
+            $this->notifySuccess('Deleted', 'Dimension removed');
+        } catch (\DomainException $e) {
+            $this->cancelDelete();
+            $this->notifyFail('Cannot Delete', $e->getMessage());
+        } catch (\Throwable $e) {
+            Log::error('Dimension encoding delete failed', [
+                'rec_no' => $this->deletingId,
+                'error'  => $e->getMessage(),
+            ]);
+
+            $this->cancelDelete();
+            $this->notifyFail('Failed', 'Failed to delete dimension. Please try again.');
+        }
+    }
+
     public function closeModal(): void
     {
         $this->showSymbolPicker = false;
@@ -428,7 +485,13 @@ new class extends Component
                                     class="px-3 py-1.5 text-xs font-medium text-blue-600 bg-white border border-blue-200 rounded-lg hover:bg-blue-50 disabled:opacity-50">
                                     Edit
                                 </button>
-
+                                <button type="button"
+                                    wire:click="confirmDelete({{ $dim->RecNo }})"
+                                    wire:loading.attr="disabled"
+                                    wire:target="confirmDelete({{ $dim->RecNo }})"
+                                    class="px-3 py-1.5 text-xs font-medium text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50">
+                                    Delete
+                                </button>
                                 @if ($dim->XBar)
                                 <button type="button"
                                     wire:click="openLimits({{ $dim->RecNo }})"
@@ -438,7 +501,10 @@ new class extends Component
                                     Limits
                                 </button>
                                 @endif
+
                             </div>
+
+
                         </td>
                     </tr>
                     @empty
@@ -690,6 +756,39 @@ new class extends Component
                 :USLx="$limitsUpper"
                 :LSLx="$limitsLower"
                 :key="'limits-' . $limitsPartNo . '-' . $limitsDimItem" />
+        </div>
+    </div>
+    @endif
+
+    @if ($showDeleteModal)
+    <div class="fixed inset-0 bg-black/50 flex items-center justify-center p-4"
+        style="z-index: 60;"
+        wire:keydown.escape.window="cancelDelete">
+        <div class="bg-white rounded-xl w-full max-w-md shadow-xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-800">Delete Dimension</h3>
+            </div>
+
+            <div class="p-6 space-y-2">
+                <p class="text-sm text-gray-700">Are you sure you want to delete this dimension?</p>
+                <p class="text-sm font-medium text-gray-900">{{ $deletingLabel }}</p>
+                <p class="text-xs text-red-500">This cannot be undone.</p>
+            </div>
+
+            <div class="px-6 py-3 border-t border-gray-200 flex justify-end gap-2">
+                <button type="button" wire:click="cancelDelete"
+                    class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                    Cancel
+                </button>
+                <button type="button"
+                    wire:click="delete"
+                    wire:loading.attr="disabled"
+                    wire:target="delete"
+                    class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">
+                    <span wire:loading.remove wire:target="delete">Delete</span>
+                    <span wire:loading wire:target="delete">Deleting...</span>
+                </button>
+            </div>
         </div>
     </div>
     @endif

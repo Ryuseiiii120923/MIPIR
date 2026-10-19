@@ -8,6 +8,7 @@ use DomainException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 
 class DimensionEncodingService
 {
@@ -233,5 +234,32 @@ class DimensionEncodingService
     public function nextDimensionNo(string $partNo): int
     {
         return $this->repo->nextDimensionNo($partNo);
+    }
+    public function delete(int $recNo): void
+    {
+        $dim = $this->repo->find($recNo);
+
+        if ($dim === null) {
+            throw new \DomainException('Dimension no longer exists.');
+        }
+
+        $partNo = $dim->PartNo;
+        $dimName = $dim->DimensionName;
+        $isXBar = (bool) $dim->XBar;
+
+        if (! $this->repo->delete($recNo)) {
+            throw new \DomainException('Dimension no longer exists.');
+        }
+        if ($isXBar && ! $this->repo->dimensionNameInUse($partNo, $dimName)) {
+            try {
+                $this->repo->deleteLimit($partNo, $dimName);
+            } catch (\Throwable $e) {
+                Log::warning('Dimension deleted but control limit cleanup failed', [
+                    'part_no'  => $partNo,
+                    'dim_item' => $dimName,
+                    'error'    => $e->getMessage(),
+                ]);
+            }
+        }
     }
 }

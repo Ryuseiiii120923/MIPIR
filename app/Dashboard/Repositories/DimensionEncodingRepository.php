@@ -87,4 +87,26 @@ class DimensionEncodingRepository
 
         return ((int) $max) + 1;
     }
+
+    public function delete(int $recNo): bool
+    {
+        return DimensionMaster::query()->whereKey($recNo)->delete() > 0;
+    }
+
+    public function dimensionNameInUse(string $partNo, string $dimensionName): bool
+    {
+        return DimensionMaster::query()
+            ->where('PartNo', $partNo)
+            ->where('DimensionName', $dimensionName)
+            ->exists();
+    }
+
+    public function deleteLimit(string $partNo, string $dimItem): void
+    {
+        DB::connection('mipirDB')
+            ->table('control_specs_limit')
+            ->where('PartNo', $partNo)
+            ->where('DimItem', $dimItem)
+            ->delete();
+    }
 }
