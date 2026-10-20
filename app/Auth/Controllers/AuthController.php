@@ -45,7 +45,6 @@ class AuthController extends Controller
         $userid = $request->input('userid');
         $password = $request->input('password');
 
-        // Pansamantalang dummy account: para makapasok kahit hindi staff o rehistradong inspector
         if ($this->isDummyLogin((int) $userid, $password)) {
             Auth::guard('web')->login($this->dummyStaff());
             $request->session()->regenerate();
@@ -68,7 +67,6 @@ class AuthController extends Controller
                 Auth::guard('web')->login($user);
                 $request->session()->regenerate();
 
-                // 'gl' = pinayagan lang sa GL table; 'staff' = pasok sa position
                 $request->session()->put('access', $isGl ? 'gl' : 'staff');
 
                 return redirect()->route($isGl ? 'lot-confirmation' : 'landing-page');

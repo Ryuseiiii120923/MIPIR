@@ -74,6 +74,7 @@ new class extends Component
 
         foreach ($this->rows as $i => $row) {
             $this->rows[$i]['forXBar'] ??= false;
+            $this->rows[$i]['rowNo'] ??= $i + 1;
 
             if (!array_key_exists('revealed', $row)) {
                 $count = count($row['measurements'] ?? []);
@@ -94,6 +95,10 @@ new class extends Component
         }
     }
 
+    private function nextRowNo(): int
+    {
+        return (int) max(0, ...array_column($this->rows, 'rowNo')) + 1;
+    }
     private function service(): DimensionsService
     {
         return app(DimensionsService::class);
@@ -108,11 +113,11 @@ new class extends Component
     }
 
     private function clearBlockingErrors(array $times): void
-{
-    foreach ($times as $time) {
-        $this->dispatch('blocking-errors', source: 'dimensions:' . $time, errors: []);
+    {
+        foreach ($times as $time) {
+            $this->dispatch('blocking-errors', source: 'dimensions:' . $time, errors: []);
+        }
     }
-}
 
     private function reportValidity(): void
     {
@@ -227,7 +232,43 @@ new class extends Component
         }
 
         $this->applyMasterSpecification($i, $master);
+
+        if ($this->isDuplicateXBar($i)) {
+            $name = $this->rows[$i]['item'];
+
+            $this->rows[$i]['item'] = '';
+            $this->rows[$i]['forXBar'] = false;
+            foreach (['specType', 'specNominal', 'specTolerance', 'specUpper', 'specLower', 'specification', 'CL', 'device'] as $key) {
+                $this->rows[$i][$key] = in_array($key, ['specType']) ? null : '';
+            }
+
+            $this->notifyFail('Duplicate X-Bar', "{$name} is an X-Bar dimension and is already encoded in this check time.");
+            $this->syncToParent();
+            return;
+        }
         $this->syncToParent();
+    }
+
+    private function isDuplicateXBar(int $i): bool
+    {
+        $row  = $this->rows[$i];
+        $name = mb_strtolower(trim($row['item'] ?? ''));
+
+        if ($name === '' || empty($row['forXBar'])) {
+            return false;
+        }
+
+        foreach ($this->rows as $j => $other) {
+            if (
+                $j !== $i
+                && !empty($other['forXBar'])
+                && mb_strtolower(trim($other['item'] ?? '')) === $name
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
     // ------------------------------------------------------------------
     // Dimension config modal
@@ -342,9 +383,33 @@ new class extends Component
     public function AddNewDimension()
     {
         $this->rows[] = [
+            'rowNo' => $this->nextRowNo(),
             'item' => '',
             'editable' => true,
             'forXBar' => false,
+            'specification' => '',
+            'CL' => '',
+            'judge' => '',
+            'measurements' => [],
+            'mode' => null,
+            'sets' => null,
+            'revealed' => false,
+            'specType' => null,
+            'specNominal' => '',
+            'specTolerance' => '',
+            'specUpper' => '',
+            'specLower' => '',
+            'device' => ''
+        ];
+    }
+
+    public function AddNewDimensionXBar()
+    {
+        $this->rows[] = [
+            'rowNo' => $this->nextRowNo(),
+            'item' => '',
+            'editable' => true,
+            'forXBar' => true,
             'specification' => '',
             'CL' => '',
             'judge' => '',
@@ -415,7 +480,7 @@ new class extends Component
         <p class="text-4xl font-extrabold text-center text-white p-4 mt-4">Dimensions</p>
     </div>
 
-    <div class="mt-3">
+    <div class="mt-3 flex flex-row gap-2">
         <button
             type="button"
             wire:click="AddNewDimension"
@@ -426,7 +491,19 @@ new class extends Component
                flex items-center gap-1">
             Add New Dimension
         </button>
+
+         <button
+            type="button"
+            wire:click="AddNewDimensionXBar"
+            @if($readonly) disabled @endif
+            class="p-3 rounded-xl bg-green-700 text-md text-white
+               hover:bg-green-600
+               transition-colors duration-200
+               flex items-center gap-1">
+            Add New X-Bar
+        </button>
     </div>
+
 
 
     <div class="w-full mx-auto mt-3 @if($readonly) opacity-50 cursor-not-allowed @endif">

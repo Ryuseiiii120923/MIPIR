@@ -170,14 +170,12 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
     ) {
         $conn = MIPIRInspectionRecord::query()->getConnection();
 
-        // Plant ng encoder
         $encoderPlant = $conn
             ->table('DB_MIPIR.dbo.tblUser')
             ->select('Plant')
             ->where('EmployeeID', $encoder)
             ->limit(1);
 
-        // EmployeeID ng lahat ng nasa parehong plant (ito ang laman ng InspectBy)
         $plantEmployees = $conn
             ->table('DB_MIPIR.dbo.tblUser')
             ->select('EmployeeID')
@@ -302,46 +300,52 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
             ->all();
     }
 
-    public function getDimensionbyCheckTime(int $ppf, string $checkTime): array
-    {
-        $records = MIPIRDimensionMeasure::where('PPFNo', $ppf)
-            ->where('Checktime', $checkTime)
-            ->orderBy('Set')
-            ->get(['DimItem', 'Specs', 'ForXBar', 'Mode', 'CL', 'Judge', 'Set', 'Value1', 'Value2', 'Value3', 'Value4', 'Value5']);
+public function getDimensionbyCheckTime(int $ppf, string $checkTime): array
+{
+    $records = MIPIRDimensionMeasure::where('PPFNo', $ppf)
+        ->where('Checktime', $checkTime)
+        ->orderBy('RECNO')
+        ->get(['DimItem', 'Specs', 'ForXBar', 'Mode', 'CL', 'Judge', 'Set', 'RowNo',
+               'Value1', 'Value2', 'Value3', 'Value4', 'Value5']);
 
-        $rows = [];
+    $rows = [];
 
-        foreach ($records as $d) {
-            $item = $d->DimItem;
-            if ($item == 'Gap-Offset' || $item === 'Gap-Offset (Y)') {
-                continue; // Skip these items
-            }
-            $values = [$d->Value1, $d->Value2, $d->Value3, $d->Value4, $d->Value5];
+    foreach ($records as $d) {
+        $item = $d->DimItem;
 
-            if (!isset($rows[$item]['measurements'])) {
-                $rows[$item] = array_merge($rows[$item] ?? [], [
-                    'item' => $item,
-                    'editable' => !in_array($item, ['Flash Thickness'], true),
-                    'specification' => $d->Specs,
-                    'forXBar' => $d->ForXBar,
-                    'CL' => $d->CL,
-                    'mode' => $d->Mode,
-                    'judge' => $d->Judge === 1 ? 'X' : 'O',
-                    'measurements' => [],
-                    'revealed' => true,
-                ]);
-            }
-
-            $rows[$item]['measurements'] = array_merge($rows[$item]['measurements'], $values);
+        if ($item === 'Gap-Offset' || $item === 'Gap-Offset (Y)') {
+            continue;
         }
 
-        // Now that all sets are merged, compute the sets count per item
-        foreach ($rows as $item => $row) {
-            $rows[$item]['sets'] = (int) ceil(count($row['measurements']) / 5);
+        $key = $d->RowNo !== null ? "{$item}|{$d->RowNo}" : $item;
+
+        if (!isset($rows[$key])) {
+            $rows[$key] = [
+                'rowNo'        => $d->RowNo !== null ? (int) $d->RowNo : null,
+                'item'          => $item,
+                'editable'      => $item !== 'Flash Thickness',
+                'specification' => $d->Specs,
+                'forXBar'       => $d->ForXBar,
+                'CL'            => $d->CL,
+                'mode'          => $d->Mode,
+                'judge'         => $d->Judge === 1 ? 'X' : 'O',
+                'measurements'  => [],
+                'revealed'      => true,
+            ];
         }
 
-        return array_values($rows);
+        $rows[$key]['measurements'] = array_merge(
+            $rows[$key]['measurements'],
+            [$d->Value1, $d->Value2, $d->Value3, $d->Value4, $d->Value5]
+        );
     }
+
+    foreach ($rows as $key => $row) {
+        $rows[$key]['sets'] = (int) ceil(count($row['measurements']) / 5);
+    }
+
+    return array_values($rows);
+}
 
     public function getOffsetbyCheckTime(int $ppf, string $checkTime): array
     {
@@ -410,7 +414,7 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
             ->map(fn($group, $shot) => [
                 'shot'    => (int) $shot,
                 'defects' => $group
-                    ->filter(fn($r) => filled($r->Defect))   // alisin ang placeholder
+                    ->filter(fn($r) => filled($r->Defect)) 
                     ->map(fn($r) => ['type' => $r->Defect, 'qty' => (int) $r->Qty])
                     ->values()
                     ->all(),

@@ -36,6 +36,14 @@ new class extends Component
         $this->mode = $mode;
     }
 
+    #[On('mka-encoding-action')]
+    public function onMKAEncodingAction(string $action, string $mode): void
+    {
+        $this->action = $action;
+        $this->mode = $mode;
+        
+    }
+
     #[On('lookup_ppf')]
     public function onLookupPpf(string $ppf): void
     {
@@ -70,7 +78,11 @@ new class extends Component
         }
 
         $isExist = MIPIRInspectionRecord::where('PPFNo', $this->ppfno)->exists();
-        if ($isExist && $this->action === 'add' && $this->mode != 'gap-offset') {
+        if (
+            $isExist
+            && $this->action === 'add'
+            && ! in_array($this->mode, ['gap-offset', 'mka-measuring'], true)
+        ) {
             $this->addError(
                 'ppfno',
                 'This PPFNo already exists. Please press the Update button instead.'

@@ -72,8 +72,8 @@ class CreateInspection
                     ->exists();
                 $existingTransactionByKey = MIPIRDimensionMeasure::where('PPFNo', $ppf)
                     ->where('Checktime', $checkTime)
-                    ->get(['DimItem', 'Set', 'xbarTransaction'])
-                    ->mapWithKeys(fn($m) => ["{$m->DimItem}|{$m->Set}" => $m->xbarTransaction])
+                    ->get(['DimItem', 'RowNo', 'Set', 'xbarTransaction'])
+                    ->mapWithKeys(fn($m) => ["{$m->DimItem}|{$m->RowNo}|{$m->Set}" => $m->xbarTransaction])
                     ->all();
                 $existingDefect = Defect::where('PPFNo', $ppf)
                     ->where('Checktime', $checkTime)
@@ -180,17 +180,20 @@ class CreateInspection
                     $forXBar = $row['forXBar'] ?? false;
                     $controlLimit = $row['CL'] ?? "";
                     $isXBarTracked = ! in_array($itemName, ['Flash Thickness', 'Gap-Offset'], true);
+                    $rowNo = $row['rowNo'] ?? null;
 
                     $setsCount = (int) ceil(count($measurements) / 5);
 
                     for ($s = 0; $s < $setsCount; $s++) {
                         $chunk = array_slice($measurements, $s * 5, 5);
-
+                        $set   = $s + 1;
                         $transactionId = null;
                         $xbarResult = null;
 
                         if ($isExistingCheckTime) {
-                            $transactionId = $existingTransactionByKey["{$itemName}|" . ($s + 1)] ?? null;
+                            $transactionId = $existingTransactionByKey["{$itemName}|{$rowNo}|{$set}"]
+                                ?? $existingTransactionByKey["{$itemName}||{$set}"]  
+                                ?? null;
                         } elseif ($isXBarTracked && $itemName && $forXBar) {
                             $xbarResult = app(XBarCycleTracker::class)->recordSubgroup(
                                 Auth::user()->Plant,
@@ -220,7 +223,8 @@ class CreateInspection
                             '3' => number_format((float) ($chunk[2] ?? 0), 4, '.', ''),
                             '4' => number_format((float) ($chunk[3] ?? 0), 4, '.', ''),
                             '5' => number_format((float) ($chunk[4] ?? 0), 4, '.', ''),
-                            'InspectedBy' => $inspectorNo
+                            'InspectedBy' => $inspectorNo,
+                            'RowNo' => $rowNo,
                         ]);
 
                         if ($isXBarTracked && $itemName && $forXBar && $transactionId) {

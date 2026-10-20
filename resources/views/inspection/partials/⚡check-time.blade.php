@@ -299,7 +299,6 @@ new class extends \Livewire\Component
             }
             $this->sortCheckTimesByDateEncode();
 
-            // Update: ang mga check time na nasa database ay makikita lang, hindi na mae-edit
             $this->lockedCheckTimes = $this->action === 'edit' ? $this->checkTimes : [];
             $this->clearBlockingErrors($this->lockedCheckTimes);
         }

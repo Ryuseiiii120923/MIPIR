@@ -35,6 +35,7 @@ class MIPIRDimensionMeasure extends Model
         'ForXBar',
         'xbarTransaction',
         'isRecord',
-        'InspectedBy'
+        'InspectedBy',
+        'RowNo'
     ];
 }

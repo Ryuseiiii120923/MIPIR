@@ -69,7 +69,7 @@ class InspectionRecordService
 
             $this->insertHeader($firstPpf, $sheet);
             $this->insertDimensionHeaders($dimItems, $blocks, $sheet);
-            $this->insertRows($plan, $dimItems, $blocks, $trailing, $sheet,$confirmedBy);
+            $this->insertRows($plan, $dimItems, $blocks, $trailing, $sheet, $confirmedBy);
 
             $output = $outputPath ?? $this->legacyOutputPath($plan);
 
@@ -342,8 +342,22 @@ class InspectionRecordService
 
     private function insertDimensionValues(MIPIRInspectionRecord $record, array $dimItems, array $blocks, $sheet, int $row)
     {
-        $measures = $record->dimensionMeasures()->where('Checktime', $record->Checktime)->get();
+        $measures = $record->dimensionMeasures()
+            ->where('Checktime', $record->Checktime)
+            ->orderBy('RowNo')
+            ->orderBy('Set')
+            ->orderBy('RECNO')
+            ->get();
+        $firstRowNo = [];
+
         foreach ($measures as $measure) {
+            $rowNo = $measure->RowNo ?? 0;
+            $firstRowNo[$measure->DimItem] ??= $rowNo;
+
+            if ($firstRowNo[$measure->DimItem] !== $rowNo) {
+                continue;
+            }
+
             $target = $this->resolveDimItemTarget($dimItems, $measure->DimItem);
             if (! $target) {
                 continue;
