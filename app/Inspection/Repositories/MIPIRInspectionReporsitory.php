@@ -53,7 +53,7 @@ class MIPIRInspectionReporsitory
             'Value4' => $data['4'] ?? null,
             'Value5' => $data['5'] ?? null,
             'InspectedBy' => $data['InspectedBy'],
-            'RowNo' => $data['RowNo']
+            'RowNo' => $data['RowNo'] ?? null
         ]);
     }
 

@@ -234,13 +234,6 @@ new class extends Component
         }
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Excel upload — parses into the currently selected check time,
-    | then opens the Normal/Tightened modal to confirm the set count.
-    |--------------------------------------------------------------------------
-    */
-
     public function updatedExcelFile(): void
     {
         $this->validateOnly('excelFile');
@@ -288,7 +281,6 @@ new class extends Component
                 continue;
             }
 
-            // Measurement is always the last column
             $value = $row[count($row) - 1] ?? null;
 
             if (!is_numeric($value)) {
@@ -405,7 +397,6 @@ new class extends Component
         $this->specLower      = $spec['specLower'];
     }
 
-    /** Fires on every wire:model.live update — recomputes limits/judge live, same as dimensions.blade.php. */
     public function updated(string $property): void
     {
         if (in_array($property, ['specType', 'specNominal', 'specTolerance', 'specUpper', 'specLower', 'controlLimit'], true)) {
@@ -476,16 +467,6 @@ new class extends Component
             $this->addError('checkTime', 'Please add at least one check time.');
             return;
         }
-
-        // $missing = array_filter(
-        //     $this->checkTimes,
-        //     fn($time) => empty($this->measurementsXByTime[$time]) || empty($this->modeByTime[$time])
-        // );
-
-        // if (! empty($missing)) {
-        //     $this->addError('excelFile', 'Every check time needs an uploaded file and confirmed Normal/Tightened mode: ' . implode(', ', $missing));
-        //     return;
-        // }
 
         DB::transaction(function () {
             foreach ($this->checkTimes as $time) {
@@ -570,7 +551,7 @@ new class extends Component
                 '3' => number_format((float) ($chunk[2] ?? 0), 4, '.', ''),
                 '4' => number_format((float) ($chunk[3] ?? 0), 4, '.', ''),
                 '5' => number_format((float) ($chunk[4] ?? 0), 4, '.', ''),
-                'InspectedBy' => Auth::user()->InspectorNo ?? null
+                'InspectedBy' => Auth::user()->InspectorNo ?? null,
             ]);
         }
 
