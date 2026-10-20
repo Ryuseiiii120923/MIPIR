@@ -107,15 +107,26 @@ class ExcelDataRepository
             ->get();
     }
 
-    public function getLimit(string $dimension){
+    public function getLimit(string $dimension)
+    {
         return ControlSpecsLimit::where('DimItem', $dimension)->first();
     }
 
-    public function getSpecs(string $dimension){
-        return DimensionMasterForXBar::where('DimensionName', $dimension)->first();
+    public function getSpecs(string $dimension, string $partNo)
+    {
+        return DimensionMasterForXBar::where('DimensionName', $dimension)->where('PartNo', $partNo)->first();
+    }
+    public function getMasterSpecs(string $dimension, string $partNo)
+    {
+        return DimensionMaster::query()
+            ->where('PartNo', $partNo)
+            ->where('DimensionName', $dimension)
+            ->orderBy('DimensionNo')
+            ->first();
     }
 
-    public function getHeaderforRec(string $ppf) {
+    public function getHeaderforRec(string $ppf)
+    {
         return MIPIRInspectionRecord::where('PPFNo', $ppf);
     }
 }

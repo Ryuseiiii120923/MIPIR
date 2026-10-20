@@ -140,43 +140,63 @@ class MIPIRRecordCycleTracker
 
     public function resolveDimItems(string $partNo, array|int|null $ppfs = null): array
     {
-        $forXBarDim = $this->dimQuery($partNo, $ppfs)
-            ->where('ForXBar', true)
-            ->whereNotIn('DimItem', ['Flash Thickness', 'Gap-Offset'])
+        $rows = $this->dimQuery($partNo, $ppfs)
             ->where('DimItem', 'not like', '% (Y)')
             ->orderBy('RECNO')
-            ->value('DimItem');
+            ->get(['PPFNo', 'Checktime', 'DimItem', 'RowNo', 'ForXBar']);
 
-        if ($forXBarDim === null) {
+        if ($rows->isEmpty()) {
             return [];
         }
 
-        $variant    = $this->variantFor($partNo);
-        $customDims = [$forXBarDim];
+        $fixed    = ['Flash Thickness', 'Gap-Offset'];
+        $hasFlash = $rows->contains('DimItem', 'Flash Thickness');
+        $hasGap   = $rows->contains('DimItem', 'Gap-Offset');
+        $custom   = $rows->reject(fn($r) => in_array($r->DimItem, $fixed, true));
 
-        // Sa 4 columns lang kukuha ng dagdag na custom dimension
-        if ($variant === 4) {
-            $others = $this->dimQuery($partNo, $ppfs)
-                ->whereNotIn('DimItem', ['Flash Thickness', 'Gap-Offset', $forXBarDim])
-                ->where('DimItem', 'not like', '% (Y)')
-                ->select('DimItem')
-                ->groupBy('DimItem')
-                ->orderByRaw('MIN(RECNO)')
-                ->pluck('DimItem')
-                ->all();
+        $names = $custom->pluck('DimItem')->unique()->values();
+        $xbar  = $custom->first(fn($r) => (bool) $r->ForXBar)?->DimItem;
 
-            $customDims = array_merge($customDims, $others);
+        if ($xbar !== null) {
+            $names = $names->reject(fn($n) => $n === $xbar)->prepend($xbar)->values();
         }
 
-        // 3 columns = 1 custom + Flash + Gap-Offset. 4 columns = 2 custom + Flash + Gap-Offset.
-        $customDims = array_slice($customDims, 0, $variant - 2);
+        $nameLimit = $this->variantFor($partNo) === 4 ? 2 : 1;
 
-        return array_merge(
-            $customDims,
-            ['Flash Thickness', ['Gap-Offset', 'Gap-Offset (Y)']]
-        );
+        $entries = [];
+
+        foreach ($names->take($nameLimit) as $name) {
+            $copies = $custom->where('DimItem', $name)
+                ->groupBy(fn($r) => $r->PPFNo . '|' . $r->Checktime)
+                ->map(fn($g) => $g->map(fn($r) => $r->RowNo ?? 0)->unique()->count())
+                ->max() ?? 1;
+
+            for ($n = 0; $n < $copies; $n++) {
+                $entries[] = ['item' => $name, 'nth' => $n];
+            }
+        }
+
+        $capacity = 4 - (int) $hasFlash - (int) $hasGap;
+
+        if (count($entries) > $capacity) {
+            Log::warning('MIPIRRecordCycleTracker: too many dimension columns, extras dropped', [
+                'partNo' => $partNo,
+                'needed' => count($entries),
+                'capacity' => $capacity,
+            ]);
+            $entries = array_slice($entries, 0, $capacity);
+        }
+
+        if ($hasFlash) {
+            $entries[] = 'Flash Thickness';
+        }
+
+        if ($hasGap) {
+            $entries[] = ['Gap-Offset', 'Gap-Offset (Y)'];
+        }
+
+        return $entries;
     }
-
     private function dimQuery(string $partNo, array|int|null $ppfs)
     {
         return MIPIRDimensionMeasure::query()

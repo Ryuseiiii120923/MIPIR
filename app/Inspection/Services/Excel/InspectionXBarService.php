@@ -177,7 +177,7 @@ class InspectionXBarService
 
                     if ($numericValue > $ucl || $numericValue < $lcl) {
                         $trendChartResult = 'NG';
-                        break; // sapat na ang isang violation para markahan NG ang buong column
+                        break;
                     }
                 }
 
@@ -209,7 +209,7 @@ class InspectionXBarService
         $sheet->setCellValue('Z7',  $result->LSLr);
         $sheet->setCellValue('T8', $result->CCLr);
         $sheet->setCellValue('W8', $result->UCLr);
-        $sheet->setCellValue('Z8', $result->LSLr);
+        $sheet->setCellValue('Z8', $result->LCLr);
 
         $maximum = number_format((float)$result->UCLx + 0.015, 3, '.', '');
         $minimum = number_format((float)$result->LCLx - 0.015, 3, '.', '');

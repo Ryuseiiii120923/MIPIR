@@ -39,8 +39,7 @@ class InspectionRecordService
     public function generate(array $lots, array $dimItems, ?string $outputPath = null, ?int $variant = null, ?string $confirmedBy = null): string
     {
         try {
-            // Kung walang ibinigay, ang dami ng dimension item ang batayan (dating asal)
-            $variant = $variant ?? count($dimItems);
+            $variant = max($variant ?? 3, count($dimItems) > 3 ? 4 : 3);
 
             if (! isset(self::BLOCK_LAYOUTS[$variant])) {
                 throw new \RuntimeException("Unsupported column variant: {$variant}");
@@ -67,8 +66,10 @@ class InspectionRecordService
                 throw new \RuntimeException('No valid PPF found to build the report header.');
             }
 
+            $partNo = trim((string) MIPIRInspectionRecord::where('PPFNo', $firstPpf)->value('PartNo'));
+
             $this->insertHeader($firstPpf, $sheet);
-            $this->insertDimensionHeaders($dimItems, $blocks, $sheet);
+            $this->insertDimensionHeaders($dimItems, $blocks, $sheet, $partNo);
             $this->insertRows($plan, $dimItems, $blocks, $trailing, $sheet, $confirmedBy);
 
             $output = $outputPath ?? $this->legacyOutputPath($plan);
@@ -128,49 +129,34 @@ class InspectionRecordService
     }
 
 
-
-    /**
-     * $dimItems: ordered array of DimItem identifiers, one entry per column-block.
-     * An entry can be a plain string ('Flash Thickness') for a single-row item, or an
-     * array (['Gap-Offset', 'Gap-Offset (Y)']) for an item that needs its own two rows —
-     * index 0 lands on the block's top row, index 1 on the row beneath it.
-     */
-    public function insertDimensionHeaders(array $dimItems, array $blocks, $sheet)
+    private function specText(string $label, string $partNo): ?string
     {
         $repository = app(ExcelDataRepository::class);
 
-        foreach ($dimItems as $index => $entry) {
-            $slot = $index + 1;
-            if (! isset($blocks[$slot])) {
-                continue;
+        if ($x = $repository->getSpecs($label, $partNo)) {
+            if ((float) $x->UpperLimit === 0.0) {
+                return 'Min ' . $this->formatSpecValue($x->LowerLimit);
+            }
+            if ((float) $x->LowerLimit === 0.0) {
+                return 'Max ' . $this->formatSpecValue($x->UpperLimit);
             }
 
-            $label = is_array($entry) ? $entry[0] : $entry;
-            $specs = $repository->getSpecs($label);
-
-            if ($specs === null) {
-                Log::error('InspectionRecordService: no specs found for dimension label', [
-                    'label' => $label,
-                    'entry' => $entry,
-                ]);
-                continue;
-            }
-
-            if ((float) $specs->UpperLimit === 0.0) {
-                $specText = 'Min' . $this->formatSpecValue($specs->LowerLimit);
-            } elseif ((float) $specs->LowerLimit === 0.0) {
-                $specText = 'Max ' . $this->formatSpecValue($specs->UpperLimit);
-            } else {
-                $lower = $specs->Specification - $specs->LowerLimit;
-                $higher = $specs->Specification + $specs->UpperLimit;
-                $specText = $this->formatSpecValue($lower) . '-' . $this->formatSpecValue($higher);
-            }
-
-            $col = $blocks[$slot]['values'][2];
-
-            $sheet->setCellValue("{$col}5", $label);
-            $sheet->setCellValue("{$col}6", $specText);
+            return $this->formatSpecValue($x->Specification - $x->LowerLimit)
+                . '-' . $this->formatSpecValue($x->Specification + $x->UpperLimit);
         }
+
+        if ($m = $repository->getMasterSpecs($label, $partNo)) {
+            $upper = is_numeric($m->UpperLimit) ? (float) $m->UpperLimit : null;
+            $lower = is_numeric($m->LowerLimit) ? (float) $m->LowerLimit : null;
+
+            return match (true) {
+                $upper !== null && $upper != 0.0 && ($lower === null || $lower == 0.0) => 'Max ' . $this->formatSpecValue($m->UpperLimit),
+                $lower !== null && $lower != 0.0 && ($upper === null || $upper == 0.0) => 'Min ' . $this->formatSpecValue($m->LowerLimit),
+                $upper !== null && $lower !== null => $this->formatSpecValue($m->LowerLimit) . '-' . $this->formatSpecValue($m->UpperLimit),
+                default => trim((string) $m->Specification) ?: null,
+            };
+        }
+        return null;
     }
 
     private function formatSpecValue($value): string
@@ -319,66 +305,107 @@ class InspectionRecordService
         $sheet->setCellValue("K{$row}", $first->NGPercent ?? 0);
         $sheet->setCellValue("L{$row}", $first->Judgement ?? 'O');
     }
-    private function resolveDimItemTarget(array $dimItems, string $dimItemName): ?array
-    {
-        foreach ($dimItems as $index => $entry) {
-            $slot = $index + 1;
-
-            if (is_array($entry)) {
-                $offset = array_search($dimItemName, $entry, true);
-                if ($offset !== false) {
-                    return ['slot' => $slot, 'rowOffset' => $offset];
-                }
-                continue;
-            }
-
-            if ($entry === $dimItemName) {
-                return ['slot' => $slot, 'rowOffset' => 0];
-            }
-        }
-
-        return null;
-    }
 
     private function insertDimensionValues(MIPIRInspectionRecord $record, array $dimItems, array $blocks, $sheet, int $row)
     {
+        $targets = [];
+
+        foreach (array_values($dimItems) as $index => $raw) {
+            $entry = $this->normalizeEntry($raw);
+
+            foreach ($entry['items'] as $offset => $name) {
+                $targets["{$name}|{$entry['nth']}"] = [
+                    'slot'      => $index + 1,
+                    'rowOffset' => $offset,
+                    'pair'      => count($entry['items']) > 1,
+                ];
+            }
+        }
+
         $measures = $record->dimensionMeasures()
             ->where('Checktime', $record->Checktime)
             ->orderBy('RowNo')
             ->orderBy('Set')
             ->orderBy('RECNO')
             ->get();
-        $firstRowNo = [];
+
+        $seen        = [];   // DimItem => [RowNo => nth]
+        $judgeBySlot = [];
 
         foreach ($measures as $measure) {
+            // Pang-ilang row ng parehong dimension sa check time na ito
             $rowNo = $measure->RowNo ?? 0;
-            $firstRowNo[$measure->DimItem] ??= $rowNo;
+            $seen[$measure->DimItem] ??= [];
+            $seen[$measure->DimItem][$rowNo] ??= count($seen[$measure->DimItem]);
+            $nth = $seen[$measure->DimItem][$rowNo];
 
-            if ($firstRowNo[$measure->DimItem] !== $rowNo) {
+            $target = $targets["{$measure->DimItem}|{$nth}"] ?? null;
+
+            if ($target === null || ! isset($blocks[$target['slot']])) {
                 continue;
             }
 
-            $target = $this->resolveDimItemTarget($dimItems, $measure->DimItem);
-            if (! $target) {
-                continue;
+            $targetRow = $row + $target['rowOffset'];
+            $values    = [$measure->Value1, $measure->Value2, $measure->Value3, $measure->Value4, $measure->Value5];
+
+            foreach ($blocks[$target['slot']]['values'] as $i => $col) {
+                $sheet->setCellValue("{$col}{$targetRow}", $values[$i]);
             }
 
-            $columns = $blocks[$target['slot']]['values'];
-            $targetRow = $row + $target['rowOffset']; // e.g. Gap-Offset X -> row, Y -> row+1
-
-            $values = [$measure->Value1, $measure->Value2, $measure->Value3, $measure->Value4, $measure->Value5];
-
-            foreach ($columns as $index => $col) {
-                $sheet->setCellValue("{$col}{$targetRow}", $values[$index]);
+            // Gap-Offset: iisang merged judge, galing sa itaas na row. Ang iba: bawat slot may sariling judge.
+            if (! $target['pair'] || $target['rowOffset'] === 0) {
+                $judgeBySlot[$target['slot']] = max($judgeBySlot[$target['slot']] ?? 0, (int) $measure->Judge);
             }
+        }
 
-            // Judge is merged across both sub-rows when a slot has them — write once, from the top row
-            if ($target['rowOffset'] === 0) {
-                $sheet->setCellValue("{$blocks[$target['slot']]['judge']}{$row}", $measure->Judge);
-            }
+        foreach ($judgeBySlot as $slot => $judge) {
+            $sheet->setCellValue("{$blocks[$slot]['judge']}{$row}", $judge);
         }
     }
 
+    private function normalizeEntry(mixed $entry): array
+    {
+        if (is_string($entry)) {
+            return ['items' => [$entry], 'nth' => 0];
+        }
+
+        if (isset($entry['item'])) {
+            return ['items' => [$entry['item']], 'nth' => (int) ($entry['nth'] ?? 0)];
+        }
+
+        return ['items' => array_values($entry), 'nth' => 0];
+    }
+
+    public function insertDimensionHeaders(array $dimItems, array $blocks, $sheet, string $partNo = '')
+    {
+        $entries = array_map(fn($e) => $this->normalizeEntry($e), array_values($dimItems));
+
+        foreach ($blocks as $slot => $block) {
+            $col   = $block['values'][2];
+            $entry = $entries[$slot - 1] ?? null;
+
+            if ($entry === null) {
+                $sheet->setCellValue("{$col}5", null);
+                $sheet->setCellValue("{$col}6", null);
+                continue;
+            }
+
+            $label = $entry['items'][0];
+            $sheet->setCellValue("{$col}5", $label);
+
+            $specText = $this->specText($label, $partNo);
+
+            if ($specText === null) {
+                Log::error('InspectionRecordService: no specs found for dimension label', [
+                    'label' => $label,
+                    'partNo' => $partNo,
+                ]);
+                continue;
+            }
+
+            $sheet->setCellValue("{$col}6", $specText);
+        }
+    }
     private function buildRowPlan(array $lots): array
     {
         $plan = [];
