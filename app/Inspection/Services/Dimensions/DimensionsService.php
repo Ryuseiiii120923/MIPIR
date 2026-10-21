@@ -289,4 +289,40 @@ class DimensionsService
     {
         return rtrim(rtrim(number_format($value, 4, '.', ''), '0'), '.');
     }
+
+    public function judgeXBar(array $measurements, array $limits): array
+    {
+        $num = fn($v) => is_numeric($v) ? round((float) $v, 4) : null;
+
+        $result = ['judgeXCL' => null, 'judgeRSL' => null, 'judgeRCL' => null];
+
+        // Kumpletong set na 5 lang ang huhusgahan, para hindi magkamali habang nagta-type
+        $sets = collect(array_chunk(array_values($measurements), 5))
+            ->map(fn($chunk) => array_map($num, $chunk))
+            ->filter(fn($set) => count($set) === 5 && ! in_array(null, $set, true))
+            ->values();
+
+        if ($sets->isEmpty()) {
+            return $result;
+        }
+
+        $means  = $sets->map(fn($s) => round(array_sum($s) / 5, 4));
+        $ranges = $sets->map(fn($s) => round(max($s) - min($s), 4));
+
+        $judge = function ($values, ?float $low, ?float $high): ?string {
+            if ($low === null && $high === null) {
+                return null;   // walang limit na naka-set
+            }
+
+            return $values->every(fn($v) => ($low === null || $v >= $low) && ($high === null || $v <= $high))
+                ? 'O'
+                : 'X';
+        };
+
+        $result['judgeXCL'] = $judge($means,  $num($limits['LCLx'] ?? null), $num($limits['UCLx'] ?? null));
+        $result['judgeRSL'] = $judge($ranges, $num($limits['LSLr'] ?? null), $num($limits['USLr'] ?? null));
+        $result['judgeRCL'] = $judge($ranges, $num($limits['LCLr'] ?? null), $num($limits['UCLr'] ?? null));
+
+        return $result;
+    }
 }

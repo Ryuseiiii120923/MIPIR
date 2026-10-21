@@ -21,6 +21,7 @@ new class extends Component
     public string $modalStep = 'choose';
     public int $pendingSets = 1;
     public int $moldingDieNo = 0;
+    public array $limitsByItem = [];
 
     public function mount(
         ?string $selectedCheckTime = null,
@@ -446,6 +447,42 @@ new class extends Component
     {
         $this->moldingDieNo = $moldingDieNo;
     }
+
+    #[On('control-limit-synced')]
+    public function onControlLimitSynced(array $draft): void
+    {
+        $item = mb_strtolower(trim((string) ($draft['dimItem'] ?? '')));
+
+        if ($item === '') {
+            return;
+        }
+
+        $this->limitsByItem[$item] = $draft;
+
+        foreach ($this->rows as $i => $row) {
+            if (mb_strtolower(trim($row['item'] ?? '')) === $item) {
+                $this->evaluateXBarJudgements($i);
+            }
+        }
+
+        $this->syncToParent();
+    }
+
+    private function evaluateXBarJudgements(int $i): void
+    {
+        $row = $this->rows[$i];
+
+        if (empty($row['forXBar'])) {
+            return;
+        }
+
+        $limits = $this->limitsByItem[mb_strtolower(trim($row['item'] ?? ''))] ?? [];
+
+        $this->rows[$i] = array_merge(
+            $row,
+            $this->service()->judgeXBar($row['measurements'] ?? [], $limits)
+        );
+    }
 }
 ?>
 
@@ -492,7 +529,7 @@ new class extends Component
             Add New Dimension
         </button>
 
-         <button
+        <button
             type="button"
             wire:click="AddNewDimensionXBar"
             @if($readonly) disabled @endif
@@ -526,6 +563,7 @@ new class extends Component
                             <p class="font-medium text-base">Dimension entry</p>
                             @if($isXBar)
                             <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">X-Bar Table</span>
+
                             @endif
                             <p class="text-sm text-gray-500">{{ $row['item'] ?: 'Enter item' }}</p>
                         </div>
@@ -675,6 +713,7 @@ new class extends Component
                         :partNo="$partNo"
                         :moldDie="$moldingDieNo"
                         :rowIndex="$i"
+                        :measurements="$row['measurements'] ?? []"
                         :key="'specs-control-limit-'.$i" />
                 </div>
                 @endif

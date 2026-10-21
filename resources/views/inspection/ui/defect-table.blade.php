@@ -15,15 +15,17 @@
                 <td class="px-4 py-2 flex justify-center gap-2">
                     <div x-data="{ openEdit: false }">
                         <div class="flex gap-3">
+                            @php $hasSmall = ! empty($smallDefects[$defect['type']] ?? []); @endphp
+
+                            @unless($hasSmall)
                             <button
                                 @click="openEdit = true"
-                                @if ($readonly)
-                                disabled
-                                @endif
+                                @if ($readonly) disabled @endif
                                 class="text-white bg-green-700 px-4 py-2 rounded"
                                 wire:click="startEditDefect('{{ $defect['type'] }}')">
                                 Edit
                             </button>
+                            @endunless
 
                             <button
                                 @if ($readonly)

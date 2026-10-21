@@ -9,6 +9,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use App\Inspection\Events\XBarCycleFull;
+use App\Inspection\Listeners\NotifyStaffXBarFull;
+use Illuminate\Support\Facades\Event;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -32,20 +35,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        \Illuminate\Support\Facades\DB::listen(function ($query) {
-            if (str_contains($query->sql, 'tblDimensionMeasure')) {
-                logger('Dimension SQL', [
-                    'sql' => $query->sql,
-                    'bindings' => $query->bindings,
-                ]);
-            }
-        });
         $this->configureDefaults();
 
         Gate::define('confirm-lots', function ($user) {
             return app(LotConfirmationRepository::class)
                 ->isGl((string) $user->{'社員CD'});
         });
+
+         Event::listen(XBarCycleFull::class, NotifyStaffXBarFull::class);
     }
 
     /**

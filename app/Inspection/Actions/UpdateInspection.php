@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 
 class UpdateInspection
 {
-    public function execute(int $ppfno): void
+    public function execute(int $ppfno): array
     {
         $drafts = app(DraftAction::class);
 
@@ -23,8 +23,8 @@ class UpdateInspection
             $draft = $drafts->get($ppfno);
         }
 
-        DB::transaction(function () use ($ppfno, $draft) {
-            app(CreateInspection::class)->execute($ppfno, $draft);
+        return DB::transaction(function () use ($ppfno, $draft) {
+            return app(CreateInspection::class)->execute($ppfno, $draft);
         });
     }
 }

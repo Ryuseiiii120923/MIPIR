@@ -1,3 +1,6 @@
+@php
+$isStaffMenu = auth('web')->check() && session('access') !== 'gl';
+@endphp
 <nav class="flex-1 py-4 space-y-1 px-2 overflow-y-auto overflow-x-hidden">
 
     <x-ui.sidebar-button
@@ -19,7 +22,7 @@
         </x-slot:icon>
     </x-ui.sidebar-button>
 
-    @if (auth('web')->check())
+    @if ($isStaffMenu)
     <x-ui.sidebar-button
         page="dimension-encoding"
         title="Dimension Encoding"
@@ -110,53 +113,53 @@
 
     </x-ui.sidebar-button>
 
-<x-ui.sidebar-button
-    page="gl-registration"
-    title="GL Registration"
-    @click.stop="desktopExpanded = false; mobileOpen = false">
+    <x-ui.sidebar-button
+        page="gl-registration"
+        title="GL Registration"
+        @click.stop="desktopExpanded = false; mobileOpen = false">
 
-    <x-slot:icon>
-        <svg xmlns="http://www.w3.org/2000/svg"
-            class="w-5 h-5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            stroke-width="1.8">
+        <x-slot:icon>
+            <svg xmlns="http://www.w3.org/2000/svg"
+                class="w-5 h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="1.8">
 
-            <!-- Group Leader -->
-            <circle cx="9" cy="7" r="3"
-                stroke-linecap="round"
-                stroke-linejoin="round" />
+                <!-- Group Leader -->
+                <circle cx="9" cy="7" r="3"
+                    stroke-linecap="round"
+                    stroke-linejoin="round" />
 
-            <!-- Group Leader shoulders -->
-            <path stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M3.5 19v-1.5a5.5 5.5 0 0111 0V19" />
+                <!-- Group Leader shoulders -->
+                <path stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M3.5 19v-1.5a5.5 5.5 0 0111 0V19" />
 
-            <!-- Registration form -->
-            <rect x="14" y="3" width="7" height="10"
-                rx="1.2"
-                stroke-linecap="round"
-                stroke-linejoin="round" />
+                <!-- Registration form -->
+                <rect x="14" y="3" width="7" height="10"
+                    rx="1.2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round" />
 
-            <!-- Form lines -->
-            <path stroke-linecap="round"
-                d="M16 6h3M16 8.5h3" />
+                <!-- Form lines -->
+                <path stroke-linecap="round"
+                    d="M16 6h3M16 8.5h3" />
 
-            <!-- Checkmark -->
-            <path stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M15.5 11l1.2 1.2 2.3-2.5" />
+                <!-- Checkmark -->
+                <path stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M15.5 11l1.2 1.2 2.3-2.5" />
 
-            <!-- Registration record -->
-            <path stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M15 17h5M15 20h5" />
+                <!-- Registration record -->
+                <path stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M15 17h5M15 20h5" />
 
-        </svg>
-    </x-slot:icon>
+            </svg>
+        </x-slot:icon>
 
-</x-ui.sidebar-button>
+    </x-ui.sidebar-button>
 
     @else
     <x-ui.sidebar-button
@@ -189,8 +192,6 @@
                 <path stroke-linecap="round"
                     stroke-linejoin="round"
                     d="M9.5 14.5L12 17l2.5-2.5" />
-
-            </svg>
 
             <path stroke-linecap="round"
                 stroke-linejoin="round"

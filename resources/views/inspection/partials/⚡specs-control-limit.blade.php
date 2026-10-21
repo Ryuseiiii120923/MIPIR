@@ -8,6 +8,9 @@ use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 use Livewire\Component;
+use App\Inspection\Services\Dimensions\DimensionsService;
+use Livewire\Attributes\Computed;
+use Livewire\Attributes\Reactive;
 
 new class extends Component
 {
@@ -53,6 +56,8 @@ new class extends Component
     public array $moldingDieNo = [];
 
     public string $selectedDie = '';
+    #[Reactive]
+    public array $measurements = [];
 
     public function syncDraft()
     {
@@ -84,8 +89,10 @@ new class extends Component
         ?float $USLx = null,
         ?float $LSLx = null,
         ?float $specs = null,
-        ?int $moldDie = 0
+        ?int $moldDie = 0,
+        array $measurements = []
     ) {
+        $this->measurements = $measurements;
         $this->moldingDieNo = array_values(array_unique(array_map('strval', $moldingDieNo)));
         $this->selectedDie = $this->moldingDieNo[0] ?? ($moldDie ? (string) $moldDie : '');
         $this->partNo = $partNo;
@@ -103,6 +110,28 @@ new class extends Component
         $this->resolveLimit();
     }
 
+    #[Computed]
+    public function judgements(): array
+    {
+        if ($this->standalone || $this->measurements === []) {
+            return [];
+        }
+
+        $j = app(DimensionsService::class)->judgeXBar($this->measurements, [
+            'LCLx' => $this->LCLx,
+            'UCLx' => $this->UCLx,
+            'LSLr' => $this->LSLr,
+            'USLr' => $this->USLr,
+            'LCLr' => $this->LCLr,
+            'UCLr' => $this->UCLr,
+        ]);
+
+        return [
+            'X - CONTROL LIMIT'       => $j['judgeXCL'],
+            'R - SPECIFICATION LIMIT' => $j['judgeRSL'],
+            'R - CONTROL LIMIT'       => $j['judgeRCL'],
+        ];
+    }
     public function updatedSelectedDie(string $value): void
     {
         if ($value !== '' && ! in_array($value, $this->moldingDieNo, true)) {
@@ -361,6 +390,18 @@ new class extends Component
                 @enderror
             </div>
             @endforeach
+            @if (! empty($this->judgements))
+            @php $verdict = $this->judgements[$groupLabel] ?? null; @endphp
+            <div class="w-24 shrink-0" wire:key="verdict-{{ $groupLabel }}">
+                @if (array_key_exists($groupLabel, $this->judgements))
+                <span class="block text-xs font-medium text-gray-600 mb-1">Judgement</span>
+                <div class="rounded-lg px-3 py-2 text-center text-sm font-semibold
+        {{ $verdict === 'X' ? 'bg-red-100 text-red-700' : ($verdict === 'O' ? 'bg-green-100 text-green-700' : 'bg-gray-50 text-gray-400') }}">
+                    {{ $verdict ?? '—' }}
+                </div>
+                @endif
+            </div>
+            @endif
         </div>
         @endforeach
     </div>

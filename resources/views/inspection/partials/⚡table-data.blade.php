@@ -28,9 +28,12 @@ new class extends Component
 
     public function mount()
     {
-        $this->encoder = Auth::user()->EmployeeID;
-    }
+        $worker = Auth::guard('worker')->user();
 
+        $this->encoder = (int) ($worker
+            ? $worker->EmployeeID
+            : Auth::guard('web')->user()?->{'社員CD'});
+    }
 
     #[On('action-changed')]
     public function onActionChanged($action)

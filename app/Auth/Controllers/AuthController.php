@@ -38,11 +38,11 @@ class AuthController extends Controller
         ];
 
         $request->validate([
-            'userid' => 'required|integer',
+            'userid'   => 'required|integer',
             'password' => 'required|string',
         ]);
 
-        $userid = $request->input('userid');
+        $userid   = $request->input('userid');
         $password = $request->input('password');
 
         if ($this->isDummyLogin((int) $userid, $password)) {
@@ -69,17 +69,21 @@ class AuthController extends Controller
 
                 $request->session()->put('access', $isGl ? 'gl' : 'staff');
 
-                return redirect()->route($isGl ? 'lot-confirmation' : 'landing-page');
+                if ($isGl) {
+                    // GL: ask where to go (lot confirmation or inspection)
+                    return redirect()
+                        ->route('landing-page')
+                        ->with('gl_choice', true);
+                }
+
+                return redirect()->route('landing-page');
             }
 
             return back()
                 ->withInput($request->only('userid'))
-                ->withErrors([
-                    'credentials' => 'Incorrect credentials',
-                ]);
+                ->withErrors(['credentials' => 'Incorrect credentials']);
         }
 
-        // Check if the inspector/worker is registered
         $worker = WorkerLogin::where('EmployeeID', $userid)->first();
 
         if (! $worker) {
@@ -90,7 +94,6 @@ class AuthController extends Controller
                 ]);
         }
 
-        // Verify worker credentials
         if ($worker->Password === $password) {
             Auth::guard('worker')->login($worker);
             $request->session()->regenerate();
@@ -100,9 +103,7 @@ class AuthController extends Controller
 
         return back()
             ->withInput($request->only('userid'))
-            ->withErrors([
-                'credentials' => 'Incorrect credentials',
-            ]);
+            ->withErrors(['credentials' => 'Incorrect credentials']);
     }
 
     private function isDummyLogin(int $userid, string $password): bool

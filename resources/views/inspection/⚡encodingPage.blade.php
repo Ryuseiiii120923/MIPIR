@@ -100,9 +100,9 @@ new class extends Component
         if ($this->action === 'edit') {
             try {
                 app(ConfirmationCheckTimeService::class)->appendIfRejected($this->selectedPpf);
-                app(UpdateInspection::class)->execute($this->selectedPpf);
+                $result = app(UpdateInspection::class)->execute($this->selectedPpf);
                 PpfLookUpRepository::forgetMainData($this->selectedPpf);
-                $this->notifyReload('success', 'Updated Successfully');
+                $this->notifyReload('success', 'Updated Successfully.' . $this->xbarFullNote($result));
                 return;
             } catch (\InvalidArgumentException $e) {
                 $this->notifyFail('Validation error', $e->getMessage());
@@ -142,12 +142,12 @@ new class extends Component
         }
 
         try {
-            app(CreateInspection::class)->execute($this->selectedPpf, $draft);
+            $result = app(CreateInspection::class)->execute($this->selectedPpf, $draft);
 
             app(DraftAction::class)->clear($this->selectedPpf);
 
             PpfLookUpRepository::forgetMainData($this->selectedPpf);
-            $this->notifyReload('success', 'Inspection record saved.');
+            $this->notifyReload('success', 'Inspection record saved.' . $this->xbarFullNote($result));
         } catch (\InvalidArgumentException $e) {
             Log::warning('DashboardSave: validation error', [
                 'ppf' => $this->selectedPpf,
@@ -163,6 +163,17 @@ new class extends Component
             ]);
             $this->notifyFail('Save failed', 'Something went wrong while saving. Please try again.');
         }
+    }
+    private function xbarFullNote(?array $result): string
+    {
+        $dimensions = collect($result['xbarFull'] ?? [])
+            ->pluck('dimension')
+            ->unique()
+            ->values();
+
+        return $dimensions->isEmpty()
+            ? ''
+            : ' X-Bar full (25 subgroups): ' . $dimensions->implode(', ') . '.';
     }
 };
 ?>

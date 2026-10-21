@@ -2,7 +2,9 @@
 
 namespace App\Inspection\Actions;
 
+use App\Auth\Services\CurrentActor;
 use App\Domain\XBar\Repositories\XBarRepository;
+use App\Inspection\Events\XBarCycleFull;
 use App\Inspection\Models\ChckTRemarks;
 use App\Inspection\Models\CheckTime;
 use App\Inspection\Models\Defect;
@@ -29,7 +31,7 @@ class CreateInspection
 {
     private const SMALL_DEFECT_MARKER = '[Small Defects]';
 
-    public function execute(int $ppf, array $draft, bool $recordDuration = true): void
+    public function execute(int $ppf, array $draft, bool $recordDuration = true): array
     {
         $ppfLookUp = $draft['ppfLookup'] ?? null;
         $checkTimes = $draft['check-time']['check-time'] ?? [];
@@ -47,8 +49,9 @@ class CreateInspection
         $remarks = $draft['remarks'] ?? [];
         $deletedCheckTimes = $draft['check-time']['deleted'] ?? [];
         $dateJudge = $draft['judgement']['dateOfJudge'] ?? null;
-        $inspectorNo = Auth::user()->InspectorNo ?? null;
+        $inspectorNo = app(CurrentActor::class)->inspectorNo() ?? null;
         $xbarJobs = [];
+        $fullCycles = [];
 
         $defectBatches = [];
         $composedRemarks = [];
@@ -65,7 +68,7 @@ class CreateInspection
             throw new \InvalidArgumentException('At least one check time is required to create an inspection.');
         }
 
-        DB::transaction(function () use ($composedRemarks, $dateEncodeCheck, $defectBatches, $defectJudge, $inspectorNo, $ngpercent, $ppf, $ppfLookUp, $touchedCheckTimes, $dimensions, $dateJudge, $remarks, &$xbarJobs) {
+        DB::transaction(function () use ($composedRemarks, $dateEncodeCheck, $defectBatches, $defectJudge, $inspectorNo, $ngpercent, $ppf, $ppfLookUp, $touchedCheckTimes, $dimensions, $dateJudge, $remarks, &$xbarJobs, &$fullCycles) {
             foreach ($touchedCheckTimes as $checkTime) {
                 $isExistingCheckTime = MIPIRInspectionRecord::where('PPFNo', $ppf)
                     ->where('Checktime', $checkTime)
@@ -109,7 +112,7 @@ class CreateInspection
                     'MachineNo' => $ppfLookUp['machineNo'],
                     'Checktime' => $checkTime ?? null,
                     'DateJudge' => $dateJudge ?? now(),
-                    'InspectBy' => Auth::user()->EmployeeID ?? null,
+                    'InspectBy' => app(CurrentActor::class)->id() ?? null,
                     'Year' => now()->year,
                     'MoldingOperator' => $ppfLookUp['moldOperator'] ?? null
                 ]);
@@ -192,11 +195,11 @@ class CreateInspection
 
                         if ($isExistingCheckTime) {
                             $transactionId = $existingTransactionByKey["{$itemName}|{$rowNo}|{$set}"]
-                                ?? $existingTransactionByKey["{$itemName}||{$set}"]  
+                                ?? $existingTransactionByKey["{$itemName}||{$set}"]
                                 ?? null;
                         } elseif ($isXBarTracked && $itemName && $forXBar) {
                             $xbarResult = app(XBarCycleTracker::class)->recordSubgroup(
-                                Auth::user()->Plant,
+                                app(CurrentActor::class)->plant(),
                                 $itemName,
                                 $dateEncodeCheck[$checkTime] ?? now()->toDateTimeString()
                             );
@@ -230,12 +233,20 @@ class CreateInspection
                         if ($isXBarTracked && $itemName && $forXBar && $transactionId) {
                             if ($xbarResult !== null && $xbarResult['shouldGenerate']) {
                                 app(XBarCycleTracker::class)->closeCycle(
-                                    Auth::user()->Plant,
+                                    app(CurrentActor::class)->plant(),
                                     $itemName,
                                     $xbarResult['cycleStart'],
                                     $xbarResult['cycleEnd'],
                                     $transactionId
                                 );
+
+                                $fullCycles[$transactionId] = [
+                                    'plant'         => app(CurrentActor::class)->plant(),
+                                    'dimension'     => $itemName,
+                                    'transactionId' => $transactionId,
+                                    'cycleStart'    => $xbarResult['cycleStart'],
+                                    'cycleEnd'      => $xbarResult['cycleEnd'],
+                                ];
                             }
 
                             // Isang Excel bawat cycle, kahit ilang set o check time ang nasa loob
@@ -292,7 +303,7 @@ class CreateInspection
                 MIPIRInspectionRecord::where('PPFNo', $ppf)->where('Checktime', $checkTime)->delete();
                 EncodingDuration::where('PPFNo', $ppf)->where('Checktime', $checkTime)->delete();
 
-                $plant = Auth::user()->Plant ?? null;
+                $plant = app(CurrentActor::class)->plant() ?? null;
 
                 if ($plant !== null) {
                     foreach ($rows as $row) {
@@ -318,7 +329,7 @@ class CreateInspection
         $this->refreshTightenedGapOffsetExcel($ppf, $ppfLookUp, $inspectorNo, $checkTimes, $touchedCheckTimes, $dimensions, $composedRemarks, $deletedCheckTimes);
         $this->refreshTightenedDefectsExcel($ppf, $ppfLookUp, $inspectorNo, $checkTimes, $modeByTime, $shotsByTime);
         app(MipirRecordRefresher::class)->refresh($ppf);
-        $this->refreshXBarExcel($xbarJobs, Auth::user()->Plant ?? null);
+        $this->refreshXBarExcel($xbarJobs, app(CurrentActor::class)->id() ?? null);
 
         if ($recordDuration) {
             foreach ($touchedCheckTimes as $checkTime) {
@@ -343,6 +354,19 @@ class CreateInspection
         } else {
             Log::info('EncodingDuration: skipped, recordDuration is false', ['PPFNo' => $ppf]);
         }
+
+        foreach ($fullCycles as $cycle) {
+            event(new XBarCycleFull(
+                ppf: $ppf,
+                plant: (string) $cycle['plant'],
+                dimension: $cycle['dimension'],
+                transactionId: (string) $cycle['transactionId'],
+                cycleStart: $cycle['cycleStart'],
+                cycleEnd: $cycle['cycleEnd'],
+            ));
+        }
+
+        return ['xbarFull' => array_values($fullCycles)];
     }
 
     private function refreshTightenedFlashExcel(

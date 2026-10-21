@@ -4,12 +4,16 @@ namespace App\Inspection\Services\Excel;
 
 use App\Inspection\Models\Defect;
 use App\Inspection\Models\GroupLeader\LotConfirmation;
+use App\Inspection\Models\MIPIRDimensionMeasure;
 use App\Inspection\Models\MIPIRInspectionRecord;
 use App\Inspection\Repositories\Excel\ExcelDataRepository;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
 
 class InspectionRecordService
 {
@@ -206,6 +210,11 @@ class InspectionRecordService
                     $record = MIPIRInspectionRecord::where('PPFNo', $ppf)
                         ->where('Checktime', $entry['checktime'])
                         ->first();
+                    $inspectedBy = MIPIRDimensionMeasure::where('PPFNo', $ppf)
+                        ->where('Checktime', $entry['checktime'])
+                        ->value('InspectedBy');
+
+                    $inspectedBy = str_replace('Q', '', (string) $inspectedBy);
                     if (! $record) {
                         $slotIndex++;
                         continue;
@@ -225,10 +234,14 @@ class InspectionRecordService
                     $this->insertAppearanceInspection($ppf, $entry['checktime'], $sheet, $row);
 
                     if (! $stampWritten) {
+                        $stampCell = "{$trailing['stamp']}{$groupStartRow}";
+
                         $sheet->setCellValue(
-                            "{$trailing['stamp']}{$groupStartRow}",
-                            $record->InspectBy . "\n" . Carbon::parse($record->DateJudge)->format('y.m.d') . "\n" . $record->Judgement
+                            $stampCell,
+                            $this->qcPassedStamp((string) $inspectedBy, $record->DateJudge)
                         );
+
+                        $this->applyQcStampStyle($sheet, $stampCell);
                         $sheet->setCellValue("{$trailing['confirmedBy']}{$groupStartRow}", $confirmedBy);
                         $stampWritten = true;
                     }
@@ -238,6 +251,35 @@ class InspectionRecordService
             }
         }
     }
+
+    private function qcPassedStamp(string $inspectedBy, $dateJudge): string
+{
+    return implode("\n", [
+        'QC',
+        $inspectedBy . ' • ' . Carbon::parse($dateJudge)->format('m.d'),
+        'PASSED',
+    ]);
+}
+
+private function applyQcStampStyle(Worksheet $sheet, string $cell): void
+{
+    $sheet->getStyle($cell)->applyFromArray([
+        'font' => [
+            'bold' => true,
+            'size' => 9,
+        ],
+        'alignment' => [
+            'horizontal' => Alignment::HORIZONTAL_CENTER,
+            'vertical'   => Alignment::VERTICAL_CENTER,
+            'wrapText'   => true,
+        ],
+        'borders' => [
+            'outline' => [
+                'borderStyle' => Border::BORDER_MEDIUM,
+            ],
+        ],
+    ]);
+}
 
     private function offsetColumn(string $col, int $offset): string
     {

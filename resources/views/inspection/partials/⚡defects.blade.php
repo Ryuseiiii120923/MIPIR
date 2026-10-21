@@ -7,6 +7,7 @@ use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
+use Illuminate\Validation\ValidationException;
 
 new class extends Component
 {
@@ -61,11 +62,12 @@ new class extends Component
 
     // Tightened
     #[Locked]
-    public string $mode = 'normal';      // 'normal' | 'tightened'
+    public string $mode = 'normal';
 
-    public array $shots = [];            // [['defects' => [], 'smallDefects' => []], ...]
-    public ?int $selectedShot = null;    // index sa $shots
+    public array $shots = [];
+    public ?int $selectedShot = null;
     public array $shotSummaries = [];
+    public int $shotStep = 5;
 
     /*
     |--------------------------------------------------------------------------
@@ -104,12 +106,22 @@ new class extends Component
                 ])
                 ->all() ?: [$this->emptyShot(1)];
 
+            $this->shotStep = $this->inferShotStep($this->shots);
             $this->loadShot(0);
         } else {
             $this->loadDefects($loadedDefects, $loadedSmallDefects);
         }
     }
 
+    private function modalDerivedQty(): int
+    {
+        if ($this->modalSmallDefects === []) {
+            return (int) $this->modalLargeQty;
+        }
+
+        return (int) collect($this->modalSmallDefects)
+            ->sum(fn($s) => (int) (($s['qty'] ?? '') ?: 0));
+    }
 
     /*
     |--------------------------------------------------------------------------
@@ -171,7 +183,7 @@ new class extends Component
 
     private const EXTRA_SMALL_DEFECTS = [
         'Surface Damaged' => ['Flow Mark', 'Surface Dirty'],
-        'Deformation' =>['Burnt'],
+        'Deformation' => ['Burnt'],
         'PL Damaged' => ['Excessive Trimming']
     ];
 
@@ -253,7 +265,7 @@ new class extends Component
 
         $result = $this->stagingService()->buildStagedEntry(
             $this->modalSelectedType,
-            (int) $this->modalLargeQty,
+            $this->modalDerivedQty(),
             $this->modalSmallDefects
         );
 
@@ -274,6 +286,22 @@ new class extends Component
 
         $this->resetModal();
         $this->resetErrorBag();
+    }
+
+    private function recalcLargeFromSmall(string $largeType): void
+    {
+        $total = (int) collect($this->smallDefects[$largeType] ?? [])
+            ->sum(fn($s) => (int) (($s['qty'] ?? '') ?: 0));
+
+        foreach ($this->defects as $i => $defect) {
+            if (strtolower(trim($defect['type'])) === strtolower(trim($largeType))) {
+                $this->defects[$i]['qty'] = $total;
+            }
+        }
+
+        $this->updateTotalNg();
+        $this->computeAndjudge();
+        $this->syncToParent();
     }
 
     public function removeStagedDefect(string $type): void
@@ -472,6 +500,7 @@ new class extends Component
                 $this->editingTypeSmall,
                 (float) $this->newSmallQuan
             );
+        $this->recalcLargeFromSmall($this->editingLarge);
 
         $this->dispatchDefectUpdate(
             $this->defects,
@@ -503,6 +532,12 @@ new class extends Component
             type: $smallType,
             largeDefect: $largeType
         );
+
+        $remaining = (int) (collect($this->defects)->firstWhere('type', $largeType)['qty'] ?? 0);
+
+        if ($remaining < 1) {
+            $this->deleteDefect($largeType);
+        }
     }
 
 
@@ -529,36 +564,22 @@ new class extends Component
 
     private function validateDefectQuantity(): void
     {
-        $this->validate([
-            'modalSelectedType' => 'required|string',
-            'modalLargeQty' => 'required|numeric|min:1',
-        ], [
-            'modalSelectedType.required' =>
-            'Please select a defect type.',
+        $this->validate(
+            ['modalSelectedType' => 'required|string'],
+            ['modalSelectedType.required' => 'Please select a defect type.']
+        );
 
-            'modalLargeQty.required' =>
-            'Please enter a quantity.',
-
-            'modalLargeQty.min' =>
-            'Quantity must be at least 1.',
-        ]);
+        if ($this->modalDerivedQty() < 1) {
+            throw ValidationException::withMessages([
+                $this->modalSmallDefects === [] ? 'modalLargeQty' : 'modalSmallDefects'
+                => 'Enter a quantity for at least one small defect.',
+            ]);
+        }
     }
 
     private function validateDefectSelection(): void
     {
-        $this->validate([
-            'modalSelectedType' => 'required|string',
-            'modalLargeQty' => 'required|numeric|min:1',
-        ], [
-            'modalSelectedType.required' =>
-            'Please select and configure at least one defect.',
-
-            'modalLargeQty.required' =>
-            'Please enter a quantity.',
-
-            'modalLargeQty.min' =>
-            'Quantity must be at least 1.',
-        ]);
+        $this->validateDefectQuantity();
     }
 
 
@@ -584,10 +605,7 @@ new class extends Component
 
     private function autoStageSelectedDefect(): void
     {
-        if (
-            $this->modalSelectedType === null ||
-            (int) $this->modalLargeQty < 1
-        ) {
+        if ($this->modalSelectedType === null || $this->modalDerivedQty() < 1) {
             return;
         }
 
@@ -598,12 +616,11 @@ new class extends Component
 
     private function tryAutoStage(string $type): void
     {
-        $result = $this->stagingService()
-            ->buildStagedEntry(
-                $type,
-                (int) $this->modalLargeQty,
-                $this->modalSmallDefects
-            );
+        $result = $this->stagingService()->buildStagedEntry(
+            $type,
+            $this->modalDerivedQty(),
+            $this->modalSmallDefects
+        );
 
         if (! $result['ok']) {
             return;
@@ -865,6 +882,7 @@ new class extends Component
         }
 
         $this->mode = $mode;
+        $this->shotStep = 5;
         $this->shots = [];
         $this->selectedShot = null;
         $this->shotSummaries = [];
@@ -940,7 +958,25 @@ new class extends Component
 
         $last = (int) collect($this->shots)->max('shot');
 
-        return $last < 5 ? 5 : $last + 5;
+        return (intdiv($last, $this->shotStep) + 1) * $this->shotStep;
+    }
+
+    public function setShotStep(int $step): void
+    {
+        if ($this->readonly || ! $this->isTightened() || ! in_array($step, [5, 10], true)) {
+            return;
+        }
+
+        $this->shotStep = $step;
+    }
+
+    private function inferShotStep(array $shots): int
+    {
+        $labels = collect($shots)->pluck('shot')->map(fn($s) => (int) $s)->filter(fn($s) => $s > 1);
+
+        return $labels->isNotEmpty() && $labels->contains(10) && $labels->every(fn($s) => $s % 10 === 0)
+            ? 10
+            : 5;
     }
 
     private function loadShot(int $index): void

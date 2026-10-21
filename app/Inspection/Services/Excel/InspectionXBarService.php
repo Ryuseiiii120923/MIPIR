@@ -46,7 +46,7 @@ class InspectionXBarService
         $sheet->getDrawingCollection()->append($drawing);
 
         File::ensureDirectoryExists(storage_path('app/excel-xbar'));
-        
+
 
         $fileTag = implode('-', $partNos);
         $output  = storage_path('app/excel-xbar/' . ($outputName ?? 'Xbar_' . $fileTag) . '.xlsx');
@@ -66,33 +66,49 @@ class InspectionXBarService
 
     private function assignColumns($groups, int $startColumn): array
     {
-        // Collect checktimes per PPF, in order of first appearance
         $blocks = [];
+
         foreach ($groups as $key => $group) {
             $first = $group->first();
-            $blocks[$first->PPFNo][] = [
+            $lot   = trim((string) $first->ProdLotNo);
+            $ppf   = (string) $first->PPFNo;
+            $blockKey = $lot . '|' . $ppf;
+
+            $at = (string) $group->min('created_at');
+
+            $blocks[$blockKey]['lot']   = $lot;
+            $blocks[$blockKey]['ppf']   = $ppf;
+            $blocks[$blockKey]['first'] = isset($blocks[$blockKey]['first'])
+                ? min($blocks[$blockKey]['first'], $at)
+                : $at;
+
+            $blocks[$blockKey]['items'][] = [
                 'key' => $key,
                 'ct'  => strtoupper(trim((string) $first->Checktime)),
+                'at'  => $at,
             ];
         }
+
+        uasort($blocks, fn($a, $b) => [$a['first'], $a['lot'], $a['ppf']] <=> [$b['first'], $b['lot'], $b['ppf']]);
 
         $map  = [];
         $next = $startColumn;
 
-        foreach ($blocks as $items) {
-            $ranks = array_map(fn($i) => self::CHECKTIME_RANK[$i['ct']] ?? null, $items);
-            $known = array_filter($ranks, fn($r) => $r !== null);
+        foreach ($blocks as $block) {
+            $items = $block['items'];
 
-            $base   = $known ? min($known) : 0;
-            $cursor = $known ? (max($known) - $base + 1) : 0; // where unknown checktimes go
+            usort($items, fn($a, $b) => [
+                self::CHECKTIME_RANK[$a['ct']] ?? 99,
+                $a['at'],
+            ] <=> [
+                self::CHECKTIME_RANK[$b['ct']] ?? 99,
+                $b['at'],
+            ]);
 
-            foreach ($items as $i => $item) {
-                $offset = $ranks[$i] !== null ? $ranks[$i] - $base : $cursor++;
-                $map[$item['key']] = Coordinate::stringFromColumnIndex($next + $offset);
+            // Magkakasunod ang column, walang puwang
+            foreach ($items as $item) {
+                $map[$item['key']] = Coordinate::stringFromColumnIndex($next++);
             }
-
-            $width = $known ? max(self::CHECKTIME_SLOTS - $base, $cursor) : $cursor;
-            $next += $width;
         }
 
         return $map;
@@ -129,7 +145,7 @@ class InspectionXBarService
         $sheet->setCellValue('Y3', $formattedEnd);
     }
 
-    public function insertMeasurement(array $partNos, string $dimension, $sheet, $transactionId,?string $confirmedBy)
+    public function insertMeasurement(array $partNos, string $dimension, $sheet, $transactionId, ?string $confirmedBy)
     {
         $repository = app(ExcelDataRepository::class);
         $measurements = $repository

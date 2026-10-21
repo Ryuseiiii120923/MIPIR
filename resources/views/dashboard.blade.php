@@ -1,7 +1,14 @@
 <x-layouts.app>
     <div
         class="p-2"
-        x-data="{ currentPage: 'dashboard' }"
+        x-data="{
+        pages: ['dashboard', 'dimension-encoding', 'x-bar-generation', 'inspector-registration', 'gl-registration'],
+        currentPage: 'dashboard',
+        init() {
+            const page = location.hash.slice(1);
+            if (this.pages.includes(page)) this.currentPage = page;
+        }
+    }"
         @navigate-to.window="currentPage = $event.detail.page">
 
         <div
@@ -26,19 +33,19 @@
             <livewire:dashboard::reports-browser />
         </div>
 
-         <div
+        <div
             x-show="currentPage === 'inspector-registration'"
             x-transition:enter="transition ease-out duration-200"
             x-transition:enter-start="opacity-0 translate-y-1"
             x-transition:enter-end="opacity-100 translate-y-0">
             <livewire:dashboard::inspector-registration />
         </div>
-         <div
+        <div
             x-show="currentPage === 'gl-registration'"
             x-transition:enter="transition ease-out duration-200"
             x-transition:enter-start="opacity-0 translate-y-1"
             x-transition:enter-end="opacity-100 translate-y-0">
-            <livewire:dashboard::gl-registration/>
+            <livewire:dashboard::gl-registration />
         </div>
     </div>
 </x-layouts.app>

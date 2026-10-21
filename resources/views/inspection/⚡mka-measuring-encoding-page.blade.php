@@ -1,5 +1,6 @@
 <?php
 
+use App\Auth\Services\CurrentActor;
 use App\Inspection\Actions\CreateInspection;
 use App\Inspection\Actions\DeleteInspection;
 use App\Inspection\Actions\DraftAction;
@@ -44,9 +45,9 @@ new class extends Component
     {
         $this->selectedPpf = $ppf;
     }
-     public function mount()
+     public function mount(CurrentActor $actor)
     {
-        $this->encoder = Auth::user()->EmployeeID;
+         $this->encoder = $actor->id();
     }
 
     public function submit(): void

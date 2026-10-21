@@ -29,6 +29,17 @@
         @endforeach
 
         @unless ($readonly)
+        <div class="flex items-center rounded-lg border border-gray-300 overflow-hidden text-xs font-semibold">
+            @foreach ([5 => 'Every 5', 10 => 'Every 10'] as $step => $label)
+            <button type="button"
+                wire:key="shot-step-{{ $step }}"
+                wire:click="setShotStep({{ $step }})"
+                class="px-3 py-2 transition {{ $shotStep === $step ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50' }}">
+                {{ $label }}
+            </button>
+            @endforeach
+        </div>
+
         <button type="button" wire:click="addShot"
             class="px-3 py-2 rounded-lg border-2 border-dashed border-blue-400 text-blue-600 text-sm font-semibold hover:bg-blue-50">
             + Add Shot

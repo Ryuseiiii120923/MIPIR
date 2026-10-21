@@ -1,5 +1,6 @@
 <?php
 
+use App\Auth\Services\CurrentActor;
 use App\Inspection\Repositories\PPFLookUp\PpfLookUpRepository;
 use App\Traits\HasNotifications;
 use App\Traits\WithLoading;
@@ -43,9 +44,9 @@ new class extends Component
         }
     }
 
-    public function mount()
+    public function mount(CurrentActor $actor)
     {
-        $this->encoder = Auth::user()->EmployeeID;
+        $this->encoder = $actor->id();
     }
 
     #[Computed]
