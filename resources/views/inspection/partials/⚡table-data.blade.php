@@ -9,6 +9,7 @@ use Livewire\WithPagination;
 use App\Traits\HasNotifications;
 use App\Traits\WithLoading;
 use App\Inspection\Repositories\LotConfirmationRepository;
+use App\Inspection\Services\Excel\MipirRecordRefresher;
 
 new class extends Component
 {
@@ -90,7 +91,11 @@ new class extends Component
 
         if ($error !== null) {
             $this->notifyFail('Cannot confirm', $error);
+
+            return;
         }
+
+        app(MipirRecordRefresher::class)->refresh($ppf);
 
         unset($this->forConfirmation);
     }

@@ -180,12 +180,14 @@ class InspectionRecordService
 
     public function insertRows(array $plan, array $dimItems, array $blocks, array $trailing, $sheet, ?string $confirmedBy = null)
     {
-        $startRow = 9;
+        $startRow  = 9;
         $slotIndex = 0;
+
+        $statuses = $this->lotStatuses($plan);
 
         foreach ($plan as $lotEntries) {
             $groupStartRow = $startRow + ($slotIndex * 2);
-            $groupEndRow = $startRow + (($slotIndex + count($lotEntries)) * 2) - 1;
+            $groupEndRow   = $startRow + (($slotIndex + count($lotEntries)) * 2) - 1;
 
             $this->clearOverlappingMerges($sheet, $trailing['stamp'], $groupStartRow, $groupEndRow);
             $this->clearOverlappingMerges($sheet, $trailing['confirmedBy'], $groupStartRow, $groupEndRow);
@@ -193,8 +195,10 @@ class InspectionRecordService
             $sheet->mergeCells("{$trailing['stamp']}{$groupStartRow}:{$this->offsetColumn($trailing['stamp'], 2)}{$groupEndRow}");
             $sheet->mergeCells("{$trailing['confirmedBy']}{$groupStartRow}:{$trailing['confirmedBy']}{$groupEndRow}");
 
-            $stampWritten = false;
-            $lotInfoWritten = false;
+            $state            = $this->lotState($lotEntries, $statuses);
+            $stampWritten     = false;
+            $confirmedWritten = false;
+            $lotInfoWritten   = false;
 
             foreach ($lotEntries as $entry) {
                 $row = $startRow + ($slotIndex * 2);
@@ -206,21 +210,23 @@ class InspectionRecordService
                     }
                     $sheet->setCellValue("L{$row}", 'O');
                 } else {
-                    $ppf = $entry['ppf'];
+                    $ppf    = $entry['ppf'];
                     $record = MIPIRInspectionRecord::where('PPFNo', $ppf)
                         ->where('Checktime', $entry['checktime'])
                         ->first();
+
                     $inspectedBy = MIPIRDimensionMeasure::where('PPFNo', $ppf)
                         ->where('Checktime', $entry['checktime'])
                         ->value('InspectedBy');
 
                     $inspectedBy = str_replace('Q', '', (string) $inspectedBy);
+
                     if (! $record) {
                         $slotIndex++;
                         continue;
                     }
 
-                    // ProdLotNo at MachineNo — isang beses lang, sa unang entry ng lot
+                    // ProdLotNo and MachineNo: only once, on the first entry of the lot
                     if (! $lotInfoWritten) {
                         $sheet->setCellValue("A{$row}", $record->ProdLotNo);
                         $sheet->setCellValue("B{$row}", $record->MachineNo);
@@ -233,7 +239,8 @@ class InspectionRecordService
                     $this->insertDimensionValues($record, $dimItems, $blocks, $sheet, $row);
                     $this->insertAppearanceInspection($ppf, $entry['checktime'], $sheet, $row);
 
-                    if (! $stampWritten) {
+                    // QC PASSED stamp: once the inspector pressed Done (pending or confirmed)
+                    if ($state['submitted'] && ! $stampWritten) {
                         $stampCell = "{$trailing['stamp']}{$groupStartRow}";
 
                         $sheet->setCellValue(
@@ -242,8 +249,13 @@ class InspectionRecordService
                         );
 
                         $this->applyQcStampStyle($sheet, $stampCell);
-                        $sheet->setCellValue("{$trailing['confirmedBy']}{$groupStartRow}", $confirmedBy);
                         $stampWritten = true;
+                    }
+
+                    // Confirmed by: only when the GL confirmed
+                    if ($state['confirmed'] && ! $confirmedWritten) {
+                        $sheet->setCellValue("{$trailing['confirmedBy']}{$groupStartRow}", $confirmedBy);
+                        $confirmedWritten = true;
                     }
                 }
 
@@ -253,33 +265,33 @@ class InspectionRecordService
     }
 
     private function qcPassedStamp(string $inspectedBy, $dateJudge): string
-{
-    return implode("\n", [
-        'QC',
-        $inspectedBy . ' • ' . Carbon::parse($dateJudge)->format('m.d'),
-        'PASSED',
-    ]);
-}
+    {
+        return implode("\n", [
+            'QC',
+            $inspectedBy . ' • ' . Carbon::parse($dateJudge)->format('m.d'),
+            'PASSED',
+        ]);
+    }
 
-private function applyQcStampStyle(Worksheet $sheet, string $cell): void
-{
-    $sheet->getStyle($cell)->applyFromArray([
-        'font' => [
-            'bold' => true,
-            'size' => 9,
-        ],
-        'alignment' => [
-            'horizontal' => Alignment::HORIZONTAL_CENTER,
-            'vertical'   => Alignment::VERTICAL_CENTER,
-            'wrapText'   => true,
-        ],
-        'borders' => [
-            'outline' => [
-                'borderStyle' => Border::BORDER_MEDIUM,
+    private function applyQcStampStyle(Worksheet $sheet, string $cell): void
+    {
+        $sheet->getStyle($cell)->applyFromArray([
+            'font' => [
+                'bold' => true,
+                'size' => 9,
             ],
-        ],
-    ]);
-}
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical'   => Alignment::VERTICAL_CENTER,
+                'wrapText'   => true,
+            ],
+            'borders' => [
+                'outline' => [
+                    'borderStyle' => Border::BORDER_MEDIUM,
+                ],
+            ],
+        ]);
+    }
 
     private function offsetColumn(string $col, int $offset): string
     {
@@ -470,5 +482,42 @@ private function applyQcStampStyle(Worksheet $sheet, string $cell): void
         $defect = Defect::where('PPFNo', $ppf)->where('Checktime', $checktime)->first();
 
         return $defect && (int) $defect->Judgement === 1;
+    }
+
+    private function lotStatuses(array $plan): array
+    {
+        $ppfs = collect($plan)
+            ->collapse()
+            ->reject(fn($e) => $e['synthetic'])
+            ->pluck('ppf')
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($ppfs === []) {
+            return [];
+        }
+
+        return LotConfirmation::whereIn('PPFNo', $ppfs)
+            ->get(['PPFNo', 'Status'])
+            ->mapWithKeys(fn($c) => [(string) $c->PPFNo => strtolower((string) $c->Status)])
+            ->all();
+    }
+
+    private function lotState(array $lotEntries, array $statuses): array
+    {
+        $ppfs = collect($lotEntries)
+            ->reject(fn($e) => $e['synthetic'])
+            ->pluck('ppf')
+            ->unique();
+
+        if ($ppfs->isEmpty()) {
+            return ['submitted' => false, 'confirmed' => false];
+        }
+
+        return [
+            'submitted' => $ppfs->every(fn($p) => in_array($statuses[(string) $p] ?? '', ['pending', 'confirmed'], true)),
+            'confirmed' => $ppfs->every(fn($p) => ($statuses[(string) $p] ?? '') === 'confirmed'),
+        ];
     }
 }
