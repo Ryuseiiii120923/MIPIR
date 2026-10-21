@@ -25,6 +25,11 @@ class LotConfirmationService
 
     public function confirm(int $id, string $inspectorId, string $employeeId): void
     {
+        $review = app(LotConfirmationRepository::class)->getLotReview($id);
+
+        if ($review !== null && $this->inspectedByApprover($review, $inspectorId, $employeeId)) {
+            throw new \DomainException('You inspected this lot, so you cannot confirm it. Another GL must approve it.');
+        }
         $lot = DB::connection('mipirDB')->transaction(function () use ($id, $employeeId, $inspectorId) {
             $lot = LotConfirmation::lockForUpdate()->findOrFail($id);
 
@@ -45,7 +50,7 @@ class LotConfirmationService
             return $lot;
         });
 
-        $this->rebuildExcel($lot,$employeeId);
+        $this->rebuildExcel($lot, $employeeId);
     }
 
     public function reject(int $id, string $employeeId, string $reason): void
@@ -155,5 +160,28 @@ class LotConfirmationService
         } catch (\Throwable $e) {
             Log::error('Lot confirmation invalidate failed', ['PPFNo' => $ppf, 'error' => $e->getMessage()]);
         }
+    }
+
+    public function inspectedByApprover(array $review, string $inspectorNo, string $employeeId): bool
+    {
+        $mine = collect([$inspectorNo, $employeeId])
+            ->map(fn($v) => $this->normalizeId($v))
+            ->filter()
+            ->all();
+
+        if ($mine === []) {
+            return false;
+        }
+
+        return collect($review['checkTimes'])
+            ->pluck('inspector')
+            ->map(fn($v) => $this->normalizeId($v))
+            ->filter()
+            ->contains(fn($id) => in_array($id, $mine, true));
+    }
+
+    private function normalizeId(mixed $value): string
+    {
+        return strtoupper(ltrim(ltrim(trim((string) $value), 'qQ'), '0'));
     }
 }

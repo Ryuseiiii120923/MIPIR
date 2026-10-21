@@ -85,6 +85,7 @@ new class extends Component
 
     public function confirm(int $id, LotConfirmationService $service): bool
     {
+
         try {
             $service->confirm($id, $this->InspectorId(), $this->employeeId());
             unset($this->lots);
@@ -117,6 +118,16 @@ new class extends Component
         if ($id !== null) {
             $this->startReject($id);
         }
+    }
+
+    #[Computed]
+    public function ownLot(): bool
+    {
+        $review = $this->review;
+
+        return $review !== null
+            && app(LotConfirmationService::class)
+            ->inspectedByApprover($review, $this->InspectorId(), $this->employeeId());
     }
 
     public function reject(LotConfirmationService $service): void
@@ -183,11 +194,11 @@ new class extends Component
     {{-- Review modal --}}
     @if ($reviewId && $this->review)
     @php
-        $review       = $this->review;
-        $keys         = collect($review['checkTimes'])->pluck('key');
-        $checkedCount = $keys->filter(fn($k) => ! empty($reviewed[$k] ?? null))->count();
-        $allChecked   = $keys->isNotEmpty() && $checkedCount === $keys->count();
-        $fmt          = fn($v) => number_format((float) $v, 4, '.', '');
+    $review = $this->review;
+    $keys = collect($review['checkTimes'])->pluck('key');
+    $checkedCount = $keys->filter(fn($k) => ! empty($reviewed[$k] ?? null))->count();
+    $allChecked = $keys->isNotEmpty() && $checkedCount === $keys->count();
+    $fmt = fn($v) => number_format((float) $v, 4, '.', '');
     @endphp
     <div class="fixed inset-0 z-50 flex items-center justify-center p-4"
         wire:key="review-modal"
@@ -219,6 +230,11 @@ new class extends Component
 
             {{-- Body --}}
             <div class="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                @if ($this->ownLot)
+                <div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    You inspected this lot, so you cannot confirm it. Another GL must approve it.
+                </div>
+                @endif
                 @forelse ($review['checkTimes'] as $ct)
                 <div wire:key="review-{{ $ct['key'] }}"
                     class="rounded-xl border {{ $ct['failed'] ? 'border-red-300' : 'border-gray-200' }}">
@@ -355,7 +371,7 @@ new class extends Component
                     <button type="button" wire:click="confirmReviewed"
                         wire:confirm="Confirm lot {{ $review['lot']->ProdLotNo }}?"
                         wire:loading.attr="disabled" wire:target="confirmReviewed"
-                        @disabled(! $allChecked)
+                        @disabled(! $allChecked || $this->ownLot)
                         class="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed">
                         Confirm
                     </button>
