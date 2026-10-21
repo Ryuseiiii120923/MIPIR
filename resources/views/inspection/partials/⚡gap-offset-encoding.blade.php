@@ -1,5 +1,4 @@
 <?php
-// resources/views/livewire/inspection/partials/gap-offset-encoding.blade.php
 
 use App\Inspection\Actions\DeleteInspection;
 use App\Inspection\Models\MIPIRDimensionMeasure;
@@ -27,35 +26,29 @@ new class extends Component
     use HasNotifications;
     use WithLoading;
 
-    // Master info (from PPF Lookup)
     public int $ppf = 0;
     public string $partNo = '';
     public string $moldNo = '';
     public string $machineNo = '';
 
-    // Encoding context
     #[Validate('required|string|max:50')]
     public string $prodLotNo = '';
 
-    // Check time — add/select/remove
     #[Validate('required')]
     public string $checkTime = '';
     public array $checkTimes = [];
     public ?string $selectedCheckTime = null;
     public array $dateEncodeByTime = [];
 
-    // Upload
     #[Validate('nullable|file|mimes:xlsx,xls,csv|max:5120')]
     public $excelFile = null;
 
-    // Parsed data, keyed by check time
     public array $measurementsXByTime = [];
     public array $measurementsYByTime = [];
     public array $judgeByTime = [];
     public array $modeByTime = [];
     public array $setsByTime = [];
 
-    // Specification + device (shared: same partNo/item across every check time)
     public string $device = '';
     public ?string $specType = null;
     public string $specNominal = '';
@@ -63,7 +56,6 @@ new class extends Component
     public string $specUpper = '';
     public string $specLower = '';
 
-    // Normal/Tightened modal (mirrors dimensions.blade.php)
     public bool $showModeModal = false;
     public string $modalStep = 'choose';
     public int $pendingSets = 1;
@@ -124,7 +116,7 @@ new class extends Component
             'tolerance_diff' => ! $blank($this->specNominal)
                 && ! $blank($this->specUpper)
                 && ! $blank($this->specLower),
-            default          => false, // no specType resolved
+            default          => false, 
         };
 
         if (! $specComplete) {

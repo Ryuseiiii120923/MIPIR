@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Log;
 
 class MIPIRRecordCycleTracker
 {
-    private const MAX_SLOTS_PER_SHEET = 21; // 7 lots x 3 checktimes — row capacity ng template
+    private const MAX_SLOTS_PER_SHEET = 21;
     private const FOUR_COLUMN_PARTS = ['135659-0010'];
 
     public function variantFor(string $partNo): int
@@ -93,14 +93,6 @@ class MIPIRRecordCycleTracker
             $cumulativeSlots += $lotSlotCount;
         }
 
-        // if (! $overflowed && $cumulativeSlots < self::MAX_SLOTS_PER_SHEET) {
-        //     Log::debug('MIPIRRecordCycleTracker: sheet not full yet, waiting for more lots', [
-        //         'partNo' => $partNo,
-        //         'cumulativeSlots' => $cumulativeSlots,
-        //         'lotsAccumulated' => count($fittingLots),
-        //     ]);
-        //     return;
-        // }
 
         $this->generateReport($partNo, $fittingLots);
     }

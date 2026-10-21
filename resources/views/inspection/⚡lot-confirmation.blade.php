@@ -16,7 +16,6 @@ new class extends Component
     public ?int $rejectingId = null;
     public string $reason = '';
 
-    // Review modal
     public ?int $reviewId = null;
     public array $reviewed = [];
 
@@ -71,7 +70,6 @@ new class extends Component
             return;
         }
 
-        // Dapat natingnan ang bawat check time
         $required = collect($review['checkTimes'])->pluck('key')->all();
         $missing  = array_diff($required, array_keys(array_filter($this->reviewed)));
 

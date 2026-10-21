@@ -10,15 +10,11 @@ use Illuminate\Support\Collection;
 
 class DashboardSummaryRepository
 {
-    // ── Ano ang ibig sabihin ng saved values (Judge/Mode ay numeric sa DB) ──
-    // Ilagay lahat ng anyo na posibleng lumabas, bilang text. Palitan ayon sa totoong data.
     public const JUDGE_OK = ['0', 'O', 'OK'];
     public const JUDGE_NG = ['1', 'X', 'NG'];
 
-    /** Mode values that mean tightened (text starting with "tight" is always recognised). */
     public const MODE_TIGHTENED = [];
 
-    // ── EncodingDuration: palitan ayon sa totoong columns ─────────────
     private const DURATION_TABLE     = 'EncodingDuration';
     private const DURATION_PPF       = 'PPFNo';
     private const DURATION_CHECKTIME = 'Checktime'; 
@@ -44,7 +40,6 @@ class DashboardSummaryRepository
             : $query;
     }
 
-    // ── SQL fragments: compare as text so smallint columns never fail ──
 
     private function sqlList(array $values): string
     {

@@ -24,12 +24,10 @@ class DimensionsService
 
     public function requiredFieldErrors(array $row): array
     {
-        // Card na hindi pa na-set up: walang ive-validate
         if (array_key_exists('revealed', $row) && ! $row['revealed']) {
             return [];
         }
 
-        // Row na galing sa database (wala pang 'revealed') at walang measurement: hindi pa ito ginalaw
         if (! array_key_exists('revealed', $row) && empty($row['measurements'])) {
             return [];
         }
@@ -38,7 +36,6 @@ class DimensionsService
         $label = $item !== '' ? $item : 'Dimension';
         $errors = [];
 
-        // Kung may naka-save o nabuo nang specification text, hindi ito empty
         $hasSpecificationText = trim((string) ($row['specification'] ?? '')) !== '';
 
         if (! $hasSpecificationText && $this->isSpecificationEmpty($row)) {
@@ -296,7 +293,6 @@ class DimensionsService
 
         $result = ['judgeXCL' => null, 'judgeRSL' => null, 'judgeRCL' => null];
 
-        // Kumpletong set na 5 lang ang huhusgahan, para hindi magkamali habang nagta-type
         $sets = collect(array_chunk(array_values($measurements), 5))
             ->map(fn($chunk) => array_map($num, $chunk))
             ->filter(fn($set) => count($set) === 5 && ! in_array(null, $set, true))
@@ -311,7 +307,7 @@ class DimensionsService
 
         $judge = function ($values, ?float $low, ?float $high): ?string {
             if ($low === null && $high === null) {
-                return null;   // walang limit na naka-set
+                return null; 
             }
 
             return $values->every(fn($v) => ($low === null || $v >= $low) && ($high === null || $v <= $high))

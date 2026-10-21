@@ -50,7 +50,7 @@ class ConfirmationCheckTimeService
                 'followUp'  => $this->hasFollowUp($source, $this->kindOf($source) === self::KIND_REGULAR ? self::KIND_CS : self::KIND_CA, $labels, $dateEncode),
             ]);
             if (! in_array($source, $labels, true)) {
-                continue; // removed during this session
+                continue; 
             }
 
             if (! $this->isRejected($source, $dimensions, $judgements)) {

@@ -10,7 +10,6 @@ class GroupLeaderService
 
     public function register(string $employeeId, string $plant,string $inspectorNo): void
     {
-        // Kailangan may account sa PASWORD, kung hindi ay hindi makakapag-login
         if (! $this->repository->employeeHasLogin($employeeId)) {
             throw new \DomainException("Employee {$employeeId} has no login account.");
         }

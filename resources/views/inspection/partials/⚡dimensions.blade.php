@@ -159,9 +159,6 @@ new class extends Component
                 $this->applyMasterSpecification($i, $repo->getMasterSpecification($this->partNo, $row['item']));
                 continue;
             }
-
-            // Editable row already has an item name (loaded from saved data)
-            // but no spec resolved yet — fetch it now instead of waiting for blur.
             if (trim($row['item'] ?? '') !== '' && empty($row['specType'])) {
                 $master = $repo->getMasterSpecification($this->partNo, $row['item'])
                     ?? $repo->getTempMaster($this->partNo, $row['item']);
@@ -443,7 +440,7 @@ new class extends Component
     }
 
     #[On('passMoldingDie')]
-    public function fetchMoldingDie(int $moldingDieNo)
+    public function fetchMoldingDie(string|int|null $moldingDieNo = null): void
     {
         $this->moldingDieNo = $moldingDieNo;
     }

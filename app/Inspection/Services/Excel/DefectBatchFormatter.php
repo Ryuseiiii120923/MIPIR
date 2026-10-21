@@ -76,7 +76,6 @@ class DefectBatchFormatter
             'qty' => (float) ($d->Qty ?? 0),
         ];
 
-        // large defect => [['type' => small, 'qty' => n], ...]
         $smallMap = static fn ($group) => $group
             ->groupBy(fn ($s) => (string) $s->largeDefect)
             ->map(fn ($g) => $g->map(fn ($s) => [

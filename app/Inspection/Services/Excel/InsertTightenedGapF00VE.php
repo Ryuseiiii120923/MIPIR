@@ -31,18 +31,14 @@ class InsertTightenedGapF00VE
 
     private const OUTPUT_ROOT = 'app/exports/tightened-monitoring/Offset-Checking(F00VE)';
 
-    private const FIRST_READING_COLUMN = 5;   // E
-    private const READINGS_PER_ROW = 12;      // E..P
+    private const FIRST_READING_COLUMN = 5;  
+    private const READINGS_PER_ROW = 12;      
     private const CHECKS_PER_BLOCK = 3;
     private const ROWS_PER_CHECK = 2;
 
-    /** Row order inside one check: 0° (Y-axis), 90° (X-axis). */
     private const LOCATIONS = ['0', '90'];
 
-    /**
-     * The template has "90 º(Y-axis)" on the 3rd check of every block (D13, D19, ...), which looks like a typo.
-     * true = rewrite every Location label as 0º (Y-axis) / 90º (X-axis); false = leave the template as it is.
-     */
+
     private const NORMALIZE_LOCATION_LABELS = true;
     private const LOCATION_LABELS = ['0 º(Y-axis)', '90 º(X-axis)'];
 
@@ -54,8 +50,8 @@ class InsertTightenedGapF00VE
             'limit'         => 'E5',
             'firstRow'      => 8,
             'lastRow'       => 133,
-            'rowsPerRecord' => 6,                  // one block = one lot = 3 checks
-            'staticCols'    => ['D', 'Q', 'R'],    // location labels, Ave/max labels and their formulas
+            'rowsPerRecord' => 6,                
+            'staticCols'    => ['D', 'Q', 'R'],    
         ],
     ];
 
@@ -77,7 +73,6 @@ class InsertTightenedGapF00VE
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle($this->sheetTitle((string) $context['partNo']));
 
-        // header first, while the template's original cell addresses are still valid
         $this->fillHeader($sheet, $layout[0], $context);
 
         $blocksNeeded = (int) ceil($checks->count() / self::CHECKS_PER_BLOCK);
@@ -119,7 +114,7 @@ class InsertTightenedGapF00VE
         $spreadsheet = IOFactory::load($path);
         $sheet = $spreadsheet->getSheet(0);
 
-        $extra = $this->currentExtra($sheet);   // blocks already added in earlier saves
+        $extra = $this->currentExtra($sheet);  
         $layout = $this->withExtra(self::LAYOUT, $extra);
 
         foreach ($checks as $check) {
@@ -127,7 +122,6 @@ class InsertTightenedGapF00VE
                 ?? $this->findFreeSlot($sheet, $layout[0], $check);
 
             if ($position === null) {
-                // table is full: add one more block (3 checks) to the end
                 $position = [$this->pageCapacity($layout), 0];
                 $this->addRows($sheet, $layout, 1);
                 $extra++;
@@ -145,15 +139,7 @@ class InsertTightenedGapF00VE
         return $path;
     }
 
-    /**
-     * The ONE place that knows the shape of the incoming payload. Adapt it to your data.
-     *
-     * Expected row (one check):
-     *   checkTime, remarks (optional),
-     *   measurements => ['0' => [12 values], '90' => [12 values]]   (12 values = columns E..P, cavity order of row 7)
-     *
-     * Context: ppf, partNo, moldNo, lotNo, machineNo, inspector, spec (optional), limit (optional)
-     */
+
     private function checksFromPayload(array $context, array $rows): Collection
     {
         return collect($rows)->map(function (array $row) use ($context) {
@@ -161,7 +147,7 @@ class InsertTightenedGapF00VE
 
             foreach (self::LOCATIONS as $location) {
                 $locations[$location] = array_map(
-                    fn($v) => is_numeric($v) ? (float) $v : null,   // blank stays blank, a typed 0 stays 0
+                    fn($v) => is_numeric($v) ? (float) $v : null,  
                     array_values((array) ($row['measurements'][$location] ?? []))
                 );
             }
@@ -189,7 +175,6 @@ class InsertTightenedGapF00VE
             rtrim((string) $sheet->getCell($section['mold'])->getValue()) . ' ' . ($context['moldNo'] ?? '')
         );
 
-        // optional: only touched when the caller sends them
         foreach (['spec', 'limit'] as $key) {
             if (isset($context[$key]) && trim((string) $context[$key]) !== '') {
                 $sheet->setCellValue(
@@ -200,14 +185,10 @@ class InsertTightenedGapF00VE
         }
     }
 
-    /** Writes one check into slot $slot (0..2) of block $block, plus the block's Machine / Lot / Inspector. */
     private function fillCheck(Worksheet $sheet, array $section, int $block, int $slot, array $check): void
     {
         $blockTop = $this->blockTop($section, $block);
         $top = $blockTop + $slot * self::ROWS_PER_CHECK;
-
-        // merged over the whole block: write the top-left cell only. Explicit strings so the
-        // template's 0.00E+00 format on Lot Number can never turn "24009" into "2.40E+04".
         $sheet->setCellValueExplicit("A{$blockTop}", (string) $check['machineNo'], DataType::TYPE_STRING);
         $sheet->setCellValueExplicit("B{$blockTop}", (string) $check['lotNo'], DataType::TYPE_STRING);
         $sheet->setCellValue("S{$blockTop}", $check['inspector']);
@@ -221,7 +202,7 @@ class InsertTightenedGapF00VE
             for ($i = 0; $i < self::READINGS_PER_ROW; $i++) {
                 $sheet->setCellValue(
                     Coordinate::stringFromColumnIndex(self::FIRST_READING_COLUMN + $i) . $row,
-                    $readings[$i] ?? null   // null clears any old value when a check is replaced
+                    $readings[$i] ?? null  
                 );
             }
         }
@@ -229,7 +210,7 @@ class InsertTightenedGapF00VE
         $sheet->setCellValue("T{$top}", $check['remarks']);
     }
 
-    /** [block, slot] of an existing (Lot No, Check Time) entry, or null. */
+  
     private function findCheck(Worksheet $sheet, array $section, array $check): ?array
     {
         $blocks = $this->blockCount($section);
@@ -253,10 +234,6 @@ class InsertTightenedGapF00VE
         return null;
     }
 
-    /**
-     * Where a NEW check goes: the next free slot of a block that already belongs to this lot,
-     * otherwise the first completely empty block. null when the table is full.
-     */
     private function findFreeSlot(Worksheet $sheet, array $section, array $check): ?array
     {
         $blocks = $this->blockCount($section);
@@ -299,7 +276,6 @@ class InsertTightenedGapF00VE
         return intdiv($section['lastRow'] - $section['firstRow'] + 1, $this->rowsPerRecord($section));
     }
 
-    /** Location labels of every row (see NORMALIZE_LOCATION_LABELS). */
     private function normalizeLabels(Worksheet $sheet, array $section): void
     {
         if (! self::NORMALIZE_LOCATION_LABELS) {
@@ -318,7 +294,6 @@ class InsertTightenedGapF00VE
             : '';
     }
 
-    /** Excel sheet names: max 31 chars, none of \ / ? * [ ] : */
     private function sheetTitle(string $partNo): string
     {
         $title = trim(mb_substr((string) preg_replace('/[\\\\\/?*\[\]:]+/', '-', $partNo), 0, 31));

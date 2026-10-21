@@ -32,7 +32,6 @@ class InspectionXBarService
 
 
 
-        // To place the symbol in excel
         $symbol = storage_path('app/Symbol/58.png');
         $drawing = new Drawing();
         $drawing->setName('Signature');
@@ -105,7 +104,6 @@ class InspectionXBarService
                 $b['at'],
             ]);
 
-            // Magkakasunod ang column, walang puwang
             foreach ($items as $item) {
                 $map[$item['key']] = Coordinate::stringFromColumnIndex($next++);
             }

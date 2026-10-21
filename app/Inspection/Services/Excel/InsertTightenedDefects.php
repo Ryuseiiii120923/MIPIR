@@ -105,8 +105,6 @@ class InsertTightenedDefects
 
             $sheet->setCellValue($labelCol . self::LOT_ROW, 'Lot No.: ' . $lotNo);
 
-            // fillHeader() only runs for a brand-new file, so write it here for existing files too.
-            // R1 is one cell for the whole file: the first lot's confirmer owns it, others only fill it if empty.
             $confirmedBy = trim((string) ($context['confirmedBy'] ?? ''));
 
             if ($confirmedBy !== '' && ($slot === self::SLOTS[0] || trim((string) $sheet->getCell('R1')->getValue()) === '')) {

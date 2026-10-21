@@ -18,11 +18,11 @@ class InsertTightenedGapOring
 
     private const OUTPUT_ROOT = 'app/exports/tightened-monitoring/Offset-Checking(Oring)';
 
-    private const FIRST_READING_COLUMN = 5;   // E
+    private const FIRST_READING_COLUMN = 5;  
     private const READINGS_PER_BLOCK = 5;
     private const BLOCKS = 5;
 
-    /** Row order inside one record: 0° (Y), 90° (X), 45° (Y), 135° (X). */
+
     private const LOCATIONS = ['0', '90', '45', '135'];
 
     private const LAYOUT = [
@@ -32,7 +32,7 @@ class InsertTightenedGapOring
             'firstRow'      => 9,
             'lastRow'       => 788,
             'rowsPerRecord' => 4,
-            'staticCols'    => ['D', 'AD', 'AE'],   // location labels, Ave/Min/Max labels and their formulas
+            'staticCols'    => ['D', 'AD', 'AE'], 
         ],
     ];
 
@@ -54,7 +54,6 @@ class InsertTightenedGapOring
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle($this->sheetTitle((string) $context['partNo']));
 
-        // header + merges first, while the template's original cell addresses are still valid
         $this->fillHeader($sheet, $layout[0], $context);
         $this->splitTallMerges($sheet, $layout[0]);
 
@@ -88,7 +87,7 @@ class InsertTightenedGapOring
         $spreadsheet = IOFactory::load($path);
         $sheet = $spreadsheet->getSheet(0);
 
-        $extra = $this->currentExtra($sheet);   // records already added in earlier saves
+        $extra = $this->currentExtra($sheet);   
         $layout = $this->withExtra(self::LAYOUT, $extra);
 
         foreach ($records as $record) {
@@ -96,7 +95,7 @@ class InsertTightenedGapOring
                 ?? $this->firstEmptyIndex($sheet, $layout[0]);
 
             if ($index === null) {
-                // table is full: add one more record to the end
+
                 $index = $this->pageCapacity($layout);
                 $this->addRows($sheet, $layout, 1);
                 $extra++;
@@ -127,7 +126,7 @@ class InsertTightenedGapOring
 
             foreach (self::LOCATIONS as $location) {
                 $locations[$location] = array_map(
-                    fn($v) => is_numeric($v) ? (float) $v : null,   // blank stays blank, a typed 0 stays 0
+                    fn($v) => is_numeric($v) ? (float) $v : null,   
                     array_values((array) ($row['measurements'][$location] ?? []))
                 );
             }
@@ -178,7 +177,6 @@ class InsertTightenedGapOring
             $sheet->unmergeCells($range);
 
             for ($r = $r1; $r <= $r2; $r++) {
-                // borders of a normal record (the one right below) go on the split cells
                 $sheet->getCell("{$col}{$r}")->setXfIndex(
                     $sheet->getCell($col . ($r2 + 1 + (($r - $r1) % $h)))->getXfIndex()
                 );
@@ -205,7 +203,7 @@ class InsertTightenedGapOring
             for ($i = 0; $i < self::BLOCKS * self::READINGS_PER_BLOCK; $i++) {
                 $sheet->setCellValue(
                     Coordinate::stringFromColumnIndex(self::FIRST_READING_COLUMN + $i) . $row,
-                    $readings[$i] ?? null   // null clears any old value when a record is replaced
+                    $readings[$i] ?? null
                 );
             }
         }
@@ -216,7 +214,6 @@ class InsertTightenedGapOring
         $sheet->setCellValue("AI{$top}", $record['remarks']);
     }
 
-    /** Record index of an existing (Lot No, Check Time) entry, or null. */
     private function findRecordIndex(Worksheet $sheet, array $section, array $record): ?int
     {
         $h = $section['rowsPerRecord'];
@@ -233,7 +230,6 @@ class InsertTightenedGapOring
         return null;
     }
 
-    /** Record index of the first unused record, or null when the table is full. */
     private function firstEmptyIndex(Worksheet $sheet, array $section): ?int
     {
         $h = $section['rowsPerRecord'];

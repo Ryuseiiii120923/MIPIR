@@ -22,7 +22,7 @@ new class extends Component
     protected function rules(): array
     {
         return [
-            'employeeID' => ['required', 'digits_between:3,5'],
+            'employeeID' => ['required'],
             'inspectorNo' => ['required', 'string'],
             'plant'      => ['required', Rule::in(['P1A', 'P1B', 'P2'])],
         ];

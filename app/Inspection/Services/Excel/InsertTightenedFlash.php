@@ -64,7 +64,6 @@ class InsertTightenedFlash
         $spreadsheet->setActiveSheetIndex(0);
         $sheet = $spreadsheet->getActiveSheet();
 
-        // header first, while the template's original cell addresses are still valid
         foreach ($layout as $section) {
             $this->fillHeader($sheet, $section, $header);
         }
@@ -100,16 +99,16 @@ class InsertTightenedFlash
 
         $spreadsheet = IOFactory::load($path);
         $sheet = $spreadsheet->getSheet(0);
-        $sheetSize = (int) preg_replace('/\D+/', '', $sheet->getTitle());   // "BLOCK 4" -> 4
+        $sheetSize = (int) preg_replace('/\D+/', '', $sheet->getTitle()); 
 
         if (! isset(self::LAYOUTS[$sheetSize]) || $neededBlocks > $sheetSize) {
             $spreadsheet->disconnectWorksheets();
 
-            return $this->insertFlashToExcel($context, $allRows);   // needs a bigger template
+            return $this->insertFlashToExcel($context, $allRows);   
         }
 
         $base = self::LAYOUTS[$sheetSize];
-        $extra = $this->currentExtra($sheet, $base);   // rows already added in earlier saves
+        $extra = $this->currentExtra($sheet, $base);  
         $layout = $this->withExtra($base, $extra);
 
         foreach ($records as $record) {
@@ -117,7 +116,6 @@ class InsertTightenedFlash
                 ?? $this->firstEmptyIndex($sheet, $layout[0]);
 
             if ($index === null) {
-                // table is full: add one more row to every section
                 $index = $this->pageCapacity($layout);
                 $this->addRows($sheet, $layout, 1);
                 $extra++;
@@ -141,7 +139,6 @@ class InsertTightenedFlash
             $blocks = [];
 
             foreach (array_chunk(array_values($row['measurements'] ?? []), self::READINGS_PER_BLOCK) as $s => $chunk) {
-                // blank input stays blank (null), a typed 0 stays 0
                 $blocks[$s + 1] = array_map(fn($v) => is_numeric($v) ? (float) $v : null, $chunk);
             }
 
@@ -169,7 +166,6 @@ class InsertTightenedFlash
             'partNo'       => (string) $context['partNo'],
             'moldNo'       => (string) ($context['moldNo'] ?? ''),
             'confirmedBy'  => trim((string) ($context['confirmedBy'] ?? '')),
-            // template already prints "max.", so drop it if it was entered with the spec
             'spec'         => trim((string) preg_replace('/^\s*max\.?\s*/i', '', (string) ($firstRow['specification'] ?? ''))),
             'controlLimit' => trim((string) ($firstRow['controlLimit'] ?? '')),
         ];
@@ -308,7 +304,6 @@ class InsertTightenedFlash
                 $col = Coordinate::stringFromColumnIndex(
                     self::FIRST_BLOCK_COLUMN + ($b * self::READINGS_PER_BLOCK) + $i
                 );
-                // null clears any old value when a row is replaced
                 $sheet->setCellValue("{$col}{$row}", $readings[$i] ?? null);
             }
         }

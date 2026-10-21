@@ -7,7 +7,6 @@ use Illuminate\Support\Facades\Cache;
 
 class DraftAction
 {
-    // Ilagay dito LAHAT ng section name na ginagamit sa put()
     private const SECTIONS = [
         'ppfLookup',
         'check-time',

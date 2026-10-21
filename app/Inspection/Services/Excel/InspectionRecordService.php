@@ -226,7 +226,6 @@ class InspectionRecordService
                         continue;
                     }
 
-                    // ProdLotNo and MachineNo: only once, on the first entry of the lot
                     if (! $lotInfoWritten) {
                         $sheet->setCellValue("A{$row}", $record->ProdLotNo);
                         $sheet->setCellValue("B{$row}", $record->MachineNo);
@@ -239,7 +238,6 @@ class InspectionRecordService
                     $this->insertDimensionValues($record, $dimItems, $blocks, $sheet, $row);
                     $this->insertAppearanceInspection($ppf, $entry['checktime'], $sheet, $row);
 
-                    // QC PASSED stamp: once the inspector pressed Done (pending or confirmed)
                     if ($state['submitted'] && ! $stampWritten) {
                         $stampCell = "{$trailing['stamp']}{$groupStartRow}";
 
@@ -252,9 +250,11 @@ class InspectionRecordService
                         $stampWritten = true;
                     }
 
-                    // Confirmed by: only when the GL confirmed
                     if ($state['confirmed'] && ! $confirmedWritten) {
-                        $sheet->setCellValue("{$trailing['confirmedBy']}{$groupStartRow}", $confirmedBy);
+                        $sheet->setCellValue(
+                            "{$trailing['confirmedBy']}{$groupStartRow}",
+                            $state['confirmedBy'] ?? $confirmedBy
+                        );
                         $confirmedWritten = true;
                     }
                 }
@@ -383,11 +383,11 @@ class InspectionRecordService
             ->orderBy('RECNO')
             ->get();
 
-        $seen        = [];   // DimItem => [RowNo => nth]
+        $seen        = [];   
         $judgeBySlot = [];
 
         foreach ($measures as $measure) {
-            // Pang-ilang row ng parehong dimension sa check time na ito
+
             $rowNo = $measure->RowNo ?? 0;
             $seen[$measure->DimItem] ??= [];
             $seen[$measure->DimItem][$rowNo] ??= count($seen[$measure->DimItem]);
@@ -406,7 +406,6 @@ class InspectionRecordService
                 $sheet->setCellValue("{$col}{$targetRow}", $values[$i]);
             }
 
-            // Gap-Offset: iisang merged judge, galing sa itaas na row. Ang iba: bawat slot may sariling judge.
             if (! $target['pair'] || $target['rowOffset'] === 0) {
                 $judgeBySlot[$target['slot']] = max($judgeBySlot[$target['slot']] ?? 0, (int) $measure->Judge);
             }
@@ -484,6 +483,11 @@ class InspectionRecordService
         return $defect && (int) $defect->Judgement === 1;
     }
 
+    private function lotKey($partNo, $prodLotNo): string
+    {
+        return trim((string) $partNo) . '|' . trim((string) $prodLotNo);
+    }
+
     private function lotStatuses(array $plan): array
     {
         $ppfs = collect($plan)
@@ -498,12 +502,32 @@ class InspectionRecordService
             return [];
         }
 
-        return LotConfirmation::whereIn('PPFNo', $ppfs)
-            ->get(['PPFNo', 'Status'])
-            ->mapWithKeys(fn($c) => [(string) $c->PPFNo => strtolower((string) $c->Status)])
+        // PPF -> (PartNo, ProdLotNo)
+        $records = MIPIRInspectionRecord::whereIn('PPFNo', $ppfs)
+            ->get(['PPFNo', 'PartNo', 'ProdLotNo'])
+            ->unique('PPFNo');
+
+        $confirmations = LotConfirmation::whereIn('PartNo', $records->pluck('PartNo')->unique()->all())
+            ->whereIn('ProdLotNo', $records->pluck('ProdLotNo')->unique()->all())
+            ->orderBy('Id')   // kung may duplicate na row, ang pinakabago ang mananaig
+            ->get(['PartNo', 'ProdLotNo', 'Status', 'ConfirmedBy'])
+            ->mapWithKeys(fn($c) => [
+                $this->lotKey($c->PartNo, $c->ProdLotNo) => [
+                    'status'      => strtolower(trim((string) $c->Status)),
+                    'confirmedBy' => $c->ConfirmedBy,
+                ],
+            ])
+            ->all();
+
+        return $records
+            ->mapWithKeys(fn($r) => [
+                (string) $r->PPFNo => $confirmations[$this->lotKey($r->PartNo, $r->ProdLotNo)]
+                    ?? ['status' => '', 'confirmedBy' => null],
+            ])
             ->all();
     }
 
+    /** @return array{submitted: bool, confirmed: bool, confirmedBy: ?string} */
     private function lotState(array $lotEntries, array $statuses): array
     {
         $ppfs = collect($lotEntries)
@@ -512,12 +536,15 @@ class InspectionRecordService
             ->unique();
 
         if ($ppfs->isEmpty()) {
-            return ['submitted' => false, 'confirmed' => false];
+            return ['submitted' => false, 'confirmed' => false, 'confirmedBy' => null];
         }
 
+        $rows = $ppfs->map(fn($p) => $statuses[(string) $p] ?? ['status' => '', 'confirmedBy' => null]);
+
         return [
-            'submitted' => $ppfs->every(fn($p) => in_array($statuses[(string) $p] ?? '', ['pending', 'confirmed'], true)),
-            'confirmed' => $ppfs->every(fn($p) => ($statuses[(string) $p] ?? '') === 'confirmed'),
+            'submitted'   => $rows->every(fn($r) => in_array($r['status'], ['pending', 'confirmed'], true)),
+            'confirmed'   => $rows->every(fn($r) => $r['status'] === 'confirmed'),
+            'confirmedBy' => $rows->first()['confirmedBy'] ?? null,
         ];
     }
 }

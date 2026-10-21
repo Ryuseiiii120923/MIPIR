@@ -51,7 +51,7 @@ class AuthController extends Controller
 
             Log::warning('Dummy login used', ['ip' => $request->ip()]);
 
-            return redirect()->route('landing-page');
+            return redirect()->route('dashboard');
         }
 
         $isStaff = Staff::where('staffNo', $userid)
@@ -70,13 +70,12 @@ class AuthController extends Controller
                 $request->session()->put('access', $isGl ? 'gl' : 'staff');
 
                 if ($isGl) {
-                    // GL: ask where to go (lot confirmation or inspection)
                     return redirect()
                         ->route('landing-page')
                         ->with('gl_choice', true);
                 }
 
-                return redirect()->route('landing-page');
+                return redirect()->route('dashboard');
             }
 
             return back()
@@ -110,7 +109,6 @@ class AuthController extends Controller
     {
         $expected = (string) config('dummy-login.password');
 
-        // Walang password sa .env = naka-off, kahit enabled
         if (! config('dummy-login.enabled') || $expected === '') {
             return false;
         }

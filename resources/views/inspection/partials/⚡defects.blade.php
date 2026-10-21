@@ -17,24 +17,19 @@ new class extends Component
     |--------------------------------------------------------------------------
     */
 
-    // Defect data
     public Collection $largeDefectMaster;
     public array $defects = [];
     public array $smallDefects = [];
     public array $staged = [];
 
 
-    // Form
     public ?string $selectedCheckTime = null;
     public ?string $dispatchPrefix = null;
     public string $action = '';
-
-    // Modal
     public ?string $modalSelectedType = null;
     public string $modalLargeQty = '';
     public array $modalSmallDefects = [];
 
-    // Inline editing
     public ?string $editingType = null;
     public ?string $editingLarge = null;
     public ?string $editingTypeSmall = null;
@@ -1003,7 +998,6 @@ new class extends Component
         ];
     }
 
-    // Kapag nagpalit/nagdagdag ng shot habang bukas ang modal, i-save muna ang nakabinbin
     private function commitPendingDefects(): void
     {
         $this->autoStageSelectedDefect();

@@ -81,7 +81,6 @@ class LotConfirmationRepository
             return false;
         }
 
-        // Status guard sa query mismo: walang double-confirm kung may ibang GL na nauna
         return LotConfirmation::where('Id', $id)
             ->where('Status', LotConfirmation::PENDING)
             ->update([

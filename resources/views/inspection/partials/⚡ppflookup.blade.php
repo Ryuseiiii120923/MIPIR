@@ -130,7 +130,6 @@ new class extends Component
         $this->moldOperator = $result['moldOperator'] ?? '';
 
         $this->found = true;
-        // Notify other components only after PPF was found.
         $this->dispatch('ppf-checked', ppf: (int) $this->ppfno);
 
         $this->dispatch(

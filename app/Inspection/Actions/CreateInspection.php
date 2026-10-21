@@ -38,7 +38,7 @@ class CreateInspection
         $dateEncodeCheck = $draft['check-time']['date-encode'] ?? [];
         $startTimeByTime = $draft['check-time']['start-time'] ?? [];
         $endTimeByTime = $draft['check-time']['end-time'] ?? [];
-        $touchedCheckTimes = $draft['check-time']['touched'] ?? $checkTimes; // fallback treats all as touched
+        $touchedCheckTimes = $draft['check-time']['touched'] ?? $checkTimes;
         $defects = $draft['defects']['defects'] ?? [];
         $smallDefects = $draft['defects']['smallDefects'] ?? [];
         $modeByTime = $draft['defects']['mode'] ?? [];
@@ -249,7 +249,6 @@ class CreateInspection
                                 ];
                             }
 
-                            // Isang Excel bawat cycle, kahit ilang set o check time ang nasa loob
                             $xbarJobs["{$itemName}|{$transactionId}"] = [
                                 'dimension'     => $itemName,
                                 'transactionId' => $transactionId,
@@ -626,7 +625,6 @@ class CreateInspection
         $cavity = (float) ($ppfLookUp['noOfCavity'] ?? 0);
         $nqr    = (float) ($ppfLookUp['nqr'] ?? 0);
 
-        // Lahat ng natitirang check time ng PPF, para laging buo ang column ng lot
         $judgements = [];
 
         foreach ($checkTimes as $checkTime) {
@@ -644,7 +642,6 @@ class CreateInspection
                 $ng  = collect($shot['defects'] ?? [])->sum(fn($d) => (float) ($d['qty'] ?? 0));
                 $pct = $cavity > 0 ? ($ng / $cavity) * 100 : 0;
 
-                // Kung pareho ang shot sa dalawang check time, X ang nananaig
                 $judge = $pct > $nqr ? 'X' : 'O';
                 $judgements[$label] = ($judgements[$label] ?? 'O') === 'X' ? 'X' : $judge;
             }
@@ -652,7 +649,6 @@ class CreateInspection
 
         ksort($judgements);
 
-        // May check time ba sa PPF na ito na naka-tightened? Kung oo, siguraduhing may file na.
         $hasTightened = collect($checkTimes)
             ->contains(fn($t) => ($modeByTime[$t] ?? 'normal') === 'tightened');
 

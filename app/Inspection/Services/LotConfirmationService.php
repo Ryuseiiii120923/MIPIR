@@ -80,7 +80,6 @@ class LotConfirmationService
             ->where('ProdLotNo', $lot->ProdLotNo)
             ->value('PPFNo');
         $plant = GroupLeader::where('EmployeeID', $employeeId)->value('Plant');
-        // confirm() just saved this on the lot; no need to look it up again
         $confimedBy = $lot->ConfirmedBy !== null ? (string) $lot->ConfirmedBy : null;
 
         if ($ppf !== null) {

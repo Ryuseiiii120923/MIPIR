@@ -16,22 +16,18 @@ new class extends Component
 {
     use HasNotifications;
 
-    // X - Specification Limit
     public ?float $CSLx = null;
     public ?float $USLx = null;
     public ?float $LSLx = null;
 
-    // X - Control Limit
     public ?float $CCLx = null;
     public ?float $UCLx = null;
     public ?float $LCLx = null;
 
-    // R - Specification Limit
     public ?float $CSLr = null;
     public ?float $USLr = null;
     public ?float $LSLr = null;
 
-    // R - Control Limit
     public ?float $CCLr = null;
     public ?float $UCLr = null;
     public ?float $LCLr = null;
@@ -48,8 +44,7 @@ new class extends Component
     public string $dimItem = '';
 
     #[Locked]
-    public bool $standalone = false; // true when used as a modal in dimension-encoding
-
+    public bool $standalone = false;
     public int $rowIndex = -1;
 
     #[Locked]
@@ -150,7 +145,6 @@ new class extends Component
             $rules[$field] = ['nullable', 'numeric'];
         }
 
-        // Upper must be >= lower, checked only when both are filled in
         foreach ([['UCLx', 'LCLx'], ['USLr', 'LSLr'], ['UCLr', 'LCLr']] as [$upper, $lower]) {
             if ($this->{$upper} !== null && $this->{$lower} !== null) {
                 $rules[$upper][] = "gte:{$lower}";
@@ -372,7 +366,6 @@ new class extends Component
             <span class="w-40 text-sm font-medium text-gray-700 shrink-0">{{ $groupLabel }}</span>
             @foreach ($fields as $field)
             @php
-            // In the modal, X spec limits are derived from the dimension's Upper/Lower Limit (edit them there)
             $locked = $this->action === 'view' || ($standalone && in_array($field, $xSpecFields, true));
             @endphp
             <div class="flex-1">

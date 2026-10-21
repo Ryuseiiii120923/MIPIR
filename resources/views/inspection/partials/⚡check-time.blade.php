@@ -14,7 +14,6 @@ new class extends \Livewire\Component
 
     public array $checkTimes = [];
 
-    // Mga check time na galing sa database (Update): view-only
     #[Locked]
     public array $lockedCheckTimes = [];
 
@@ -29,7 +28,6 @@ new class extends \Livewire\Component
     public array $deletedCheckTime = [];
     public int $ppf = 0;
     public string $action = '';
-    //Computation
     public array $dataFromMaster = [];
     public string $partNo = '';
     public string $lookupTime = '';
@@ -103,7 +101,6 @@ new class extends \Livewire\Component
             'date-encode' => $this->dateEncodeByTime,
             'start-time' => $this->startTimeByTime,
             'end-time' => $this->endTimeByTime,
-            // Ang mga bagong check time lang ang isinasave; ang naka-lock ay hindi ginagalaw
             'touched' => array_values(array_diff($this->checkTimes, $this->lockedCheckTimes)),
             'deleted' => $this->deletedCheckTime,
         ]);
@@ -342,7 +339,6 @@ new class extends \Livewire\Component
         </div>
     </div>
 
-    {{-- Add check time field --}}
     <div class=" flex flex-col justify-center items-center" @if($action==='view' || $action==='delete' ) hidden @endif>
         <div class="@if($this->ppf === 0 || $this->action === 'view') cursor-not-allowed @endif">
             <label for="checkTime" class="block text-sm font-medium text-gray-700 mb-1.5">Check Time</label>

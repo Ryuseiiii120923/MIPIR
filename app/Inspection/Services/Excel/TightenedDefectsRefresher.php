@@ -5,10 +5,7 @@ namespace App\Inspection\Services\Excel;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
-/**
- * Synchronizes tightened shot judgements to the SAIR Excel workbook,
- * reading everything from DB_MIPIR (tblInspectionRecord + tblDefect).
- */
+
 class TightenedDefectsRefresher
 {
     public function refresh(int $ppf, ?string $confirmedBy = null): void
@@ -24,7 +21,6 @@ class TightenedDefectsRefresher
             $cavity = $header['cavity'];
             $nqr = $header['nqr'];
 
-            // Tightened rows are the ones carrying a shot number.
             $rows = $source->defects($ppf)
                 ->filter(static fn ($d) => $d->Shot !== null && (int) $d->Shot >= 1);
 
@@ -36,7 +32,6 @@ class TightenedDefectsRefresher
                     $percentage = $cavity > 0 ? ($ng / $cavity) * 100 : 0;
                     $judge = $percentage > $nqr ? 'X' : 'O';
 
-                    // If a shot label appears more than once, X takes precedence.
                     $judgements[(int) $label] = ($judgements[(int) $label] ?? 'O') === 'X'
                         ? 'X'
                         : $judge;
