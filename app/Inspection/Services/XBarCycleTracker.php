@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Inspection\Services;
+
 use App\Inspection\Models\XBarCycleLog;
 use App\Inspection\Models\XBarCycleProgress;
 use Illuminate\Support\Facades\DB;
@@ -12,6 +13,14 @@ class XBarCycleTracker
 
     public function recordSubgroup(string $plant, string $dimensionName, ?string $encodedAt = null): array
     {
+        logger()->info('XBar recordSubgroup', [
+            'plant' => $plant,
+            'dim'   => $dimensionName,
+            'at'    => $encodedAt,
+            'trace' => collect(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 6))
+                ->pluck('function')->all(),
+        ]);
+        
         $encodedAt = $encodedAt ?? now()->toDateTimeString();
 
         $shouldGenerate = false;

@@ -357,6 +357,7 @@ new class extends Component
     <div class="w-full mx-auto mt-3 @if($readonly) opacity-50 cursor-not-allowed @endif">
         @foreach ($rows as $i => $row)
         @php $isXBar = (bool) ($row['forXBar'] ?? false); @endphp
+        @continue($isXBar)
         <div wire:key="dim-row-mka{{ $i }}" data-card-index="{{ $i }}" class="w-full mb-4">
             @if (!$row['revealed'])
 
@@ -371,9 +372,6 @@ new class extends Component
                     </div>
                     <div>
                         <p class="font-medium text-base">Dimension entry</p>
-                        @if($isXBar)
-                        <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">X-Bar Table</span>
-                        @endif
                         <p class="text-sm text-gray-500">{{ $row['item'] ?: 'Enter item' }}</p>
                     </div>
                 </div>
@@ -394,9 +392,6 @@ new class extends Component
                             <p class="font-medium text-base">Dimension entry</p>
                             <p class="text-sm text-gray-500 flex flex-wrap items-center gap-1">
                                 <span>{{ $row['item'] ?: 'Enter item' }}</span>
-                                @if($isXBar)
-                                <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">X-Bar Table</span>
-                                @endif
                                 @if(!empty($row['mode']))
                                 <span class="text-xs font-medium px-2 py-0.5 rounded-full {{ $row['mode'] === 'tightened' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700' }}">
                                     {{ $row['mode'] === 'tightened' ? 'Tightened · ' . $row['sets'] . ' set' . ($row['sets'] > 1 ? 's' : '') : 'Normal' }}
@@ -498,17 +493,6 @@ new class extends Component
                         </div>
                     </div>
                 </div>
-
-                @if($isXBar)
-                <div class="mb-4 rounded-xl border border-purple-200 bg-purple-50/40 p-4">
-                    <p class="text-sm font-medium text-purple-700 mb-2">X-Bar Control Limits</p>
-                    <livewire:inspection::partials.specs-control-limit
-                        :dimItem="$row['item']"
-                        :partNo="$partNo"
-                        :rowIndex="$i"
-                        :key="'specs-control-limit-'.$i" />
-                </div>
-                @endif
 
                 <div class="mb-4">
                     <label class="text-sm font-medium block mb-1.5">Control Limit</label>

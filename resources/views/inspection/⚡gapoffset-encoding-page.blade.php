@@ -18,6 +18,7 @@ new class extends Component
     public $isHideTable = true;
     public string $search = '';
     public int $encoder = 0;
+    public string $plant = '';
 
     public string $action = '';
     public int $selectedPpf = 0;
@@ -47,6 +48,7 @@ new class extends Component
     public function mount(CurrentActor $actor)
     {
         $this->encoder = $actor->id();
+        $this->plant = $actor->plant();
     }
 
     #[Computed]
@@ -59,6 +61,7 @@ new class extends Component
         return app(PpfLookUpRepository::class)->getDataforSearchGapOffset(
             $this->search,
             $this->encoder,
+            $this->plant,
             excludeGenerated: $this->action === 'add'
         );
     }

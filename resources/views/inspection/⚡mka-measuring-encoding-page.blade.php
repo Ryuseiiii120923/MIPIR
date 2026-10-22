@@ -148,6 +148,7 @@ new class extends Component
         return app(PpfLookUpRepository::class)->getDataforSearchGapOffset(
             $this->search,
             $this->encoder,
+            app(CurrentActor::class)->plant(),
             excludeGenerated: $this->action === 'add'
         );
     }

@@ -328,7 +328,7 @@ class CreateInspection
         $this->refreshTightenedGapOffsetExcel($ppf, $ppfLookUp, $inspectorNo, $checkTimes, $touchedCheckTimes, $dimensions, $composedRemarks, $deletedCheckTimes);
         $this->refreshTightenedDefectsExcel($ppf, $ppfLookUp, $inspectorNo, $checkTimes, $modeByTime, $shotsByTime);
         app(MipirRecordRefresher::class)->refresh($ppf);
-        $this->refreshXBarExcel($xbarJobs, app(CurrentActor::class)->id() ?? null);
+        $this->refreshXBarExcel($xbarJobs, app(CurrentActor::class)->plant() ?? null);
 
         if ($recordDuration) {
             foreach ($touchedCheckTimes as $checkTime) {
