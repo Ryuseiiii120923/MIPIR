@@ -16,6 +16,7 @@ use App\Inspection\Models\SmallDefect;
 use App\Inspection\Repositories\Contracts\PpfLookUpRepositoryInterface;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class PpfLookUpRepository implements PpfLookUpRepositoryInterface
 {
@@ -122,21 +123,22 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
 
     public function getDataforSearch(
         string $search,
-        int $encoder,
+        string $plant,
         int $perPage = 5,
         bool $excludeConfirmed = true
     ) {
         $record = (new MIPIRInspectionRecord())->getTable();
+        $plantEmployees = $this->plantEmployeeIds($plant);
+
         return MIPIRInspectionRecord::query()
             ->select([
                 'PPFNo',
                 'PartNo',
                 'MDNo',
                 'DateJudge',
-                'MachineNo'
+                'MachineNo',
             ])
-            ->where('InspectBy', $encoder)
-
+            ->whereIn('InspectBy', $plantEmployees)
             ->when($search !== '', function ($query) use ($search) {
                 $query->where('PPFNo', 'like', "%{$search}%");
             })
@@ -144,7 +146,7 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
                 'RECNO',
                 MIPIRInspectionRecord::query()
                     ->selectRaw('MAX(RECNO)')
-                    ->where('InspectBy', $encoder)
+                    ->whereIn('InspectBy', $plantEmployees)
                     ->groupBy('PPFNo')
             )
             ->when($excludeConfirmed, function ($query) use ($record) {
@@ -159,6 +161,24 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
             })
             ->orderByDesc('DateJudge')
             ->paginate($perPage);
+    }
+
+    private function plantEmployeeIds(string $plant)
+    {
+        $conn = DB::connection('mipirDB');
+
+        $users = $conn
+            ->table('DB_MIPIR.dbo.tblUser')
+            ->select('EmployeeID')
+            ->where('Plant', '=', $plant);
+
+        $merged = $conn
+            ->table('DB_MIPIR.dbo.GroupLeader')
+            ->select('EmployeeID')
+            ->where('Plant', '=', $plant) // alisin kung walang Plant column ang GroupLeader
+            ->union($users);
+
+        return $conn->query()->fromSub($merged, 'pe')->select('EmployeeID');
     }
 
 

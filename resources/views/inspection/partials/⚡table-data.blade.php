@@ -1,5 +1,6 @@
 <?php
 
+use App\Auth\Services\CurrentActor;
 use App\Inspection\Repositories\PPFLookUp\PpfLookUpRepository;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
@@ -59,7 +60,7 @@ new class extends Component
             return;
         }
 
-        return app(PpfLookUpRepository::class)->getDataforSearch($this->search, $this->encoder);
+        return app(PpfLookUpRepository::class)->getDataforSearch($this->search, app(CurrentActor::class)->plant());
     }
 
     public function confirm_ppf(int $ppf)
