@@ -5,7 +5,7 @@ $isStaffMenu = auth('web')->check() && session('access') !== 'gl';
 
     <x-ui.sidebar-button
         page="dashboard"
-        title="Hand Finishing Dashboard"
+        title="Process Inspection Dashboard"
         @click.stop="desktopExpanded = false; mobileOpen = false">
         <x-slot:icon>
             <svg xmlns="http://www.w3.org/2000/svg"
@@ -43,7 +43,7 @@ $isStaffMenu = auth('web')->check() && session('access') !== 'gl';
     </x-ui.sidebar-button>
     <x-ui.sidebar-button
         page="x-bar-generation"
-        title="X-Bar Generation"
+        title="Report Generation"
         @click.stop="desktopExpanded = false; mobileOpen = false">
 
         <x-slot:icon>
