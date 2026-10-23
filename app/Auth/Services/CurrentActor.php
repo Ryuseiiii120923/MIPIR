@@ -7,6 +7,8 @@ use Illuminate\Support\Facades\Auth;
 
 class CurrentActor
 {
+    private const DUMMY_PLANT = 'P1A';
+
     public function id(): int
     {
         $worker = Auth::guard('worker')->user();
@@ -15,12 +17,24 @@ class CurrentActor
             return (int) $worker->EmployeeID;
         }
 
-        return (int) Auth::guard('web')->user()?->{'社員CD'};
+        return (int) $this->webEmployeeCode();
     }
 
     public function isWorker(): bool
     {
         return Auth::guard('worker')->check();
+    }
+
+    public function isDummy(): bool
+    {
+        if ($this->isWorker() || ! config('dummy-login.enabled')) {
+            return false;
+        }
+
+        $code = $this->webEmployeeCode();
+
+        return $code !== null
+            && (int) $code === (int) config('dummy-login.userid');
     }
 
     public function plant(): ?string
@@ -31,20 +45,26 @@ class CurrentActor
             return $worker->Plant;
         }
 
-        $glNo = Auth::guard('web')->user()?->{'社員CD'};
+        if ($this->isDummy()) {
+            return self::DUMMY_PLANT;
+        }
 
-        return GroupLeader::where('EmployeeId', $glNo)->value('Plant');
+        return GroupLeader::where('EmployeeId', $this->webEmployeeCode())->value('Plant');
     }
 
     public function inspectorNo(): ?string
     {
-         $worker = Auth::guard('worker')->user();
+        $worker = Auth::guard('worker')->user();
 
         if ($worker) {
             return $worker->InspectorNo;
         }
 
-         $glNo = Auth::guard('web')->user()?->{'社員CD'};
-        return GroupLeader::where('EmployeeId', $glNo)->value('InspectorNo');
+        return GroupLeader::where('EmployeeId', $this->webEmployeeCode())->value('InspectorNo');
+    }
+
+    private function webEmployeeCode(): int|string|null
+    {
+        return Auth::guard('web')->user()?->{'社員CD'};
     }
 }
