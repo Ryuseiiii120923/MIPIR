@@ -1,7 +1,9 @@
 <x-layouts.app>
     <div class="p-2">
+        <x-gl-switcher current="inspection" />
         <livewire:inspection::page-host />
     </div>
+
     @if (session('gl_choice'))
     <div x-data="{ open: true }"
         x-show="open"

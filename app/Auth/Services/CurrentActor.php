@@ -4,6 +4,7 @@ namespace App\Auth\Services;
 
 use App\Inspection\Models\GroupLeader\GroupLeader;
 use Illuminate\Support\Facades\Auth;
+use PHPUnit\Metadata\Group;
 
 class CurrentActor
 {
@@ -61,6 +62,21 @@ class CurrentActor
         }
 
         return GroupLeader::where('EmployeeId', $this->webEmployeeCode())->value('InspectorNo');
+    }
+
+    public function isGl(): bool
+    {
+        if ($this->isWorker()) {
+            return false;
+        }
+
+        $code = $this->webEmployeeCode();
+
+        if ($code === null) {
+            return false;
+        }
+
+        return GroupLeader::where('EmployeeId', $code)->exists();
     }
 
     private function webEmployeeCode(): int|string|null

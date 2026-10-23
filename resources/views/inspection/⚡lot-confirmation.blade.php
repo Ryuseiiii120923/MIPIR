@@ -1,5 +1,6 @@
 <?php
 
+use App\Auth\Services\CurrentActor;
 use App\Inspection\Models\GroupLeader\GroupLeader;
 use App\Inspection\Repositories\LotConfirmationRepository;
 use App\Inspection\Services\LotConfirmationService;
@@ -146,9 +147,8 @@ new class extends Component
     }
 };
 ?>
-
-{{-- Naka-pause ang poll habang bukas ang review modal --}}
 <div @unless($reviewId) wire:poll.15s @endunless class="space-y-4">
+    <x-gl-switcher current="lot-confirmation" />
     <div class="flex items-center justify-between">
         <h2 class="text-lg font-semibold text-gray-900">For confirmation</h2>
         <span class="text-sm text-gray-500">{{ $this->lots->count() }} pending</span>
