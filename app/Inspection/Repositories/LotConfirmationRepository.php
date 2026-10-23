@@ -2,6 +2,7 @@
 
 namespace App\Inspection\Repositories;
 
+use App\Auth\Services\CurrentActor;
 use App\Inspection\Models\GroupLeader\GroupLeader;
 use App\Inspection\Models\GroupLeader\LotConfirmation;
 use App\Inspection\Models\MIPIRInspectionRecord;
@@ -274,10 +275,7 @@ class LotConfirmationRepository
             return 'This lot is already ' . strtolower($lot->Status) . '.';
         }
 
-        $plant = (new LotConfirmation)->getConnection()
-            ->table('DB_MIPIR.dbo.tblUser')
-            ->where('EmployeeID', $employeeId)
-            ->value('Plant');
+        $plant = app(CurrentActor::class)->plant();
 
         LotConfirmation::updateOrCreate($keys, [
             'Plant'        => $plant,
