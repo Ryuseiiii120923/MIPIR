@@ -30,7 +30,6 @@ trait GroupsExcelFiles
 
         $label = implode(' + ', $list);
 
-        // iwasan ang 260-character na limit ng Windows path
         return mb_strlen($label) > 100 ? $list[0] . ' +' . (count($list) - 1) . ' more' : $label;
     }
 

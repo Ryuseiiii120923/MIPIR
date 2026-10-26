@@ -513,14 +513,13 @@ class InspectionRecordService
             return [];
         }
 
-        // PPF -> (PartNo, ProdLotNo)
         $records = MIPIRInspectionRecord::whereIn('PPFNo', $ppfs)
             ->get(['PPFNo', 'PartNo', 'ProdLotNo'])
             ->unique('PPFNo');
 
         $confirmations = LotConfirmation::whereIn('PartNo', $records->pluck('PartNo')->unique()->all())
             ->whereIn('ProdLotNo', $records->pluck('ProdLotNo')->unique()->all())
-            ->orderBy('Id')   // kung may duplicate na row, ang pinakabago ang mananaig
+            ->orderBy('Id')   
             ->get(['PartNo', 'ProdLotNo', 'Status', 'ConfirmedBy'])
             ->mapWithKeys(fn($c) => [
                 $this->lotKey($c->PartNo, $c->ProdLotNo) => [

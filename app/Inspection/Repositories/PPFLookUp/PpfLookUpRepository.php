@@ -363,7 +363,6 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
         $rows     = [];
         $yRecords = [];
 
-        // X muna: lahat ng hindi "(Y)"
         foreach ($records as $d) {
             $item = trim((string) $d->DimItem);
 
@@ -382,7 +381,6 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
             $rows[$key]['measurements'] = array_merge($rows[$key]['measurements'], $values($d));
         }
 
-        // Y: ibalik sa X row nito bilang measurements_y
         $legacy = [];
 
         foreach ($yRecords as $d) {
@@ -393,7 +391,6 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
             if ($d->RowNo !== null && isset($rows["{$base}|{$d->RowNo}"])) {
                 $key = "{$base}|{$d->RowNo}";
             } else {
-                // lumang data na walang RowNo ang Y: unang X row na kapangalan at wala pang Y
                 $key = $legacy[$lower] ?? null;
 
                 if ($key === null) {
@@ -411,7 +408,6 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
             }
 
             if ($key === null) {
-                // Y na walang X: ipakita pa rin bilang sariling row para hindi mawala ang data
                 $item = trim((string) $d->DimItem);
 
                 $rows[$item] ??= $newRow($d, $item);
@@ -446,7 +442,6 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
             ->unique()
             ->values();
 
-        // Normalize dimension names and identify Y-axis items.
         $normalizedItems = $items->mapWithKeys(function ($item) {
             $item = trim($item);
 
@@ -536,15 +531,12 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
         foreach ($records as $record) {
             $item = trim($record->DimItem);
 
-            // Identify dimensions ending in "(Y)"
             $isY = preg_match('/\s*\(Y\)$/i', $item) === 1;
 
-            // CSD (Y) becomes CSD
             $baseItem = $isY
                 ? trim(preg_replace('/\s*\(Y\)$/i', '', $item))
                 : $item;
 
-            // Keep separate rows when RowNo is available
             $key = $record->RowNo !== null
                 ? "{$baseItem}|{$record->RowNo}"
                 : $baseItem;

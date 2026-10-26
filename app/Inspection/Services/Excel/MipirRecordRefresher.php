@@ -49,7 +49,6 @@ class MipirRecordRefresher
                     continue;
                 }
 
-                // part numbers na talagang nasa sheet na ito (hindi buong group)
                 $partNos  = $this->partNosOf($group['headers'], $sheet['ppfs']);
                 $variant  = $tracker->variantFor($partNos);
                 $dimItems = $tracker->resolveDimItems($partNos, $sheet['ppfs']);

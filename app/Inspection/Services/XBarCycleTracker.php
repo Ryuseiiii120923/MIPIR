@@ -146,7 +146,6 @@ class XBarCycleTracker
             ->where('DimensionName', $dimensionName)
             ->get(['GroupKey', 'TransactionId']);
 
-        // may sariling bukas na cycle na ang key na ito: huwag lumipat sa gitna ng cycle
         if ($open->contains('GroupKey', $default)) {
             return $default;
         }
