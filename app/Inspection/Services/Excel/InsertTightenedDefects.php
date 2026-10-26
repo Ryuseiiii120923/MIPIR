@@ -35,15 +35,19 @@ class InsertTightenedDefects
 
     public function sync(array $context, array $shots, bool $ensureFile = false): ?string
     {
-        $partNo = $this->safeName((string) ($context['partNo'] ?? ''));
+        $partNo = trim((string) ($context['partNo'] ?? ''));
         $lotNo  = trim((string) ($context['lotNo'] ?? ''));
 
         if ($partNo === '' || $lotNo === '') {
             throw new RuntimeException('Part number and lot number are required.');
         }
 
+        $base = $this->safeName((string) ($context['basePartNo'] ?? '')) ?: $this->safeName($partNo);
+        $mold = $this->safeName(trim((string) ($context['moldNo'] ?? '')));
+        $stem = $base . '_' . ($mold !== '' ? $mold : 'NOMD');
+
         $create = $ensureFile || $shots !== [];
-        $dir    = storage_path(self::BASE_DIR . DIRECTORY_SEPARATOR . $partNo);
+        $dir    = storage_path(self::BASE_DIR . DIRECTORY_SEPARATOR . $base);
 
         if (! $create && ! is_dir($dir)) {
             return null;
@@ -55,7 +59,7 @@ class InsertTightenedDefects
         flock($lock, LOCK_EX);
 
         try {
-            $files = $this->listFiles($dir, $partNo); 
+            $files = $this->listFiles($dir, $stem);
 
             $spreadsheet = null;
             $path = null;
@@ -91,7 +95,7 @@ class InsertTightenedDefects
                 }
 
                 if ($slot === null) {
-                    $path        = $this->newFilePath($dir, $partNo);
+                    $path        = $this->newFilePath($dir, $stem);
                     $spreadsheet = IOFactory::load(storage_path(self::TEMPLATE));
                     $this->fillHeader($spreadsheet->getActiveSheet(), $context);
                     $slot        = $this->firstEmptySlot($spreadsheet->getActiveSheet());
@@ -102,6 +106,8 @@ class InsertTightenedDefects
 
             $sheet = $spreadsheet->getActiveSheet();
             [$labelCol, $judgeCol] = $slot;
+
+            $this->mergePartNo($sheet, $partNo);
 
             $sheet->setCellValue($labelCol . self::LOT_ROW, 'Lot No.: ' . $lotNo);
 
@@ -114,11 +120,12 @@ class InsertTightenedDefects
             $inspector = trim((string) ($context['inspector'] ?? ''));
 
             if ($inspector !== '') {
-                $stamp = $labelCol . self::STAMP_ROW;
+                $stamp     = $labelCol . self::STAMP_ROW;
+                $stampDate = trim((string) ($context['stampDate'] ?? '')) ?: now()->format('Y-m-d');
 
                 $sheet->setCellValueExplicit(
                     $stamp,
-                    $inspector . "\n" . now()->format('Y-m-d'),
+                    $inspector . "\n" . $stampDate,
                     DataType::TYPE_STRING
                 );
 
@@ -162,6 +169,26 @@ class InsertTightenedDefects
         }
     }
 
+    private function mergePartNo(Worksheet $sheet, string $partNo): void
+    {
+        $text     = trim((string) $sheet->getCell('I4')->getValue());
+        $existing = trim((string) preg_replace('/^Part Number:?\s*/i', '', $text));
+
+        $list = $existing === ''
+            ? []
+            : array_values(array_filter(array_map('trim', explode('/', $existing)), fn($p) => $p !== ''));
+
+        if (in_array($partNo, $list, true)) {
+            return;
+        }
+
+        $list[] = $partNo;
+
+        usort($list, fn($a, $b) => [strlen($a), $a] <=> [strlen($b), $b]);
+
+        $sheet->setCellValue('I4', 'Part Number: ' . implode('/ ', $list));
+    }
+
     private function findLotSlot(Worksheet $sheet, string $lotNo): ?array
     {
         foreach (self::SLOTS as $slot) {
@@ -191,9 +218,9 @@ class InsertTightenedDefects
         return trim((string) preg_replace('/^Lot No\.?:?/i', '', $text));
     }
 
-    private function listFiles(string $dir, string $partNo): array
+    private function listFiles(string $dir, string $stem): array
     {
-        $prefix = "SAIR_{$partNo}_";
+        $prefix = "SAIR_{$stem}_";
 
         $files = collect(File::files($dir))
             ->filter(fn($f) => str_starts_with($f->getFilename(), $prefix) && $f->getExtension() === 'xls')
@@ -205,9 +232,9 @@ class InsertTightenedDefects
         return $files;
     }
 
-    private function newFilePath(string $dir, string $partNo): string
+    private function newFilePath(string $dir, string $stem): string
     {
-        $base = sprintf('SAIR_%s_%s', $partNo, now()->format('Y-m-d'));
+        $base = sprintf('SAIR_%s_%s', $stem, now()->format('Y-m-d'));
         $path = $dir . DIRECTORY_SEPARATOR . $base . '.xls';
 
         for ($n = 2; file_exists($path); $n++) {

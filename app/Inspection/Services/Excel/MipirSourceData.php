@@ -179,4 +179,24 @@ class MipirSourceData
             'moldNo'     => $moldNos[0] ?? '',
         ];
     }
+
+    public function sairBase(int $ppf): string
+    {
+        $partNos = [];
+
+        foreach ($this->groupPpfs($ppf) as $groupPpf) {
+            $header = $this->header($groupPpf);
+
+            if ($header !== null) {
+                $partNos[] = $header['partNo'];
+            }
+        }
+
+        if ($partNos === []) {
+            $header = $this->header($ppf);
+            $partNos = $header !== null ? [$header['partNo']] : [];
+        }
+
+        return PartNumber::sairBase($partNos);
+    }
 }
