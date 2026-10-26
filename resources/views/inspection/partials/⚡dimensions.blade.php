@@ -16,6 +16,7 @@ new class extends Component
     public ?string $selectedCheckTime = null;
     public bool $readonly = false;
     public string $action = '';
+    public string $pendingAxes = 'single';
 
     public ?int $activeModalIndex = null;
     public string $modalStep = 'choose';
@@ -175,7 +176,10 @@ new class extends Component
         $this->rows[$i]['specification'] = $this->service()->formatSpecification($row);
         $this->rows[$i]['upperLimit'] = $limits['upperLimit'] ?? null;
         $this->rows[$i]['lowerLimit'] = $limits['lowerLimit'] ?? null;
-        $this->rows[$i]['judge'] = $this->service()->judgeRow($row, $limits);
+
+        $judgeInput = $row;
+        $judgeInput['measurements'] = array_merge($row['measurements'] ?? [], $row['measurements_y'] ?? []);
+        $this->rows[$i]['judge'] = $this->service()->judgeRow($judgeInput, $limits);
 
         if ($limits !== null) {
             $this->dispatch(
@@ -282,6 +286,10 @@ new class extends Component
         $this->modalStep = 'choose';
         $this->pendingSets = 1;
         $this->initItem($index);
+
+        $this->pendingAxes = array_key_exists('measurements_y', $this->rows[$index] ?? [])
+            ? 'xy'
+            : 'single';
     }
 
     public function closeDimensionModal(): void
@@ -289,6 +297,7 @@ new class extends Component
         $this->activeModalIndex = null;
         $this->modalStep = 'choose';
         $this->pendingSets = 1;
+        $this->pendingAxes = 'single';
     }
 
     public function cancelDimensionModal(): void
@@ -354,9 +363,11 @@ new class extends Component
         $existing = $row['measurements'] ?? [];
         $this->rows[$index]['measurements'] = array_pad(array_slice($existing, 0, $count), $count, '');
 
-        if (array_key_exists('measurements_y', $row)) {
+        if ($this->pendingAxes === 'xy') {
             $existingY = $row['measurements_y'] ?? [];
             $this->rows[$index]['measurements_y'] = array_pad(array_slice($existingY, 0, $count), $count, '');
+        } else {
+            unset($this->rows[$index]['measurements_y']);
         }
     }
 
@@ -496,6 +507,14 @@ new class extends Component
         const x = document.querySelector(`[data-card-index='${cardIndex}'] input[data-x-index='${slotIndex}']`);
         if (x) x.focus();
     },
+    afterY(cardIndex, slotIndex) {
+    const nextX = document.querySelector(`[data-card-index='${cardIndex}'] input[data-x-index='${slotIndex + 1}']`);
+    if (nextX) {
+        nextX.focus();
+    } else {
+        this.focusNextCard(cardIndex);
+    }
+},
     focusMeasurement(cardIndex, slotIndex) {
         const el = document.querySelector(`[data-card-index='${cardIndex}'] input[data-measurement-index='${slotIndex}']`);
         if (el) el.focus();
@@ -560,7 +579,6 @@ new class extends Component
                             <p class="font-medium text-base">Dimension entry</p>
                             @if($isXBar)
                             <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">X-Bar Table</span>
-
                             @endif
                             <p class="text-sm text-gray-500">{{ $row['item'] ?: 'Enter item' }}</p>
                         </div>
@@ -599,6 +617,10 @@ new class extends Component
                                 <span class="text-xs font-medium px-2 py-0.5 rounded-full {{ $row['mode'] === 'tightened' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700' }}">
                                     {{ $row['mode'] === 'tightened' ? 'Tightened · ' . $row['sets'] . ' set' . ($row['sets'] > 1 ? 's' : '') : 'Normal' }}
                                 </span>
+
+                                @if(array_key_exists('measurements_y', $row))
+                                <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-teal-100 text-teal-700">X &amp; Y</span>
+                                @endif
                             </p>
                         </div>
                     </div>
@@ -725,29 +747,54 @@ new class extends Component
                 <hr class="border-gray-200 my-4">
 
                 {{-- Measurements --}}
-                <div class="mb-1">
+                @php
+                $hasY = array_key_exists('measurements_y', $row);
+                $axes = $hasY ? ['measurements' => 'X', 'measurements_y' => 'Y'] : ['measurements' => null];
+                @endphp
+
+                @foreach ($axes as $field => $axisLabel)
+                @php
+                $values = $row[$field] ?? [];
+                $total = count($values);
+                $setsCount = (int) ceil($total / 5);
+                @endphp
+
+                <div class="mb-1 {{ $axisLabel === 'Y' ? 'mt-4' : '' }}">
                     <label class="text-sm font-medium block mb-1.5">
+                        @if ($axisLabel)
+                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-teal-100 text-teal-700 mr-1">{{ $axisLabel }}</span>
+                        @endif
                         Measurements
-                        <span class="text-gray-400 font-normal">({{ count($row['measurements']) }} total)</span>
+                        <span class="text-gray-400 font-normal">({{ $total }} total)</span>
                     </label>
                 </div>
-                @php $setsCount = (int) ceil(count($row['measurements']) / 5); @endphp
+
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
                     @for ($s = 0; $s < $setsCount; $s++)
-                        <div wire:key="dim-{{ $i }}-mset-{{ $s }}" class="flex flex-col gap-1.5">
-                        @if($setsCount > 1)
+                        <div wire:key="dim-{{ $i }}-{{ $field }}-mset-{{ $s }}" class="flex flex-col gap-1.5">
+                        @if ($setsCount > 1)
                         <p class="text-xs text-gray-400">Set {{ $s + 1 }}</p>
                         @endif
                         <div class="flex flex-wrap gap-2">
                             @for ($k = 0; $k < 5; $k++)
                                 @php $j=$s * 5 + $k; @endphp
-                                @if($j < count($row['measurements']))
+                                @if ($j < $total)
                                 <input @if($readonly) disabled @endif type="text"
-                                wire:model.live.debounce.400ms="rows.{{ $i }}.measurements.{{ $j }}"
-                                wire:key="dim-{{ $i }}-m-{{ $j }}"
+                                wire:model.live.debounce.400ms="rows.{{ $i }}.{{ $field }}.{{ $j }}"
+                                wire:key="dim-{{ $i }}-{{ $field }}-m-{{ $j }}"
+                                @if ($hasY)
+                                @if ($axisLabel==='X' )
+                                @keydown.enter.prevent="focusY({{ $i }}, {{ $j }})"
+                                data-x-index="{{ $j }}"
+                                @else
+                                @keydown.enter.prevent="afterY({{ $i }}, {{ $j }})"
+                                data-y-index="{{ $j }}"
+                                @endif
+                                @else
                                 @keydown.enter.prevent="nextMeasurement({{ $i }}, {{ $j }})"
                                 data-measurement-index="{{ $j }}"
-                                @if($j===0) data-first-measurement @endif
+                                @endif
+                                @if ($j===0 && $axisLabel !=='Y' ) data-first-measurement @endif
                                 class="w-16 bg-gray-50 border-0 rounded-lg text-center py-2"
                                 placeholder="{{ $j + 1 }}">
                                 @endif
@@ -756,23 +803,23 @@ new class extends Component
                 </div>
                 @endfor
             </div>
+            @endforeach
+        <hr class="border-gray-200 my-4">
 
-            <hr class="border-gray-200 my-4">
-
-            {{-- Judgement now INSIDE the card --}}
-            <div class="flex items-center justify-between">
-                <div class="w-40">
-                    <label class="text-sm font-medium block mb-1.5">Judgement</label>
-                    <input type="text" wire:model="rows.{{ $i }}.judge"
-                        class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2 text-gray-500 text-center"
-                        readonly>
-                </div>
-                <button @if($readonly) disabled @endif type="button" class="text-sm text-gray-500 hover:text-gray-700">Clear</button>
+        {{-- Judgement now INSIDE the card --}}
+        <div class="flex items-center justify-between">
+            <div class="w-40">
+                <label class="text-sm font-medium block mb-1.5">Judgement</label>
+                <input type="text" wire:model="rows.{{ $i }}.judge"
+                    class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2 text-gray-500 text-center"
+                    readonly>
             </div>
+            <button @if($readonly) disabled @endif type="button" class="text-sm text-gray-500 hover:text-gray-700">Clear</button>
         </div>
-        @endif
     </div>
-    @endforeach
+    @endif
+</div>
+@endforeach
 </div>
 
 @if($activeModalIndex !== null)
@@ -783,14 +830,30 @@ new class extends Component
         <h3 class="text-lg font-semibold mb-1">
             Configure {{ $rows[$activeModalIndex]['item'] ?: 'this dimension' }}
         </h3>
-        <p class="text-sm text-gray-500 mb-5">Is this a normal or tightened inspection?</p>
 
+        <p class="text-sm text-gray-500 mb-3">How will this be measured?</p>
+        <div class="flex gap-2 mb-5">
+            <button type="button" wire:click="$set('pendingAxes', 'single')"
+                class="flex-1 rounded-xl border-2 py-3 text-sm font-medium transition-all {{ $pendingAxes === 'single' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600 hover:border-gray-300' }}">
+                One measurement
+                <span class="block text-xs font-normal text-gray-400 mt-0.5">Single input</span>
+            </button>
+            <button type="button" wire:click="$set('pendingAxes', 'xy')"
+                class="flex-1 rounded-xl border-2 py-3 text-sm font-medium transition-all {{ $pendingAxes === 'xy' ? 'border-teal-500 bg-teal-50 text-teal-700' : 'border-gray-200 text-gray-600 hover:border-gray-300' }}">
+                X and Y
+                <span class="block text-xs font-normal text-gray-400 mt-0.5">Two inputs</span>
+            </button>
+        </div>
+
+        <p class="text-sm text-gray-500 mb-3">Is this a normal or tightened inspection?</p>
         <div class="flex gap-3">
             <button type="button" wire:click="chooseNormal"
                 class="flex-1 border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50 rounded-xl py-4 text-sm font-medium text-gray-700 hover:text-blue-700 transition-all">
                 <i class="ti ti-target text-2xl block mx-auto mb-1"></i>
                 Normal
-                <span class="block text-xs text-gray-400 font-normal mt-0.5">5 measurements</span>
+                <span class="block text-xs text-gray-400 font-normal mt-0.5">
+                    {{ $pendingAxes === 'xy' ? '5 X + 5 Y' : '5 measurements' }}
+                </span>
             </button>
             <button type="button" wire:click="chooseTightened"
                 class="flex-1 border-2 border-gray-200 hover:border-amber-500 hover:bg-amber-50 rounded-xl py-4 text-sm font-medium text-gray-700 hover:text-amber-700 transition-all">
@@ -810,7 +873,11 @@ new class extends Component
         <input type="number" min="1" wire:model="pendingSets"
             class="w-full border rounded-lg px-3 py-2 text-sm text-center" />
         <p class="text-xs text-gray-400 mt-1.5 text-center">
+            @if($pendingAxes === 'xy')
+            = {{ max(1, (int) $pendingSets) * 5 }} X + {{ max(1, (int) $pendingSets) * 5 }} Y measurements
+            @else
             = {{ max(1, (int) $pendingSets) * 5 }} total measurements
+            @endif
         </p>
 
         <div class="flex justify-end gap-2 mt-5">

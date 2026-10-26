@@ -89,7 +89,8 @@ class ExcelDataRepository
             ->where('DimItem', $dimension)
             ->where('xbarTransaction', $transactionId)
             ->select([
-                'RecNo',       // <-- adjust to your actual PK column name if different from RecNo
+                'RecNo',   
+                'PartNo',    
                 'PPFNo',
                 'ProdLotNo',
                 'MachineNo',
@@ -102,7 +103,7 @@ class ExcelDataRepository
                 'Value5',
                 'InspectedBy'
             ])
-            ->orderBy('RecNo')   // earliest-encoded first
+            ->orderBy('RecNo')  
             ->orderBy('Set')
             ->get();
     }

@@ -16,6 +16,11 @@ class InspectionXBarService
 
     private const CHECKTIME_RANK  = ['F' => 0, 'MI' => 1, 'E' => 2];
     private const CHECKTIME_SLOTS = 3;
+    private const POINTS_PER_SUBGROUP = 5;
+
+    private const POINT_LIMITS = [
+        '7W0706-0500A' => 2,
+    ];
 
     public function generate(array $partNos, string $dimension, string $cycleStart, string $cycleEnd, string $transactionId, ?string $outputName = null, ?string $confirmedBy = null): string
     {
@@ -61,6 +66,13 @@ class InspectionXBarService
         File::move($tmp, $output);
 
         return $output;
+    }
+
+    private function pointsFor(string $partNo): int
+    {
+        $key = strtoupper((string) preg_replace('/\s+/', '', $partNo));
+
+        return self::POINT_LIMITS[$key] ?? self::POINTS_PER_SUBGROUP;
     }
 
     private function assignColumns($groups, int $startColumn): array
@@ -117,6 +129,7 @@ class InspectionXBarService
         $header = app(ExcelDataRepository::class)->getHeaderforXbar($partNos[0], $dimension);
         $formattedStart = \Carbon\Carbon::parse($cycleStart)->format('Y/m/d');
         $formattedEnd = \Carbon\Carbon::parse($cycleEnd)->format('Y/m/d');
+        $points = collect($partNos)->map(fn($p) => $this->pointsFor((string) $p))->max();
 
         $partNoDisplay = $header['partNo'];
 
@@ -137,7 +150,7 @@ class InspectionXBarService
         $sheet->setCellValue('G6', '     ' . str($header['dimItem'])->upper());
         $sheet->setCellValue('J3', $header['specs']);
         $sheet->setCellValue('J6', $header['device']);
-        $sheet->setCellValue('N3', '5PCS.');
+        $sheet->setCellValue('N3', $points . 'PCS.');
         $sheet->setCellValue('S3', 'F.MI.E');
         $sheet->setCellValue('V3', $formattedStart);
         $sheet->setCellValue('Y3', $formattedEnd);
@@ -174,13 +187,13 @@ class InspectionXBarService
             $trendChartResult = 'Ok';
 
             foreach ($group as $measurement) {
-                $values = [
+                $values = array_slice([
                     $measurement->Value1,
                     $measurement->Value2,
                     $measurement->Value3,
                     $measurement->Value4,
                     $measurement->Value5,
-                ];
+                ], 0, $this->pointsFor((string) $measurement->PartNo));
 
                 foreach ($values as $value) {
                     if ($value === null || $value === '') {

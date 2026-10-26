@@ -340,46 +340,144 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
                 'Value2',
                 'Value3',
                 'Value4',
-                'Value5'
+                'Value5',
             ]);
 
-        $rows = [];
+        $yPattern = '/\s*\(Y\)$/i';
 
+        $values = fn($d) => [$d->Value1, $d->Value2, $d->Value3, $d->Value4, $d->Value5];
+
+        $newRow = fn($d, string $item) => [
+            'rowNo'         => $d->RowNo !== null ? (int) $d->RowNo : null,
+            'item'          => $item,
+            'editable'      => $item !== 'Flash Thickness',
+            'specification' => $d->Specs,
+            'forXBar'       => $d->ForXBar,
+            'CL'            => $d->CL,
+            'mode'          => $d->Mode,
+            'judge'         => $d->Judge === 1 ? 'X' : 'O',
+            'measurements'  => [],
+            'revealed'      => true,
+        ];
+
+        $rows     = [];
+        $yRecords = [];
+
+        // X muna: lahat ng hindi "(Y)"
         foreach ($records as $d) {
-            $item = $d->DimItem;
+            $item = trim((string) $d->DimItem);
 
             if ($item === 'Gap-Offset' || $item === 'Gap-Offset (Y)') {
                 continue;
             }
 
-            $key = $d->RowNo !== null ? "{$item}|{$d->RowNo}" : $item;
-
-            if (!isset($rows[$key])) {
-                $rows[$key] = [
-                    'rowNo'        => $d->RowNo !== null ? (int) $d->RowNo : null,
-                    'item'          => $item,
-                    'editable'      => $item !== 'Flash Thickness',
-                    'specification' => $d->Specs,
-                    'forXBar'       => $d->ForXBar,
-                    'CL'            => $d->CL,
-                    'mode'          => $d->Mode,
-                    'judge'         => $d->Judge === 1 ? 'X' : 'O',
-                    'measurements'  => [],
-                    'revealed'      => true,
-                ];
+            if (preg_match($yPattern, $item) === 1) {
+                $yRecords[] = $d;
+                continue;
             }
 
-            $rows[$key]['measurements'] = array_merge(
-                $rows[$key]['measurements'],
-                [$d->Value1, $d->Value2, $d->Value3, $d->Value4, $d->Value5]
-            );
+            $key = $d->RowNo !== null ? "{$item}|{$d->RowNo}" : $item;
+
+            $rows[$key] ??= $newRow($d, $item);
+            $rows[$key]['measurements'] = array_merge($rows[$key]['measurements'], $values($d));
+        }
+
+        // Y: ibalik sa X row nito bilang measurements_y
+        $legacy = [];
+
+        foreach ($yRecords as $d) {
+            $base  = trim((string) preg_replace($yPattern, '', (string) $d->DimItem));
+            $lower = mb_strtolower($base);
+            $key   = null;
+
+            if ($d->RowNo !== null && isset($rows["{$base}|{$d->RowNo}"])) {
+                $key = "{$base}|{$d->RowNo}";
+            } else {
+                // lumang data na walang RowNo ang Y: unang X row na kapangalan at wala pang Y
+                $key = $legacy[$lower] ?? null;
+
+                if ($key === null) {
+                    $found = collect($rows)->search(
+                        fn($r) => mb_strtolower($r['item']) === $lower
+                            && ! array_key_exists('measurements_y', $r)
+                    );
+
+                    $key = $found === false ? null : $found;
+                }
+
+                if ($key !== null) {
+                    $legacy[$lower] = $key;
+                }
+            }
+
+            if ($key === null) {
+                // Y na walang X: ipakita pa rin bilang sariling row para hindi mawala ang data
+                $item = trim((string) $d->DimItem);
+
+                $rows[$item] ??= $newRow($d, $item);
+                $rows[$item]['measurements'] = array_merge($rows[$item]['measurements'], $values($d));
+                continue;
+            }
+
+            $rows[$key]['measurements_y'] = array_merge($rows[$key]['measurements_y'] ?? [], $values($d));
         }
 
         foreach ($rows as $key => $row) {
-            $rows[$key]['sets'] = (int) ceil(count($row['measurements']) / 5);
+            $count = count($row['measurements']);
+
+            $rows[$key]['sets'] = (int) ceil($count / 5);
+
+            if (array_key_exists('measurements_y', $row)) {
+                $rows[$key]['measurements_y'] = array_pad(array_slice($row['measurements_y'], 0, $count), $count, '');
+            }
         }
 
         return array_values($rows);
+    }
+
+
+    public function hasDimensionXY(int $ppf, string $checktime): bool
+    {
+        $items = MIPIRDimensionMeasure::query()
+            ->where('PPFNo', $ppf)
+            ->where('Checktime', $checktime)
+            ->pluck('DimItem')
+            ->filter()
+            ->unique()
+            ->values();
+
+        // Normalize dimension names and identify Y-axis items.
+        $normalizedItems = $items->mapWithKeys(function ($item) {
+            $item = trim($item);
+
+            if (preg_match('/\s*\(Y\)\s*$/i', $item)) {
+                $baseItem = trim(preg_replace('/\s*\(Y\)\s*$/i', '', $item));
+
+                return [$item => [
+                    'base' => $baseItem,
+                    'axis' => 'Y',
+                ]];
+            }
+
+            return [$item => [
+                'base' => $item,
+                'axis' => 'X',
+            ]];
+        });
+
+        $xItems = $normalizedItems
+            ->filter(fn($item) => $item['axis'] === 'X')
+            ->pluck('base')
+            ->map(fn($item) => mb_strtolower($item))
+            ->unique();
+
+        $yItems = $normalizedItems
+            ->filter(fn($item) => $item['axis'] === 'Y')
+            ->pluck('base')
+            ->map(fn($item) => mb_strtolower($item))
+            ->unique();
+
+        return $xItems->intersect($yItems)->isNotEmpty();
     }
 
     public function getOffsetbyCheckTime(int $ppf, string $checkTime): array
@@ -410,6 +508,86 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
             'Gap-Offset (Y)' => $offsets['Gap-Offset (Y)'],
             'Judge' => $judge === 1 ? 'X' : 'O',
         ];
+    }
+
+    public function getDimensionByXY(int $ppf, string $checktime): array
+    {
+        $records = MIPIRDimensionMeasure::where('PPFNo', $ppf)
+            ->where('Checktime', $checktime)
+            ->orderBy('RECNO')
+            ->get([
+                'DimItem',
+                'Specs',
+                'ForXBar',
+                'Mode',
+                'CL',
+                'Judge',
+                'Set',
+                'RowNo',
+                'Value1',
+                'Value2',
+                'Value3',
+                'Value4',
+                'Value5',
+            ]);
+
+        $dimensions = [];
+
+        foreach ($records as $record) {
+            $item = trim($record->DimItem);
+
+            // Identify dimensions ending in "(Y)"
+            $isY = preg_match('/\s*\(Y\)$/i', $item) === 1;
+
+            // CSD (Y) becomes CSD
+            $baseItem = $isY
+                ? trim(preg_replace('/\s*\(Y\)$/i', '', $item))
+                : $item;
+
+            // Keep separate rows when RowNo is available
+            $key = $record->RowNo !== null
+                ? "{$baseItem}|{$record->RowNo}"
+                : $baseItem;
+
+            if (!isset($dimensions[$key])) {
+                $dimensions[$key] = [
+                    'item' => $baseItem,
+                    'rowNo' => $record->RowNo !== null
+                        ? (int) $record->RowNo
+                        : null,
+                    'specification' => $record->Specs,
+                    'forXBar' => $record->ForXBar,
+                    'mode' => $record->Mode,
+                    'CL' => $record->CL,
+                    'judge' => $record->Judge === 1 ? 'X' : 'O',
+                    'hasXY' => false,
+                    'xMeasurements' => [],
+                    'yMeasurements' => [],
+                    'editable'      => $item !== 'Flash Thickness',
+                ];
+            }
+
+            $values = [
+                $record->Value1,
+                $record->Value2,
+                $record->Value3,
+                $record->Value4,
+                $record->Value5,
+            ];
+
+            $axis = $isY ? 'yMeasurements' : 'xMeasurements';
+
+            $dimensions[$key][$axis] = array_merge(
+                $dimensions[$key][$axis],
+                $values
+            );
+
+            if ($isY) {
+                $dimensions[$key]['hasXY'] = true;
+            }
+        }
+
+        return array_values($dimensions);
     }
 
     public function getRemarks(int $ppf, string $check)

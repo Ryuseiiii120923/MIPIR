@@ -38,13 +38,27 @@ class PartNumber
     }
 
     public function partNumbers(array $context, array $rows): array
-{
-    return collect($rows)
-        ->map(fn(array $row) => trim((string) ($row['partNo'] ?? $context['partNo'] ?? '')))
-        ->prepend(trim((string) ($context['partNo'] ?? '')))
-        ->filter(fn($p) => $p !== '')
-        ->unique()
-        ->values()
-        ->all();
-}
+    {
+        return collect($rows)
+            ->map(fn(array $row) => trim((string) ($row['partNo'] ?? $context['partNo'] ?? '')))
+            ->prepend(trim((string) ($context['partNo'] ?? '')))
+            ->filter(fn($p) => $p !== '')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    public static function sairBase(array $partNos): string
+    {
+        $bases = collect($partNos)
+            ->map(fn($p) => trim((string) $p))
+            ->filter(fn($p) => $p !== '')
+            ->map(fn($p) => self::base($p))
+            ->filter(fn($b) => $b !== '')
+            ->unique()
+            ->sort(fn($a, $b) => [strlen($a), $a] <=> [strlen($b), $b])
+            ->values();
+
+        return (string) ($bases->first() ?? '');
+    }
 }

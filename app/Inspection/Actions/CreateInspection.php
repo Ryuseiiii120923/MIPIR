@@ -20,11 +20,13 @@ use App\Inspection\Services\Excel\InsertTightenedGapF00VE;
 use App\Inspection\Services\Excel\InsertTightenedGapOring;
 use App\Inspection\Services\Excel\InspectionXBarService;
 use App\Inspection\Services\Excel\MipirRecordRefresher;
+use App\Inspection\Services\Excel\MipirSourceData;
 use App\Inspection\Services\Excel\TightenedFlashRefresher;
 use App\Inspection\Services\Excel\TightenedGapOffsetRefresher;
 use App\Inspection\Services\Excel\XBarRecordRefresher;
 use App\Inspection\Services\Saving\CreateInspectionService;
 use App\Inspection\Services\XBarCycleTracker;
+use App\Inspection\Support\PartNumber;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -290,7 +292,8 @@ class CreateInspection
                                 '3' => number_format((float) ($yChunk[2] ?? 0), 4, '.', ''),
                                 '4' => number_format((float) ($yChunk[3] ?? 0), 4, '.', ''),
                                 '5' => number_format((float) ($yChunk[4] ?? 0), 4, '.', ''),
-                                'InspectedBy' => $inspectorNo
+                                'InspectedBy' => $inspectorNo,
+                                'RowNo'       => $rowNo,
                             ]);
                         }
                     }
@@ -694,13 +697,17 @@ class CreateInspection
             ->contains(fn($t) => ($modeByTime[$t] ?? 'normal') === 'tightened');
 
         try {
+            $partNo = trim((string) ($ppfLookUp['partNo'] ?? ''));
+            $base   = app(PartNumber::class)->base($ppf);
+
             app(InsertTightenedDefects::class)->sync([
-                'partNo'    => $ppfLookUp['partNo'] ?? '',
-                'partName'  => $ppfLookUp['partName'] ?? '',
-                'machineNo' => $ppfLookUp['machineNo'] ?? '',
-                'moldNo'    => $ppfLookUp['moldNo'] ?? '',
-                'lotNo'     => $ppfLookUp['productionLotNo'] ?? '',
-                'inspector' => $inspectorNo,
+                'partNo'     => $partNo,
+                'basePartNo' => $base !== '' ? $base : PartNumber::base($partNo),
+                'partName'   => $ppfLookUp['partName'] ?? '',
+                'machineNo'  => $ppfLookUp['machineNo'] ?? '',
+                'moldNo'     => $ppfLookUp['moldNo'] ?? '',
+                'lotNo'      => $ppfLookUp['productionLotNo'] ?? '',
+                'inspector'  => $inspectorNo,
             ], $judgements, ensureFile: $hasTightened);
         } catch (\Throwable $e) {
             Log::error('Tightened defects SAIR Excel failed', [

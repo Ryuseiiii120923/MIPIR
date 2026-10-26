@@ -125,7 +125,7 @@ new class extends \Livewire\Component
         $this->selectedCheckTime = $this->selectedCheckTime === $time ? null : $time;
     }
 
-     public function clearBlockingErrors(array $times): void
+    public function clearBlockingErrors(array $times): void
     {
         foreach ($times as $time) {
             $this->dispatch('blocking-errors', source: 'dimensions:' . $time, errors: []);
@@ -284,6 +284,8 @@ new class extends \Livewire\Component
             $this->startTimeByTime = $result['startTime'] ?? [];
             $this->endTimeByTime = $result['endTime'] ?? [];
             $this->dateEncodeByTime = $result['dateEncode'] ?? [];
+            $repository = app(PpfLookUpRepository::class);
+
 
             foreach ($this->checkTimes as $time) {
                 $tightened = app(PpfLookUpRepository::class)->getDefectShots($ppf, $time);
@@ -291,7 +293,7 @@ new class extends \Livewire\Component
                 $this->shotsByTime[$time] = $tightened['shots'];
                 $this->defectsByTime[$time] = app(PpfLookUpRepository::class)->getDefectbyCheckTime($ppf, $time);
                 $this->smallDefectsByTime[$time] = app(PpfLookUpRepository::class)->getSmallDefectbyCheckTime($ppf, $time);
-                $this->dimensionsByTime[$time] = app(PpfLookUpRepository::class)->getDimensionbyCheckTime($ppf, $time);
+                $this->dimensionsByTime[$time] = $repository->getDimensionbyCheckTime($ppf, $time);
                 $this->remarksByTime[$time] = app(PpfLookUpRepository::class)->getRemarks($ppf, $time);
             }
             $this->sortCheckTimesByDateEncode();
