@@ -16,28 +16,38 @@ class DimensionMasterRepository implements DimensionMasterRepositoryInterface
         return DimensionMaster::where('PartNo', $partNo)->distinct()->pluck('DimensionName');
     }
 
-    
+
 
     public function getMasterSpecification(string $partNo, string $item): ?array
     {
-        $row = DimensionMaster::query()
-            ->where('PartNo', $partNo)
-            ->where('DimensionName', $item)
-            ->first();
+        $query = DimensionMaster::query()->where('PartNo', $partNo);
+        $row = (clone $query)->where('DimensionName', $item)->first();
+        if ($row === null) {
+            $wanted = $this->normalizeDimensionName($item);
 
-        if (!$row) {
+            $row = $query->get()->first(
+                fn($r) => $this->normalizeDimensionName((string) $r->DimensionName) === $wanted
+            );
+        }
+
+        if ($row === null) {
             return null;
         }
 
         return [
-            'Device' => $row->Device,
+            'Device'        => $row->Device,
             'Specification' => $row->Specification,
             'UpperLimit'    => $row->UpperLimit,
             'LowerLimit'    => $row->LowerLimit,
         ];
     }
 
-     public function getTempMaster(string $partNo, string $item): ?array
+    private function normalizeDimensionName(string $name): string
+    {
+        return mb_strtolower((string) preg_replace('/[^\p{L}\p{N}]+/u', '', $name));
+    }
+
+    public function getTempMaster(string $partNo, string $item): ?array
     {
         $row = TempDimension::query()
             ->where('PartNo', $partNo)
@@ -81,7 +91,7 @@ class DimensionMasterRepository implements DimensionMasterRepositoryInterface
         string $specification,
         string $upperLimit,
         string $lowerLimit,
-        
+
     ): void {
         $row = [
             'PartNo' => $partNo,

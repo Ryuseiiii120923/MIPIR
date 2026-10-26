@@ -22,8 +22,7 @@ class InsertTightenedGapOring
     private const FIRST_READING_COLUMN = 5;
     private const READINGS_PER_BLOCK = 5;
     private const BLOCKS = 5;
-
-
+    private const NAME_PREFIX = 'Offset Checking (O-Ring) - ';
     private const LOCATIONS = ['0', '90', '45', '135'];
 
     private const LAYOUT = [
@@ -261,15 +260,12 @@ class InsertTightenedGapOring
 
     private function fileName(array $context): string
     {
-        return "Offset Checking (O-Ring) - {$this->groupStem($context)}.xlsx";
+        return $this->groupFileName(self::NAME_PREFIX, $context);
     }
 
     private function partDirectory(string $partNo): string
     {
-        $folder = trim((string) preg_replace('/[^A-Za-z0-9._ -]+/', '_', $partNo), ' ._');
-        $folder = $folder !== '' ? $folder : 'UNKNOWN';
-
-        $directory = storage_path(self::OUTPUT_ROOT) . DIRECTORY_SEPARATOR . $folder;
+        $directory = $this->familyDirectory(self::OUTPUT_ROOT, $partNo);
         File::ensureDirectoryExists($directory);
 
         return $directory;
@@ -277,15 +273,26 @@ class InsertTightenedGapOring
 
     private function deleteStaleFiles(array $context): void
     {
-        File::delete(File::glob(storage_path(self::OUTPUT_ROOT) . '/*/' . $this->fileName($context)) ?: []);
+        File::delete($this->familyFiles(
+            $this->familyDirectory(self::OUTPUT_ROOT, (string) $context['basePartNo']),
+            self::NAME_PREFIX,
+            $context
+        ));
     }
 
     private function save(Spreadsheet $spreadsheet, array $context): string
     {
-        $path = $this->partDirectory((string) $context['basePartNo']) . DIRECTORY_SEPARATOR . $this->fileName($context);
+        $dir  = $this->partDirectory((string) $context['basePartNo']);
+        $path = $dir . DIRECTORY_SEPARATOR . $this->fileName($context);
 
         IOFactory::createWriter($spreadsheet, 'Xlsx')->save($path);
         $spreadsheet->disconnectWorksheets();
+
+        foreach ($this->familyFiles($dir, self::NAME_PREFIX, $context) as $old) {
+            if ($old !== $path) {
+                File::delete($old);
+            }
+        }
 
         return $path;
     }

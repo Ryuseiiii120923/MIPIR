@@ -20,11 +20,13 @@ use App\Inspection\Services\Excel\InsertTightenedGapF00VE;
 use App\Inspection\Services\Excel\InsertTightenedGapOring;
 use App\Inspection\Services\Excel\InspectionXBarService;
 use App\Inspection\Services\Excel\MipirRecordRefresher;
+use App\Inspection\Services\Excel\MipirSourceData;
 use App\Inspection\Services\Excel\TightenedFlashRefresher;
 use App\Inspection\Services\Excel\TightenedGapOffsetRefresher;
 use App\Inspection\Services\Excel\XBarRecordRefresher;
 use App\Inspection\Services\Saving\CreateInspectionService;
 use App\Inspection\Services\XBarCycleTracker;
+use App\Inspection\Support\PartNumber;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -409,189 +411,6 @@ class CreateInspection
         }
     }
 
-    private function refreshTightenedFlashExcel(
-        int $ppf,
-        array $ppfLookUp,
-        $inspectorNo,
-        array $checkTimes,
-        array $touchedCheckTimes,
-        array $dimensions,
-        array $remarks,
-        array $deletedCheckTimes
-    ): void {
-        $isFlash = fn($row) => ($row['item'] ?? null) === 'Flash Thickness';
-        $isTightenedFlash = fn($row) => $isFlash($row)
-            && strcasecmp((string) ($row['mode'] ?? ''), 'tightened') === 0;
-
-        $flashRowsFor = function (array $times) use ($dimensions, $remarks, $isTightenedFlash): array {
-            $rows = [];
-
-            foreach ($times as $checkTime) {
-                foreach ($dimensions[$checkTime] ?? [] as $row) {
-                    if ($isTightenedFlash($row)) {
-                        $rows[] = [
-                            'checkTime'     => $checkTime,
-                            'measurements'  => $row['measurements'] ?? [],
-                            'specification' => $row['specification'] ?? '',
-                            'controlLimit'  => $row['CL'] ?? '',
-                            'remarks'       => $remarks[$checkTime] ?? '',
-                        ];
-                    }
-                }
-            }
-
-            return $rows;
-        };
-
-        $needsRebuild = false;
-
-        foreach ($touchedCheckTimes as $checkTime) {
-            foreach ($dimensions[$checkTime] ?? [] as $row) {
-                if ($isFlash($row) && ! $isTightenedFlash($row)) {
-                    $needsRebuild = true;
-                }
-            }
-        }
-
-        foreach ($deletedCheckTimes as $deleted) {
-            if (collect($deleted['dimensions'] ?? [])->contains($isFlash)) {
-                $needsRebuild = true;
-            }
-        }
-
-        $upserts = $flashRowsFor($touchedCheckTimes);
-
-        if (! $needsRebuild && $upserts === []) {
-            return;
-        }
-
-        $deletedTimes = array_column($deletedCheckTimes, 'time');
-        $allRows = $flashRowsFor(array_values(array_diff($checkTimes, $deletedTimes)));
-
-        $context = [
-            'ppf'       => $ppf,
-            'partNo'    => $ppfLookUp['partNo'] ?? '',
-            'moldNo'    => $ppfLookUp['moldNo'] ?? '',
-            'machineNo' => $ppfLookUp['machineNo'],
-            'lotNo'     => $ppfLookUp['productionLotNo'],
-            'inspector' => $inspectorNo,
-        ];
-
-        try {
-            $service = app(InsertTightenedFlash::class);
-
-            if ($needsRebuild) {
-                $service->insertFlashToExcel($context, $allRows);
-            } else {
-                $service->appendFlashToExcel($context, $upserts, $allRows);
-            }
-        } catch (\Throwable $e) {
-            Log::error('Tightened Flash Thickness Excel failed', [
-                'PPFNo' => $ppf,
-                'error' => $e->getMessage(),
-            ]);
-        }
-    }
-
-    private function refreshTightenedGapOffsetExcel(
-        int $ppf,
-        array $ppfLookUp,
-        $inspectorNo,
-        array $checkTimes,
-        array $touchedCheckTimes,
-        array $dimensions,
-        array $remarks,
-        array $deletedCheckTimes
-    ): void {
-        $isGap = fn($row) => ($row['item'] ?? null) === 'Gap-Offset';
-        $isTightenedGap = fn($row) => $isGap($row)
-            && strcasecmp((string) ($row['mode'] ?? ''), 'tightened') === 0;
-
-        $partNo = (string) ($ppfLookUp['partNo'] ?? '');
-        $isF00VE = str_starts_with(strtoupper(trim($partNo)), 'F00VE');
-
-        $gapRowsFor = function (array $times) use ($dimensions, $remarks, $isTightenedGap): array {
-            $rows = [];
-
-            foreach ($times as $checkTime) {
-                foreach ($dimensions[$checkTime] ?? [] as $row) {
-                    if ($isTightenedGap($row)) {
-                        $rows[] = [
-                            'checkTime'     => $checkTime,
-                            'remarks'       => $remarks[$checkTime] ?? '',
-                            'judgement'     => $row['judge'] ?? null,
-                            'specification' => $row['specification'] ?? '',
-                            'controlLimit'  => $row['CL'] ?? '',
-                            'measurements'  => [
-                                '0'  => $row['measurements_y'] ?? [],
-                                '90' => $row['measurements'] ?? [],
-                            ],
-                        ];
-                    }
-                }
-            }
-
-            return $rows;
-        };
-
-        $needsRebuild = false;
-
-        foreach ($touchedCheckTimes as $checkTime) {
-            foreach ($dimensions[$checkTime] ?? [] as $row) {
-                if ($isGap($row) && ! $isTightenedGap($row)) {
-                    $needsRebuild = true;
-                }
-            }
-        }
-
-        foreach ($deletedCheckTimes as $deleted) {
-            if (collect($deleted['dimensions'] ?? [])->contains($isGap)) {
-                $needsRebuild = true;
-            }
-        }
-
-        $upserts = $gapRowsFor($touchedCheckTimes);
-
-        if (! $needsRebuild && $upserts === []) {
-            return;
-        }
-
-        $deletedTimes = array_column($deletedCheckTimes, 'time');
-        $allRows = $gapRowsFor(array_values(array_diff($checkTimes, $deletedTimes)));
-
-        $context = [
-            'ppf'       => $ppf,
-            'partNo'    => $partNo,
-            'moldNo'    => $ppfLookUp['moldNo'] ?? '',
-            'machineNo' => $ppfLookUp['machineNo'],
-            'lotNo'     => $ppfLookUp['productionLotNo'],
-            'inspector' => $inspectorNo,
-            'spec'      => $allRows[0]['specification'] ?? '',
-            'limit'     => $allRows[0]['controlLimit'] ?? '',
-        ];
-
-        try {
-            if ($isF00VE) {
-                $service = app(InsertTightenedGapF00VE::class);
-
-                $needsRebuild
-                    ? $service->insertGapF00VEToExcel($context, $allRows)
-                    : $service->appendGapF00VEToExcel($context, $upserts, $allRows);
-            } else {
-                $service = app(InsertTightenedGapOring::class);
-
-                $needsRebuild
-                    ? $service->insertGapOringToExcel($context, $allRows)
-                    : $service->appendGapOringToExcel($context, $upserts, $allRows);
-            }
-        } catch (\Throwable $e) {
-            Log::error('Tightened Gap-Offset Excel failed', [
-                'PPFNo' => $ppf,
-                'error' => $e->getMessage(),
-            ]);
-        }
-    }
-
     private function composeRemarks(string $remarks, array $batches): string
     {
         $base = trim(preg_replace(
@@ -694,13 +513,17 @@ class CreateInspection
             ->contains(fn($t) => ($modeByTime[$t] ?? 'normal') === 'tightened');
 
         try {
+            $partNo = trim((string) ($ppfLookUp['partNo'] ?? ''));
+            $base   = app(MipirSourceData::class)->sairBase($ppf);
+
             app(InsertTightenedDefects::class)->sync([
-                'partNo'    => $ppfLookUp['partNo'] ?? '',
-                'partName'  => $ppfLookUp['partName'] ?? '',
-                'machineNo' => $ppfLookUp['machineNo'] ?? '',
-                'moldNo'    => $ppfLookUp['moldNo'] ?? '',
-                'lotNo'     => $ppfLookUp['productionLotNo'] ?? '',
-                'inspector' => $inspectorNo,
+                'partNo'     => $partNo,
+                'basePartNo' => $base !== '' ? $base : PartNumber::base($partNo),
+                'partName'   => $ppfLookUp['partName'] ?? '',
+                'machineNo'  => $ppfLookUp['machineNo'] ?? '',
+                'moldNo'     => $ppfLookUp['moldNo'] ?? '',
+                'lotNo'      => $ppfLookUp['productionLotNo'] ?? '',
+                'inspector'  => $inspectorNo,
             ], $judgements, ensureFile: $hasTightened);
         } catch (\Throwable $e) {
             Log::error('Tightened defects SAIR Excel failed', [
@@ -710,61 +533,4 @@ class CreateInspection
         }
     }
 
-    private function refreshXBarExcel(array $jobs, ?string $plant): void
-    {
-        Log::info('XBar refresh', ['plant' => $plant, 'jobs' => array_values($jobs)]);
-
-        if ($plant === null) {
-            Log::warning('XBar Excel skipped: user has no Plant');
-            return;
-        }
-
-        $safe = fn(string $v) => preg_replace('/[^A-Za-z0-9_-]/', '_', $v);
-
-        foreach ($jobs as $job) {
-            try {
-                $window = app(XBarCycleTracker::class)
-                    ->cycleWindow($plant, $job['dimension'], $job['transactionId']);
-
-                if ($window === null) {
-                    Log::warning('XBar Excel skipped: cycle window not found', $job);
-                    continue;
-                }
-
-                $partNos = collect(app(XBarRepository::class)->getPartNumbersForTransaction($job['transactionId']))
-                    ->values()
-                    ->all();
-
-                if ($partNos === []) {
-                    Log::warning('XBar Excel skipped: no part numbers for transaction', $job);
-                    continue;
-                }
-
-                $name = sprintf(
-                    'Xbar_%s_%s_%s',
-                    $safe($plant),
-                    $safe($job['dimension']),
-                    Carbon::parse($window['start'])->format('Ymd_His')
-                );
-
-                $path = app(InspectionXBarService::class)->generate(
-                    $partNos,
-                    $job['dimension'],
-                    $window['start'],
-                    $window['end'],
-                    $job['transactionId'],
-                    $name
-                );
-
-                XBarCycleLog::where('TransactionId', $job['transactionId'])->update(['FilePath' => $path]);
-            } catch (\Throwable $e) {
-                Log::error('XBar Excel failed', [
-                    'dimension'     => $job['dimension'],
-                    'transactionId' => $job['transactionId'],
-                    'error'         => $e->getMessage(),
-                    'at'            => $e->getFile() . ':' . $e->getLine(),
-                ]);
-            }
-        }
-    }
 }

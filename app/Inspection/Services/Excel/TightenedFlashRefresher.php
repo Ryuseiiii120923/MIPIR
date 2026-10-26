@@ -4,12 +4,9 @@ namespace App\Inspection\Services\Excel;
 
 use Illuminate\Support\Facades\Log;
 use App\Inspection\Models\GroupLeader\LotConfirmation;
+use App\Inspection\Support\PartNumber;
 use Throwable;
 
-/**
- * Refreshes the Tightened Flash Thickness Excel workbook from
- * tblDimensionMeasure / tblInspectionRecord. Always rebuilds from the DB.
- */
 class TightenedFlashRefresher
 {
     private const DIM_ITEM = 'Flash Thickness';
@@ -25,6 +22,7 @@ class TightenedFlashRefresher
             }
 
             $allRows = [];
+            $usedPartNos = [];
 
             foreach ($group['headers'] as $groupPpf => $header) {
                 $tightened = $source->dimensions($groupPpf, self::DIM_ITEM)
@@ -44,17 +42,17 @@ class TightenedFlashRefresher
                         'controlLimit'  => (string) ($first->CL ?? ''),
                         'remarks'       => $header['remarks'][(string) $checkTime] ?? '',
                     ];
+                    $usedPartNos[] = $header['partNo'];
                 }
             }
 
             $context = [
-                'partNo'      => $group['partNo'],
-                'basePartNo'  => $group['basePartNo'],
+                'partNo'      => $source->partNoLabel($usedPartNos, $group['partNo']),
+                'basePartNo' => app(MipirSourceData::class)->sairBase($ppf) ?: PartNumber::base($header['partNo']),
                 'moldNo'      => $group['moldNo'],
                 'confirmedBy' => $confirmedBy ?? $this->confirmedByFromDb($group),
             ];
 
-            // walang row = buburahin ng service ang lumang file ng group
             app(InsertTightenedFlash::class)->insertFlashToExcel($context, $allRows);
         } catch (Throwable $e) {
             Log::error('Tightened Flash Thickness Excel failed', [

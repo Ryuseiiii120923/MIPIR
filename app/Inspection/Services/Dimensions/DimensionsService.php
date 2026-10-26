@@ -6,7 +6,6 @@ use App\Inspection\Repositories\Contracts\DimensionMasterRepositoryInterface;
 
 class DimensionsService
 {
-    private const CL_REQUIRED_ITEMS = ['flash thickness', 'gap-offset'];
 
     /** Empty when the type is missing, or a value that type needs is blank. */
     public function isSpecificationEmpty(array $row): bool
@@ -282,9 +281,9 @@ class DimensionsService
         };
     }
 
-    private function trimNumber(float $value): string
+    private function trimNumber(float $value, int $decimals = 3): string
     {
-        return rtrim(rtrim(number_format($value, 4, '.', ''), '0'), '.');
+        return number_format((float) $value, $decimals, '.', '');
     }
 
     public function judgeXBar(array $measurements, array $limits): array
@@ -307,7 +306,7 @@ class DimensionsService
 
         $judge = function ($values, ?float $low, ?float $high): ?string {
             if ($low === null && $high === null) {
-                return null; 
+                return null;
             }
 
             return $values->every(fn($v) => ($low === null || $v >= $low) && ($high === null || $v <= $high))
@@ -320,5 +319,31 @@ class DimensionsService
         $result['judgeRCL'] = $judge($ranges, $num($limits['LCLr'] ?? null), $num($limits['UCLr'] ?? null));
 
         return $result;
+    }
+
+    public function normalizeMeasurement(mixed $value): mixed
+    {
+        if (! is_string($value)) {
+            return $value;
+        }
+
+        $s = trim($value);
+
+        return preg_match('/^([+-]?)\.(\d+)$/', $s, $m)
+            ? $m[1] . '0.' . $m[2]
+            : $s;
+    }
+
+    public function normalizeRows(array $rows): array
+    {
+        foreach ($rows as $i => $row) {
+            foreach (['measurements', 'measurements_y'] as $key) {
+                if (isset($row[$key]) && is_array($row[$key])) {
+                    $rows[$i][$key] = array_map(fn($v) => $this->normalizeMeasurement($v), $row[$key]);
+                }
+            }
+        }
+
+        return $rows;
     }
 }

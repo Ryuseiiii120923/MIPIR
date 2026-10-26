@@ -116,7 +116,7 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
 
         return SEIHIN::where('品番 ', $partNo)->value('不良率');
     }
-    public function isExist(int $ppf): bool
+    public function isExist(string $ppf): bool
     {
         return MoldingPlan::where('流動NO', $ppf)->exists();
     }
