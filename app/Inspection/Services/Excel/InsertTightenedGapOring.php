@@ -3,6 +3,7 @@
 namespace App\Inspection\Services\Excel;
 
 use App\Traits\ExpandsSheet;
+use App\Traits\GroupsExcelFiles;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\File;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
@@ -12,13 +13,13 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 class InsertTightenedGapOring
 {
-    use ExpandsSheet;
+    use ExpandsSheet, GroupsExcelFiles;
 
     private const TEMPLATE = 'app/excel-template/tightened-monitoring/Offset-checking (o-Ring).xlsx';
 
     private const OUTPUT_ROOT = 'app/exports/tightened-monitoring/Offset-Checking(Oring)';
 
-    private const FIRST_READING_COLUMN = 5;  
+    private const FIRST_READING_COLUMN = 5;
     private const READINGS_PER_BLOCK = 5;
     private const BLOCKS = 5;
 
@@ -32,17 +33,16 @@ class InsertTightenedGapOring
             'firstRow'      => 9,
             'lastRow'       => 788,
             'rowsPerRecord' => 4,
-            'staticCols'    => ['D', 'AD', 'AE'], 
+            'staticCols'    => ['D', 'AD', 'AE'],
         ],
     ];
 
     public function insertGapOringToExcel(array $context, array $rows): ?string
     {
-        $ppf = (int) $context['ppf'];
         $records = $this->recordsFromPayload($context, $rows);
 
         if ($records->isEmpty()) {
-            $this->deleteStaleFiles($ppf);
+            $this->deleteStaleFiles($context);
 
             return null;
         }
@@ -52,7 +52,7 @@ class InsertTightenedGapOring
         $spreadsheet = IOFactory::load(storage_path(self::TEMPLATE));
         $spreadsheet->setActiveSheetIndex(0);
         $sheet = $spreadsheet->getActiveSheet();
-        $sheet->setTitle($this->sheetTitle((string) $context['partNo']));
+        $sheet->setTitle($this->sheetTitle((string) $context['basePartNo']));
 
         $this->fillHeader($sheet, $layout[0], $context);
         $this->splitTallMerges($sheet, $layout[0]);
@@ -68,15 +68,16 @@ class InsertTightenedGapOring
             $this->fillRecord($sheet, $layout[0], $index, $record);
         }
 
-        return $this->save($spreadsheet, $ppf, (string) $context['partNo']);
+        return $this->save($spreadsheet, $context);
     }
+
 
     public function appendGapOringToExcel(array $context, array $rows, ?array $allRows = null): ?string
     {
         $allRows ??= $rows;
 
         $ppf = (int) $context['ppf'];
-        $path = $this->partDirectory((string) $context['partNo']) . DIRECTORY_SEPARATOR . $this->fileName($ppf);
+        $path = $this->partDirectory((string) $context['basePartNo']) . DIRECTORY_SEPARATOR . $this->fileName($context);
 
         if (! File::exists($path)) {
             return $this->insertGapOringToExcel($context, $allRows);
@@ -87,7 +88,7 @@ class InsertTightenedGapOring
         $spreadsheet = IOFactory::load($path);
         $sheet = $spreadsheet->getSheet(0);
 
-        $extra = $this->currentExtra($sheet);   
+        $extra = $this->currentExtra($sheet);
         $layout = $this->withExtra(self::LAYOUT, $extra);
 
         foreach ($records as $record) {
@@ -126,16 +127,16 @@ class InsertTightenedGapOring
 
             foreach (self::LOCATIONS as $location) {
                 $locations[$location] = array_map(
-                    fn($v) => is_numeric($v) ? (float) $v : null,   
+                    fn($v) => is_numeric($v) ? (float) $v : null,
                     array_values((array) ($row['measurements'][$location] ?? []))
                 );
             }
 
             return [
-                'lotNo'       => $context['lotNo'],
-                'machineNo'   => $context['machineNo'],
+                'lotNo'       => $row['lotNo'] ?? $context['lotNo'] ?? '',
+                'machineNo'   => $row['machineNo'] ?? $context['machineNo'] ?? '',
                 'checkTime'   => $row['checkTime'],
-                'inspector'   => $context['inspector'],
+                'inspector'   => $row['inspector'] ?? $context['inspector'] ?? '',
                 'judgement'   => $row['judgement'] ?? null,
                 'disposition' => $row['disposition'] ?? null,
                 'remarks'     => $row['remarks'] ?? '',
@@ -258,9 +259,9 @@ class InsertTightenedGapOring
         return $title !== '' ? $title : 'Offset Checking';
     }
 
-    private function fileName(int $ppf): string
+    private function fileName(array $context): string
     {
-        return "Offset Checking (O-Ring) - PPF{$ppf}.xlsx";
+        return "Offset Checking (O-Ring) - {$this->groupStem($context)}.xlsx";
     }
 
     private function partDirectory(string $partNo): string
@@ -274,14 +275,14 @@ class InsertTightenedGapOring
         return $directory;
     }
 
-    private function deleteStaleFiles(int $ppf): void
+    private function deleteStaleFiles(array $context): void
     {
-        File::delete(File::glob(storage_path(self::OUTPUT_ROOT) . '/*/' . $this->fileName($ppf)) ?: []);
+        File::delete(File::glob(storage_path(self::OUTPUT_ROOT) . '/*/' . $this->fileName($context)) ?: []);
     }
 
-    private function save(Spreadsheet $spreadsheet, int $ppf, string $partNo): string
+    private function save(Spreadsheet $spreadsheet, array $context): string
     {
-        $path = $this->partDirectory($partNo) . DIRECTORY_SEPARATOR . $this->fileName($ppf);
+        $path = $this->partDirectory((string) $context['basePartNo']) . DIRECTORY_SEPARATOR . $this->fileName($context);
 
         IOFactory::createWriter($spreadsheet, 'Xlsx')->save($path);
         $spreadsheet->disconnectWorksheets();

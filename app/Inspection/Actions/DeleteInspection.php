@@ -19,11 +19,13 @@ class DeleteInspection
     {
         return DB::transaction(function () use ($ppfno) {
             $plant = Auth::user()->Plant ?? null; // <-- confirm this is correct source
+            $groupKey = XBarCycleTracker::groupKey((string) ($ppfLookUp['partNo'] ?? ''), $ppfLookUp['moldNo'] ?? null);
 
             $measuresToReverse = MIPIRDimensionMeasure::where('PPFNo', $ppfno)
                 ->where('forXBar', true)
                 ->where('DimItem', 'not like', '% (Y)')
-                ->get(['DimItem']);
+                ->whereNotNull('xbarTransaction')
+                ->get(['xbarTransaction']);
 
             Defect::where('PPFNo', $ppfno)->delete();
             SmallDefect::where('PPFNo', $ppfno)->delete();
@@ -37,9 +39,9 @@ class DeleteInspection
             if ($plant !== null) {
                 $countsByDimItem = $measuresToReverse->countBy('DimItem');
 
-                foreach ($countsByDimItem as $dimItem => $count) {
+                foreach ($measuresToReverse->countBy('xbarTransaction') as $transactionId => $count) {
                     for ($i = 0; $i < $count; $i++) {
-                        app(XBarCycleTracker::class)->reverseSubgroup($plant, $dimItem);
+                        app(XBarCycleTracker::class)->reverseSubgroupByTransaction((string) $transactionId);
                     }
                 }
             }

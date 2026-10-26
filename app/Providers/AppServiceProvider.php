@@ -28,6 +28,7 @@ class AppServiceProvider extends ServiceProvider
             \App\Inspection\Repositories\Contracts\PpfLookUpRepositoryInterface::class,
             \App\Inspection\Repositories\PPFLookUp\PpfLookUpRepository::class
         );
+        $this->app->scoped(\App\Inspection\Services\PartFamily::class);
     }
 
     /**

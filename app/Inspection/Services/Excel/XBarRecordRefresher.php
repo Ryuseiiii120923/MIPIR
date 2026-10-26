@@ -4,27 +4,25 @@ namespace App\Inspection\Services\Excel;
 
 use App\Domain\XBar\Repositories\XBarRepository as RepositoriesXBarRepository;
 use App\Inspection\Models\MIPIRDimensionMeasure;
+use App\Inspection\Models\MIPIRInspectionRecord;
 use App\Inspection\Models\XBarCycleLog;
 use App\Inspection\Services\Excel\InspectionXBarService as ExcelInspectionXBarService;
 use App\Inspection\Services\XBarCycleTracker;
+use App\Inspection\Support\PartNumber;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
-/**
- * Refreshes XBar Excel workbooks for the (dimension, transaction) pairs
- * stored against a PPF in tblDimensionMeasure.
- */
 class XBarRecordRefresher
 {
-    public function refresh(int $ppf, ?string $plant, ?string $confirmedBy): void
+    public function refresh(int $ppf, ?string $plant, ?string $confirmedBy, ?array $jobs = null): void
     {
         if ($plant === null) {
             Log::warning('XBar Excel skipped: user has no Plant');
             return;
         }
 
-        $jobs = $this->jobsFor($ppf);
+        $jobs ??= $this->jobsFor($ppf);
 
         Log::info('XBar refresh', [
             'PPFNo' => $ppf,
@@ -32,8 +30,10 @@ class XBarRecordRefresher
             'jobs' => $jobs,
         ]);
 
-        $safe = static fn (string $value): string =>
-            (string) preg_replace('/[^A-Za-z0-9_-]/', '_', $value);
+        $mdNo = trim((string) MIPIRInspectionRecord::where('PPFNo', $ppf)->orderByDesc('RECNO')->value('MDNo'));
+
+        $safe = static fn(string $value): string =>
+        (string) preg_replace('/[^A-Za-z0-9_-]/', '_', $value);
 
         foreach ($jobs as $job) {
             try {
@@ -50,7 +50,13 @@ class XBarRecordRefresher
 
                 $partNos = collect(
                     app(RepositoriesXBarRepository::class)->getPartNumbersForTransaction($job['transactionId'])
-                )->values()->all();
+                )
+                    ->map(fn($p) => trim((string) $p))
+                    ->filter()
+                    ->unique()
+                    ->sort(fn($a, $b) => [strlen($a), $a] <=> [strlen($b), $b])
+                    ->values()
+                    ->all();
 
                 if ($partNos === []) {
                     Log::warning('XBar Excel skipped: no part numbers for transaction', $job);
@@ -58,8 +64,10 @@ class XBarRecordRefresher
                 }
 
                 $name = sprintf(
-                    'Xbar_%s_%s_%s',
+                    'Xbar_%s_%s_%s_%s_%s',
                     $safe($plant),
+                    $safe(PartNumber::base($partNos[0])),
+                    $safe($mdNo !== '' ? $mdNo : 'NOMD'),
                     $safe((string) $job['dimension']),
                     Carbon::parse($window['start'])->format('Ymd_His')
                 );
@@ -98,8 +106,8 @@ class XBarRecordRefresher
                 ->whereNotNull('xbarTransaction')
                 ->where('xbarTransaction', '!=', '')
                 ->get(['DimItem', 'xbarTransaction'])
-                ->unique(fn ($r) => "{$r->DimItem}|{$r->xbarTransaction}")
-                ->map(fn ($r) => [
+                ->unique(fn($r) => "{$r->DimItem}|{$r->xbarTransaction}")
+                ->map(fn($r) => [
                     'dimension' => (string) $r->DimItem,
                     'transactionId' => $r->xbarTransaction,
                 ])

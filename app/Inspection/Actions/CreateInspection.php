@@ -20,6 +20,9 @@ use App\Inspection\Services\Excel\InsertTightenedGapF00VE;
 use App\Inspection\Services\Excel\InsertTightenedGapOring;
 use App\Inspection\Services\Excel\InspectionXBarService;
 use App\Inspection\Services\Excel\MipirRecordRefresher;
+use App\Inspection\Services\Excel\TightenedFlashRefresher;
+use App\Inspection\Services\Excel\TightenedGapOffsetRefresher;
+use App\Inspection\Services\Excel\XBarRecordRefresher;
 use App\Inspection\Services\Saving\CreateInspectionService;
 use App\Inspection\Services\XBarCycleTracker;
 use Illuminate\Support\Carbon;
@@ -68,7 +71,11 @@ class CreateInspection
             throw new \InvalidArgumentException('At least one check time is required to create an inspection.');
         }
 
+
+
         DB::transaction(function () use ($composedRemarks, $dateEncodeCheck, $defectBatches, $defectJudge, $inspectorNo, $ngpercent, $ppf, $ppfLookUp, $touchedCheckTimes, $dimensions, $dateJudge, $remarks, &$xbarJobs, &$fullCycles) {
+            $plant    = app(CurrentActor::class)->plant();
+            $groupKey = XBarCycleTracker::groupKey((string) ($ppfLookUp['partNo'] ?? ''), $ppfLookUp['moldNo'] ?? null);
             foreach ($touchedCheckTimes as $checkTime) {
                 $isExistingCheckTime = MIPIRInspectionRecord::where('PPFNo', $ppf)
                     ->where('Checktime', $checkTime)
@@ -199,8 +206,9 @@ class CreateInspection
                                 ?? null;
                         } elseif ($isXBarTracked && $itemName && $forXBar) {
                             $xbarResult = app(XBarCycleTracker::class)->recordSubgroup(
-                                app(CurrentActor::class)->plant(),
+                                $plant,
                                 $itemName,
+                                $groupKey,
                                 $dateEncodeCheck[$checkTime] ?? now()->toDateTimeString()
                             );
                             $transactionId = $xbarResult['transactionId'];
@@ -233,15 +241,16 @@ class CreateInspection
                         if ($isXBarTracked && $itemName && $forXBar && $transactionId) {
                             if ($xbarResult !== null && $xbarResult['shouldGenerate']) {
                                 app(XBarCycleTracker::class)->closeCycle(
-                                    app(CurrentActor::class)->plant(),
+                                    $plant,
                                     $itemName,
+                                    $groupKey,
                                     $xbarResult['cycleStart'],
                                     $xbarResult['cycleEnd'],
                                     $transactionId
                                 );
 
                                 $fullCycles[$transactionId] = [
-                                    'plant'         => app(CurrentActor::class)->plant(),
+                                    'plant'         => $plant,
                                     'dimension'     => $itemName,
                                     'transactionId' => $transactionId,
                                     'cycleStart'    => $xbarResult['cycleStart'],
@@ -289,7 +298,10 @@ class CreateInspection
             }
         });
 
-        DB::transaction(function () use ($ppf, $deletedCheckTimes) {
+        DB::transaction(function () use ($ppf, $deletedCheckTimes, $ppfLookUp) {
+            $plant    = app(CurrentActor::class)->plant();
+            $groupKey = XBarCycleTracker::groupKey((string) ($ppfLookUp['partNo'] ?? ''), $ppfLookUp['moldNo'] ?? null);
+
             foreach ($deletedCheckTimes as $deleted) {
                 $checkTime = $deleted['time'];
                 $rows = $deleted['dimensions'] ?? [];
@@ -302,33 +314,31 @@ class CreateInspection
                 MIPIRInspectionRecord::where('PPFNo', $ppf)->where('Checktime', $checkTime)->delete();
                 EncodingDuration::where('PPFNo', $ppf)->where('Checktime', $checkTime)->delete();
 
-                $plant = app(CurrentActor::class)->plant() ?? null;
+                if ($plant === null) {
+                    continue;
+                }
 
-                if ($plant !== null) {
-                    foreach ($rows as $row) {
-                        $itemName = $row['item'] ?? null;
-                        $forXBar = $row['forXBar'] ?? false;
-                        $isXBarTracked = ! in_array($itemName, ['Flash Thickness', 'Gap-Offset'], true);
+                foreach ($rows as $row) {
+                    $itemName = $row['item'] ?? null;
+                    $forXBar = $row['forXBar'] ?? false;
+                    $isXBarTracked = ! in_array($itemName, ['Flash Thickness', 'Gap-Offset'], true);
 
-                        if (! $isXBarTracked || ! $forXBar || ! $itemName) {
-                            continue;
-                        }
+                    if (! $isXBarTracked || ! $forXBar || ! $itemName) {
+                        continue;
+                    }
 
-                        $setsCount = (int) ceil(count($row['measurements'] ?? []) / 5);
+                    $setsCount = (int) ceil(count($row['measurements'] ?? []) / 5);
 
-                        for ($s = 0; $s < $setsCount; $s++) {
-                            app(XBarCycleTracker::class)->reverseSubgroup($plant, $itemName);
-                        }
+                    for ($s = 0; $s < $setsCount; $s++) {
+                        app(XBarCycleTracker::class)->reverseSubgroup($plant, $itemName, $groupKey);
                     }
                 }
             }
         });
-
-        $this->refreshTightenedFlashExcel($ppf, $ppfLookUp, $inspectorNo, $checkTimes, $touchedCheckTimes, $dimensions, $composedRemarks, $deletedCheckTimes);
-        $this->refreshTightenedGapOffsetExcel($ppf, $ppfLookUp, $inspectorNo, $checkTimes, $touchedCheckTimes, $dimensions, $composedRemarks, $deletedCheckTimes);
+        $this->refreshTightenedExcels($ppf, $touchedCheckTimes, $dimensions, $deletedCheckTimes);
         $this->refreshTightenedDefectsExcel($ppf, $ppfLookUp, $inspectorNo, $checkTimes, $modeByTime, $shotsByTime);
         app(MipirRecordRefresher::class)->refresh($ppf);
-        $this->refreshXBarExcel($xbarJobs, app(CurrentActor::class)->plant() ?? null);
+        app(XBarRecordRefresher::class)->refresh($ppf, app(CurrentActor::class)->plant(), null, array_values($xbarJobs));
 
         if ($recordDuration) {
             foreach ($touchedCheckTimes as $checkTime) {
@@ -366,6 +376,37 @@ class CreateInspection
         }
 
         return ['xbarFull' => array_values($fullCycles)];
+    }
+
+    private function refreshTightenedExcels(int $ppf, array $touchedCheckTimes, array $dimensions, array $deletedCheckTimes): void
+    {
+        $touches = function (string $item) use ($touchedCheckTimes, $dimensions, $deletedCheckTimes): bool {
+            foreach ($touchedCheckTimes as $checkTime) {
+                foreach ($dimensions[$checkTime] ?? [] as $row) {
+                    if (($row['item'] ?? null) === $item) {
+                        return true;
+                    }
+                }
+            }
+
+            foreach ($deletedCheckTimes as $deleted) {
+                foreach ($deleted['dimensions'] ?? [] as $row) {
+                    if (($row['item'] ?? null) === $item) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        };
+
+        if ($touches('Flash Thickness')) {
+            app(TightenedFlashRefresher::class)->refresh($ppf);
+        }
+
+        if ($touches('Gap-Offset')) {
+            app(TightenedGapOffsetRefresher::class)->refresh($ppf);
+        }
     }
 
     private function refreshTightenedFlashExcel(

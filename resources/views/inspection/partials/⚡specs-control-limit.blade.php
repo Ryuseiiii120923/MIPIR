@@ -84,7 +84,7 @@ new class extends Component
         ?float $USLx = null,
         ?float $LSLx = null,
         ?float $specs = null,
-        ?int $moldDie = 0,
+        ?string $moldDie = '',
         array $measurements = []
     ) {
         $this->measurements = $measurements;

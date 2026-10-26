@@ -3,6 +3,7 @@
 namespace App\Inspection\Services\Excel;
 
 use App\Traits\ExpandsSheet;
+use App\Traits\GroupsExcelFiles;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\File;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
@@ -25,14 +26,14 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  */
 class InsertTightenedGapF00VE
 {
-    use ExpandsSheet;
+    use ExpandsSheet, GroupsExcelFiles;
 
     private const TEMPLATE = 'app/excel-template/tightened-monitoring/F00VE24009 & F00VE2406S-01.xlsx';
 
     private const OUTPUT_ROOT = 'app/exports/tightened-monitoring/Offset-Checking(F00VE)';
 
-    private const FIRST_READING_COLUMN = 5;  
-    private const READINGS_PER_ROW = 12;      
+    private const FIRST_READING_COLUMN = 5;
+    private const READINGS_PER_ROW = 12;
     private const CHECKS_PER_BLOCK = 3;
     private const ROWS_PER_CHECK = 2;
 
@@ -50,18 +51,20 @@ class InsertTightenedGapF00VE
             'limit'         => 'E5',
             'firstRow'      => 8,
             'lastRow'       => 133,
-            'rowsPerRecord' => 6,                
-            'staticCols'    => ['D', 'Q', 'R'],    
+            'rowsPerRecord' => 6,
+            'staticCols'    => ['D', 'Q', 'R'],
         ],
     ];
 
     public function insertGapF00VEToExcel(array $context, array $rows): ?string
     {
-        $ppf = (int) $context['ppf'];
-        $checks = $this->checksFromPayload($context, $rows);
+        $checks = $this->checksFromPayload($context, $rows)
+            ->groupBy(fn($c) => trim((string) $c['lotNo']))
+            ->flatten(1)
+            ->values();
 
         if ($checks->isEmpty()) {
-            $this->deleteStaleFiles($ppf);
+            $this->deleteStaleFiles($context);
 
             return null;
         }
@@ -71,12 +74,13 @@ class InsertTightenedGapF00VE
         $spreadsheet = IOFactory::load(storage_path(self::TEMPLATE));
         $spreadsheet->setActiveSheetIndex(0);
         $sheet = $spreadsheet->getActiveSheet();
-        $sheet->setTitle($this->sheetTitle((string) $context['partNo']));
+        $sheet->setTitle($this->sheetTitle((string) $context['basePartNo']));
 
         $this->fillHeader($sheet, $layout[0], $context);
 
-        $blocksNeeded = (int) ceil($checks->count() / self::CHECKS_PER_BLOCK);
-        $extra = max(0, $blocksNeeded - $this->pageCapacity($layout));
+        $positions    = $this->positionsFor($checks);
+        $blocksNeeded = max(array_column($positions, 0)) + 1;
+        $extra        = max(0, $blocksNeeded - $this->pageCapacity($layout));
 
         if ($extra > 0) {
             $this->addRows($sheet, $layout, $extra);
@@ -84,26 +88,44 @@ class InsertTightenedGapF00VE
         }
 
         foreach ($checks as $index => $check) {
-            $this->fillCheck(
-                $sheet,
-                $layout[0],
-                intdiv($index, self::CHECKS_PER_BLOCK),
-                $index % self::CHECKS_PER_BLOCK,
-                $check
-            );
+            [$block, $slot] = $positions[$index];
+            $this->fillCheck($sheet, $layout[0], $block, $slot, $check);
         }
 
         $this->normalizeLabels($sheet, $layout[0]);
 
-        return $this->save($spreadsheet, $ppf, (string) $context['partNo']);
+        return $this->save($spreadsheet, $context);
     }
+
+    private function positionsFor(Collection $checks): array
+    {
+        $positions = [];
+        $block = -1;
+        $slot  = self::CHECKS_PER_BLOCK;
+        $lot   = null;
+
+        foreach ($checks as $index => $check) {
+            $lotNo = trim((string) $check['lotNo']);
+
+            if ($lotNo !== $lot || $slot >= self::CHECKS_PER_BLOCK) {
+                $block++;
+                $slot = 0;
+                $lot  = $lotNo;
+            }
+
+            $positions[$index] = [$block, $slot++];
+        }
+
+        return $positions;
+    }
+
 
     public function appendGapF00VEToExcel(array $context, array $rows, ?array $allRows = null): ?string
     {
         $allRows ??= $rows;
 
         $ppf = (int) $context['ppf'];
-        $path = $this->partDirectory((string) $context['partNo']) . DIRECTORY_SEPARATOR . $this->fileName($ppf);
+        $path = $this->partDirectory((string) $context['basePartNo']) . DIRECTORY_SEPARATOR . $this->fileName($context);
 
         if (! File::exists($path)) {
             return $this->insertGapF00VEToExcel($context, $allRows);
@@ -114,7 +136,7 @@ class InsertTightenedGapF00VE
         $spreadsheet = IOFactory::load($path);
         $sheet = $spreadsheet->getSheet(0);
 
-        $extra = $this->currentExtra($sheet);  
+        $extra = $this->currentExtra($sheet);
         $layout = $this->withExtra(self::LAYOUT, $extra);
 
         foreach ($checks as $check) {
@@ -147,15 +169,15 @@ class InsertTightenedGapF00VE
 
             foreach (self::LOCATIONS as $location) {
                 $locations[$location] = array_map(
-                    fn($v) => is_numeric($v) ? (float) $v : null,  
+                    fn($v) => is_numeric($v) ? (float) $v : null,
                     array_values((array) ($row['measurements'][$location] ?? []))
                 );
             }
 
             return [
-                'lotNo'     => $context['lotNo'],
-                'machineNo' => $context['machineNo'],
-                'inspector' => $context['inspector'],
+                'lotNo'     => $row['lotNo'] ?? $context['lotNo'] ?? '',
+                'machineNo' => $row['machineNo'] ?? $context['machineNo'] ?? '',
+                'inspector' => $row['inspector'] ?? $context['inspector'] ?? '',
                 'checkTime' => $row['checkTime'],
                 'remarks'   => $row['remarks'] ?? '',
                 'locations' => $locations,
@@ -202,7 +224,7 @@ class InsertTightenedGapF00VE
             for ($i = 0; $i < self::READINGS_PER_ROW; $i++) {
                 $sheet->setCellValue(
                     Coordinate::stringFromColumnIndex(self::FIRST_READING_COLUMN + $i) . $row,
-                    $readings[$i] ?? null  
+                    $readings[$i] ?? null
                 );
             }
         }
@@ -210,7 +232,7 @@ class InsertTightenedGapF00VE
         $sheet->setCellValue("T{$top}", $check['remarks']);
     }
 
-  
+
     private function findCheck(Worksheet $sheet, array $section, array $check): ?array
     {
         $blocks = $this->blockCount($section);
@@ -301,9 +323,9 @@ class InsertTightenedGapF00VE
         return $title !== '' ? $title : 'Offset Checking';
     }
 
-    private function fileName(int $ppf): string
+    private function fileName(array $context): string
     {
-        return "Offset Checking (F00VE) - PPF{$ppf}.xlsx";
+        return "Offset Checking (F00VE) - {$this->groupStem($context)}.xlsx";
     }
 
     private function partDirectory(string $partNo): string
@@ -317,18 +339,18 @@ class InsertTightenedGapF00VE
         return $directory;
     }
 
-    private function deleteStaleFiles(int $ppf): void
-    {
-        File::delete(File::glob(storage_path(self::OUTPUT_ROOT) . '/*/' . $this->fileName($ppf)) ?: []);
-    }
+    private function deleteStaleFiles(array $context): void
+{
+    File::delete(File::glob(storage_path(self::OUTPUT_ROOT) . '/*/' . $this->fileName($context)) ?: []);
+}
 
-    private function save(Spreadsheet $spreadsheet, int $ppf, string $partNo): string
-    {
-        $path = $this->partDirectory($partNo) . DIRECTORY_SEPARATOR . $this->fileName($ppf);
+private function save(Spreadsheet $spreadsheet, array $context): string
+{
+    $path = $this->partDirectory((string) $context['basePartNo']) . DIRECTORY_SEPARATOR . $this->fileName($context);
 
-        IOFactory::createWriter($spreadsheet, 'Xlsx')->save($path);
-        $spreadsheet->disconnectWorksheets();
+    IOFactory::createWriter($spreadsheet, 'Xlsx')->save($path);
+    $spreadsheet->disconnectWorksheets();
 
-        return $path;
-    }
+    return $path;
+}
 }

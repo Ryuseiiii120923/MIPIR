@@ -2,7 +2,9 @@
 
 namespace App\Inspection\Services\Excel;
 
+use App\Inspection\Support\PartNumber;
 use App\Traits\ExpandsSheet;
+use App\Traits\GroupsExcelFiles;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\File;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
@@ -12,7 +14,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 class InsertTightenedFlash
 {
-    use ExpandsSheet;
+    use ExpandsSheet, GroupsExcelFiles;
     private const TEMPLATE = 'app/excel-template/tightened-monitoring/Flash Thickness Template.xlsx';
     private const OUTPUT_ROOT = 'app/exports/tightened-monitoring/Flash Thickness';
     private const FIRST_BLOCK_COLUMN = 4;
@@ -21,34 +23,33 @@ class InsertTightenedFlash
 
     private const LAYOUTS = [
         2 => [
-            ['part' => 'A2', 'mold' => 'A3', 'limit' => 'D5','checkedBy'=>'J2', 'firstRow' => 9, 'lastRow' => 58, 'firstBlock' => 1, 'blockCount' => 2, 'inspectorCol' => 'N', 'remarksCol' => 'O'],
+            ['part' => 'A2', 'mold' => 'A3', 'limit' => 'D5', 'checkedBy' => 'J2', 'firstRow' => 9, 'lastRow' => 58, 'firstBlock' => 1, 'blockCount' => 2, 'inspectorCol' => 'N', 'remarksCol' => 'O'],
         ],
         4 => [
-            ['part' => 'A2', 'mold' => 'A3', 'limit' => 'D5','checkedBy'=>'P2', 'firstRow' => 9, 'lastRow' => 35, 'firstBlock' => 1, 'blockCount' => 4, 'inspectorCol' => 'X', 'remarksCol' => 'Y'],
+            ['part' => 'A2', 'mold' => 'A3', 'limit' => 'D5', 'checkedBy' => 'P2', 'firstRow' => 9, 'lastRow' => 35, 'firstBlock' => 1, 'blockCount' => 4, 'inspectorCol' => 'X', 'remarksCol' => 'Y'],
         ],
         5 => [
-            ['part' => 'A2', 'mold' => 'A3', 'limit' => 'D5','checkedBy'=>'U2', 'firstRow' => 8, 'lastRow' => 41, 'firstBlock' => 1, 'blockCount' => 5, 'inspectorCol' => 'AC', 'remarksCol' => 'AD'],
+            ['part' => 'A2', 'mold' => 'A3', 'limit' => 'D5', 'checkedBy' => 'U2', 'firstRow' => 8, 'lastRow' => 41, 'firstBlock' => 1, 'blockCount' => 5, 'inspectorCol' => 'AC', 'remarksCol' => 'AD'],
         ],
         6 => [
-            ['part' => 'A2', 'mold' => 'A3', 'limit' => 'A5','checkedBy'=>'Z2', 'firstRow' => 9, 'lastRow' => 38, 'firstBlock' => 1, 'blockCount' => 6, 'inspectorCol' => 'AH', 'remarksCol' => 'AI'],
+            ['part' => 'A2', 'mold' => 'A3', 'limit' => 'A5', 'checkedBy' => 'Z2', 'firstRow' => 9, 'lastRow' => 38, 'firstBlock' => 1, 'blockCount' => 6, 'inspectorCol' => 'AH', 'remarksCol' => 'AI'],
         ],
         10 => [
-            ['part' => 'A2',  'mold' => 'A3',  'limit' => 'D5','checkedBy'=>'U2', 'firstRow' => 8,  'lastRow' => 39, 'firstBlock' => 1, 'blockCount' => 5, 'inspectorCol' => 'AC', 'remarksCol' => 'AD'],
-            ['part' => 'A41', 'mold' => 'A42', 'limit' => 'D44','checkedBy'=>'U41','firstRow' => 47, 'lastRow' => 78, 'firstBlock' => 6, 'blockCount' => 5, 'inspectorCol' => 'AC', 'remarksCol' => 'AD'],
+            ['part' => 'A2',  'mold' => 'A3',  'limit' => 'D5', 'checkedBy' => 'U2', 'firstRow' => 8,  'lastRow' => 39, 'firstBlock' => 1, 'blockCount' => 5, 'inspectorCol' => 'AC', 'remarksCol' => 'AD'],
+            ['part' => 'A41', 'mold' => 'A42', 'limit' => 'D44', 'checkedBy' => 'U41', 'firstRow' => 47, 'lastRow' => 78, 'firstBlock' => 6, 'blockCount' => 5, 'inspectorCol' => 'AC', 'remarksCol' => 'AD'],
         ],
         12 => [
-            ['part' => 'A2',  'mold' => 'A3',  'limit' => 'A5','checkedBy'=>'Z2', 'firstRow' => 9,  'lastRow' => 38, 'firstBlock' => 1, 'blockCount' => 6, 'inspectorCol' => 'AH', 'remarksCol' => 'AI'],
-            ['part' => 'A40', 'mold' => 'A41', 'limit' => 'A43','checkedBy'=>'Z40',  'firstRow' => 47, 'lastRow' => 76, 'firstBlock' => 7, 'blockCount' => 6, 'inspectorCol' => 'AH', 'remarksCol' => 'AI'],
+            ['part' => 'A2',  'mold' => 'A3',  'limit' => 'A5', 'checkedBy' => 'Z2', 'firstRow' => 9,  'lastRow' => 38, 'firstBlock' => 1, 'blockCount' => 6, 'inspectorCol' => 'AH', 'remarksCol' => 'AI'],
+            ['part' => 'A40', 'mold' => 'A41', 'limit' => 'A43', 'checkedBy' => 'Z40',  'firstRow' => 47, 'lastRow' => 76, 'firstBlock' => 7, 'blockCount' => 6, 'inspectorCol' => 'AH', 'remarksCol' => 'AI'],
         ],
     ];
 
     public function insertFlashToExcel(array $context, array $rows): ?string
     {
-        $ppf = (int) $context['ppf'];
         $records = $this->recordsFromPayload($context, $rows);
 
         if ($records->isEmpty()) {
-            $this->deleteStaleFiles($ppf);
+            $this->deleteStaleFiles($context);
 
             return null;
         }
@@ -65,7 +66,7 @@ class InsertTightenedFlash
         $sheet = $spreadsheet->getActiveSheet();
 
         foreach ($layout as $section) {
-            $this->fillHeader($sheet, $section, $header);
+            $this->fillHeader($sheet, $section, $header, app(PartNumber::class)->partNumbers($context,$rows));
         }
 
         $extra = max(0, $records->count() - $this->pageCapacity($layout));
@@ -79,17 +80,15 @@ class InsertTightenedFlash
             $this->fillRows($sheet, $section, $records);
         }
 
-        return $this->save($spreadsheet, $ppf, $header['partNo']);
+        return $this->save($spreadsheet, $context);
     }
-
     public function appendFlashToExcel(array $context, array $rows, ?array $allRows = null): ?string
     {
         $allRows ??= $rows;
         logger('insertToFlash', ['draft' => $rows]);
 
         $ppf = (int) $context['ppf'];
-        $path = $this->partDirectory((string) $context['partNo']) . DIRECTORY_SEPARATOR . $this->fileName($ppf);
-
+        $path = $this->partDirectory((string) $context['basePartNo']) . DIRECTORY_SEPARATOR . $this->fileName($context);
         if (! File::exists($path)) {
             return $this->insertFlashToExcel($context, $allRows);
         }
@@ -99,16 +98,16 @@ class InsertTightenedFlash
 
         $spreadsheet = IOFactory::load($path);
         $sheet = $spreadsheet->getSheet(0);
-        $sheetSize = (int) preg_replace('/\D+/', '', $sheet->getTitle()); 
+        $sheetSize = (int) preg_replace('/\D+/', '', $sheet->getTitle());
 
         if (! isset(self::LAYOUTS[$sheetSize]) || $neededBlocks > $sheetSize) {
             $spreadsheet->disconnectWorksheets();
 
-            return $this->insertFlashToExcel($context, $allRows);   
+            return $this->insertFlashToExcel($context, $allRows);
         }
 
         $base = self::LAYOUTS[$sheetSize];
-        $extra = $this->currentExtra($sheet, $base);  
+        $extra = $this->currentExtra($sheet, $base);
         $layout = $this->withExtra($base, $extra);
 
         foreach ($records as $record) {
@@ -143,10 +142,10 @@ class InsertTightenedFlash
             }
 
             return [
-                'machineNo' => $context['machineNo'],
-                'lotNo'     => $context['lotNo'],
+                'machineNo' => $row['machineNo'] ?? $context['machineNo'] ?? '',
+                'lotNo'     => $row['lotNo'] ?? $context['lotNo'] ?? '',
                 'checkTime' => $row['checkTime'],
-                'inspector' => $context['inspector'],
+                'inspector' => $row['inspector'] ?? $context['inspector'] ?? '',
                 'remarks'   => $row['remarks'] ?? '',
                 'blocks'    => $blocks,
             ];
@@ -182,11 +181,11 @@ class InsertTightenedFlash
         throw new \RuntimeException("No Flash Thickness template supports {$blockCount} blocks (max 12).");
     }
 
-    private function fillHeader(Worksheet $sheet, array $section, array $header): void
+    private function fillHeader(Worksheet $sheet, array $section, array $header, array $partNos): void
     {
         $sheet->setCellValue(
             $section['part'],
-            rtrim((string) $sheet->getCell($section['part'])->getValue()) . ' ' . $header['partNo']
+            rtrim((string) $sheet->getCell($section['part'])->getValue()) . ' ' . implode('/', $partNos)
         );
 
         $sheet->setCellValue(
@@ -207,6 +206,17 @@ class InsertTightenedFlash
         $sheet->setCellValue($section['checkedBy'], $header['confirmedBy'] ?? '');
     }
 
+    private function partNumbers(array $context, array $rows): array
+    {
+        return collect($rows)
+            ->map(fn(array $row) => trim((string) ($row['partNo'] ?? $context['partNo'] ?? '')))
+            ->prepend(trim((string) ($context['partNo'] ?? '')))
+            ->filter(fn($p) => $p !== '')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
     private function fillRows(Worksheet $sheet, array $section, Collection $records): void
     {
         $lastReadingCol = Coordinate::stringFromColumnIndex(
@@ -222,9 +232,9 @@ class InsertTightenedFlash
         }
     }
 
-    private function fileName(int $ppf): string
+    private function fileName(array $context): string
     {
-        return "Flash Thickness - PPF{$ppf}.xlsx";
+        return "Flash Thickness - {$this->groupStem($context)}.xlsx";
     }
 
     private function partDirectory(string $partNo): string
@@ -238,16 +248,16 @@ class InsertTightenedFlash
         return $directory;
     }
 
-    private function deleteStaleFiles(int $ppf): void
+    private function deleteStaleFiles(array $context): void
     {
-        $pattern = storage_path(self::OUTPUT_ROOT) . '/*/' . $this->fileName($ppf);
+        $pattern = storage_path(self::OUTPUT_ROOT) . '/*/' . $this->fileName($context);
 
         File::delete(File::glob($pattern) ?: []);
     }
 
-    private function save(Spreadsheet $spreadsheet, int $ppf, string $partNo): string
+    private function save(Spreadsheet $spreadsheet, array $context): string
     {
-        $path = $this->partDirectory($partNo) . DIRECTORY_SEPARATOR . $this->fileName($ppf);
+        $path = $this->partDirectory((string) $context['basePartNo']) . DIRECTORY_SEPARATOR . $this->fileName($context);
 
         IOFactory::createWriter($spreadsheet, 'Xlsx')->save($path);
         $spreadsheet->disconnectWorksheets();

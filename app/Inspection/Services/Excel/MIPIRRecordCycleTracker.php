@@ -14,9 +14,15 @@ class MIPIRRecordCycleTracker
     private const MAX_SLOTS_PER_SHEET = 21;
     private const FOUR_COLUMN_PARTS = ['135659-0010'];
 
-    public function variantFor(string $partNo): int
+    public function variantFor(string|array $partNo): int
     {
-        return in_array(strtoupper(trim($partNo)), self::FOUR_COLUMN_PARTS, true) ? 4 : 3;
+        foreach ((array) $partNo as $p) {
+            if (in_array(strtoupper(trim($p)), self::FOUR_COLUMN_PARTS, true)) {
+                return 4;
+            }
+        }
+
+        return 3;
     }
 
     public function checkAndRecordLotComplete(int $ppf, string $partNo): void
@@ -130,7 +136,7 @@ class MIPIRRecordCycleTracker
         MIPIRDimensionMeasure::whereIn('PPFNo', $allPpfNos)->update(['isRecord' => true]);
     }
 
-    public function resolveDimItems(string $partNo, array|int|null $ppfs = null): array
+    public function resolveDimItems(string|array $partNo, array|int|null $ppfs = null): array
     {
         $rows = $this->dimQuery($partNo, $ppfs)
             ->where('DimItem', 'not like', '% (Y)')
@@ -189,10 +195,11 @@ class MIPIRRecordCycleTracker
 
         return $entries;
     }
-    private function dimQuery(string $partNo, array|int|null $ppfs)
+
+    private function dimQuery(string|array $partNo, array|int|null $ppfs)
     {
         return MIPIRDimensionMeasure::query()
-            ->where('PartNo', $partNo)
+            ->whereIn('PartNo', (array) $partNo)
             ->when($ppfs !== null, fn($q) => $q->whereIn('PPFNo', (array) $ppfs));
     }
 }

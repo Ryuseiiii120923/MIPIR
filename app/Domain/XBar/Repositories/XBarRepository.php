@@ -32,12 +32,12 @@ class XBarRepository
         }
 
         $query->select([
-                'DimensionName',
-                DB::raw('MIN(Device) as Device'),
-                DB::raw('MIN(Specification) as Specification'),
-                DB::raw('MIN(LowerLimit) as LowerLimit'),
-                DB::raw('MIN(UpperLimit) as UpperLimit'),
-            ])
+            'DimensionName',
+            DB::raw('MIN(Device) as Device'),
+            DB::raw('MIN(Specification) as Specification'),
+            DB::raw('MIN(LowerLimit) as LowerLimit'),
+            DB::raw('MIN(UpperLimit) as UpperLimit'),
+        ])
             ->groupBy('DimensionName');
 
         if (count($partNos) > 1) {
@@ -56,10 +56,10 @@ class XBarRepository
     }
 
     public function getPartNumbersForTransaction(string $transactionId): array
-{
-    return MIPIRDimensionMeasure::where('xbarTransaction', $transactionId)
-        ->distinct()
-        ->pluck('PartNo')
-        ->all();
-}
+    {
+        return MIPIRDimensionMeasure::where('xbarTransaction', $transactionId)
+            ->distinct()
+            ->pluck('PartNo')
+            ->all();
+    }
 }

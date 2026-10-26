@@ -36,7 +36,7 @@ new class extends \Livewire\Component
     public array $controlLimitByTime = [];
     public array $modeByTime = [];
     public array $shotsByTime = [];
-    public int $moldingDieNo = 0;
+    public int|string $moldingDieNo = 0;
 
     public bool $isMKA = false;
 

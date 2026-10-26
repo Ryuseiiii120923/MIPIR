@@ -7,6 +7,7 @@ use App\Inspection\Models\GroupLeader\LotConfirmation;
 use App\Inspection\Models\MIPIRDimensionMeasure;
 use App\Inspection\Models\MIPIRInspectionRecord;
 use App\Inspection\Repositories\Excel\ExcelDataRepository;
+use App\Inspection\Support\PartNumber;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -40,7 +41,7 @@ class InspectionRecordService
         4 => ['remarks' => 'AK', 'stamp' => 'AM', 'confirmedBy' => 'AP'],
     ];
 
-    public function generate(array $lots, array $dimItems, ?string $outputPath = null, ?int $variant = null, ?string $confirmedBy = null): string
+    public function generate(array $lots, array $dimItems, ?string $path = null, int $variant = 3, ?string $confirmedBy = null, ?string $partNoDisplay = null): string
     {
         try {
             $variant = max($variant ?? 3, count($dimItems) > 3 ? 4 : 3);
@@ -70,10 +71,11 @@ class InspectionRecordService
                 throw new \RuntimeException('No valid PPF found to build the report header.');
             }
 
-            $partNo = trim((string) MIPIRInspectionRecord::where('PPFNo', $firstPpf)->value('PartNo'));
+            $identity = $this->groupIdentity($plan);
+            $this->warnIfMixedGroup($identity);
 
-            $this->insertHeader($firstPpf, $sheet);
-            $this->insertDimensionHeaders($dimItems, $blocks, $sheet, $partNo);
+            $this->insertHeader($firstPpf, $sheet, $identity['partNos'], $identity['mdNos']);
+            $this->insertDimensionHeaders($dimItems, $blocks, $sheet, $identity['partNos']);
             $this->insertRows($plan, $dimItems, $blocks, $trailing, $sheet, $confirmedBy);
 
             $output = $outputPath ?? $this->legacyOutputPath($plan);
@@ -120,13 +122,21 @@ class InspectionRecordService
         return null;
     }
 
-    public function insertHeader(string $ppf, $sheet)
+    public function insertHeader(string $ppf, $sheet, ?array $partNos = null, ?array $mdNos = null)
     {
         $repository = app(ExcelDataRepository::class);
         $header = $repository->getHeaderforRec($ppf)->first();
 
-        $sheet->setCellValue('C3', $header->PartNo);
-        $sheet->setCellValue('M3', $header->MDNo);
+        $partDisplay = $partNos ? implode(' / ', $partNos) : $header->PartNo;
+        $mdDisplay   = $mdNos ? implode(' / ', $mdNos) : $header->MDNo;
+
+        $sheet->setCellValue('C3', $partDisplay);
+        $sheet->setCellValue('M3', $mdDisplay);
+
+        if (count($partNos ?? []) > 1) {
+            $sheet->getStyle('C3')->getAlignment()->setWrapText(true);
+        }
+
         $sheet->setCellValue('R3', $header->NoofCavity . "\nNOTE: Refer to PPF");
         $sheet->setCellValue('X3', $header->NQR . "\nNOTE: Refer to PPF");
         $sheet->setCellValue('AC3', $header->Year);
@@ -383,7 +393,7 @@ class InspectionRecordService
             ->orderBy('RECNO')
             ->get();
 
-        $seen        = [];   
+        $seen        = [];
         $judgeBySlot = [];
 
         foreach ($measures as $measure) {
@@ -429,8 +439,9 @@ class InspectionRecordService
         return ['items' => array_values($entry), 'nth' => 0];
     }
 
-    public function insertDimensionHeaders(array $dimItems, array $blocks, $sheet, string $partNo = '')
+    public function insertDimensionHeaders(array $dimItems, array $blocks, $sheet, array|string $partNos = '')
     {
+        $partNos = array_values(array_filter((array) $partNos, fn($p) => trim((string) $p) !== ''));
         $entries = array_map(fn($e) => $this->normalizeEntry($e), array_values($dimItems));
 
         foreach ($blocks as $slot => $block) {
@@ -446,12 +457,12 @@ class InspectionRecordService
             $label = $entry['items'][0];
             $sheet->setCellValue("{$col}5", $label);
 
-            $specText = $this->specText($label, $partNo);
+            $specText = $this->specTextFor($label, $partNos);
 
             if ($specText === null) {
                 Log::error('InspectionRecordService: no specs found for dimension label', [
-                    'label' => $label,
-                    'partNo' => $partNo,
+                    'label'   => $label,
+                    'partNos' => $partNos,
                 ]);
                 continue;
             }
@@ -546,5 +557,68 @@ class InspectionRecordService
             'confirmed'   => $rows->every(fn($r) => $r['status'] === 'confirmed'),
             'confirmedBy' => $rows->first()['confirmedBy'] ?? null,
         ];
+    }
+
+    private function groupIdentity(array $plan): array
+    {
+        $ppfs = collect($plan)
+            ->collapse()
+            ->reject(fn($e) => $e['synthetic'])
+            ->pluck('ppf')
+            ->unique()
+            ->values()
+            ->all();
+
+        $rows = MIPIRInspectionRecord::whereIn('PPFNo', $ppfs)->get(['PartNo', 'MDNo']);
+
+        $partNos = $rows
+            ->map(fn($r) => trim((string) $r->PartNo))
+            ->filter()
+            ->unique()
+            ->sort(fn($a, $b) => [strlen($a), $a] <=> [strlen($b), $b])
+            ->values()
+            ->all();
+
+        $mdNos = $rows
+            ->map(fn($r) => trim((string) $r->MDNo))
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+
+        return ['partNos' => $partNos, 'mdNos' => $mdNos];
+    }
+
+    private function warnIfMixedGroup(array $identity): void
+    {
+        $bases = array_unique(array_map(fn($p) => PartNumber::base($p), $identity['partNos']));
+
+        if (count($bases) > 1 || count($identity['mdNos']) > 1) {
+            Log::warning('InspectionRecordService: lots mix different base part numbers or molding dies', [
+                'partNos' => $identity['partNos'],
+                'mdNos'   => $identity['mdNos'],
+            ]);
+        }
+    }
+
+    /** Tries each part number in the group, then the computed base, and returns the first spec found. */
+    private function specTextFor(string $label, array $partNos): ?string
+    {
+        $candidates = $partNos;
+
+        if ($partNos !== []) {
+            $candidates[] = PartNumber::base($partNos[0]);
+        }
+
+        foreach (array_unique($candidates) as $partNo) {
+            $text = $this->specText($label, $partNo);
+
+            if ($text !== null) {
+                return $text;
+            }
+        }
+
+        return null;
     }
 }

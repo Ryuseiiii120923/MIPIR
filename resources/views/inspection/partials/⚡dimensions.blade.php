@@ -20,7 +20,7 @@ new class extends Component
     public ?int $activeModalIndex = null;
     public string $modalStep = 'choose';
     public int $pendingSets = 1;
-    public int $moldingDieNo = 0;
+    public int|string $moldingDieNo = 0;
     public array $limitsByItem = [];
 
     public function mount(
@@ -29,7 +29,7 @@ new class extends Component
         string $action,
         int $ppfno,
         string $partNo,
-        int $moldingDieNo
+        int|string $moldingDieNo
     ): void {
         $this->selectedCheckTime = $selectedCheckTime;
         $this->ppfNumber = $ppfno;

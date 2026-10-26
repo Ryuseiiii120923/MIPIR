@@ -5,66 +5,61 @@ namespace App\Inspection\Services\Excel;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
-/**
- * Refreshes Tightened Gap-Offset Excel workbooks from the database.
- *
- * F00VE parts use InsertTightenedGapF00VE; other parts use
- * InsertTightenedGapOring.
- */
 class TightenedGapOffsetRefresher
 {
-    private const DIM_ITEM = 'Gap-Offset';
+    private const DIM_ITEM   = 'Gap-Offset';  
+    private const DIM_ITEM_Y = 'Gap-Offset (Y)';
 
     public function refresh(int $ppf): void
     {
         try {
             $source = app(MipirSourceData::class);
-            $header = $source->header($ppf);
+            $group  = $source->groupContext($ppf);
 
-            if ($header === null) {
+            if ($group === null) {
                 return;
             }
 
-            $gap = $source->dimensions($ppf, self::DIM_ITEM);
-
-            if ($gap->isEmpty()) {
-                return;
-            }
-
-            $partNo = $header['partNo'];
-            $isF00VE = str_starts_with(strtoupper($partNo), 'F00VE');
-
+            $isF00VE = str_starts_with(strtoupper($group['basePartNo']), 'F00VE');
             $allRows = [];
 
-            foreach ($gap->filter(fn ($r) => $source->isTightened($r))->groupBy(fn ($r) => (string) $r->Checktime) as $checkTime => $rows) {
-                $measurements = ['0' => [], '90' => []];
+            foreach ($group['headers'] as $groupPpf => $header) {
+                $x = $source->dimensions($groupPpf, self::DIM_ITEM)
+                    ->filter(fn($r) => $source->isTightened($r))
+                    ->groupBy(fn($r) => (string) $r->Checktime);
 
-                foreach ($rows as $row) {
-                    $angle = $this->angleOf($row);
-                    $measurements[$angle] = array_merge($measurements[$angle], $source->measurements($row));
+                $y = $source->dimensions($groupPpf, self::DIM_ITEM_Y)
+                    ->filter(fn($r) => $source->isTightened($r))
+                    ->groupBy(fn($r) => (string) $r->Checktime);
+
+                foreach ($x->keys()->merge($y->keys())->unique() as $checkTime) {
+                    $xRows = $x->get($checkTime, collect());
+                    $yRows = $y->get($checkTime, collect());
+                    $first = $xRows->first() ?? $yRows->first();
+
+                    $allRows[] = [
+                        'lotNo'         => $header['lotNo'],
+                        'machineNo'     => $header['machineNo'],
+                        'inspector'     => $header['inspector'],
+                        'checkTime'     => (string) $checkTime,
+                        'remarks'       => $header['remarks'][(string) $checkTime] ?? '',
+                        'judgement'     => $this->judgementOf($xRows->concat($yRows)),
+                        'specification' => (string) ($first->Specs ?? ''),
+                        'controlLimit'  => (string) ($first->CL ?? ''),
+                        'measurements'  => [
+                            '0'  => $yRows->flatMap(fn($r) => $source->measurements($r))->values()->all(),
+                            '90' => $xRows->flatMap(fn($r) => $source->measurements($r))->values()->all(),
+                        ],
+                    ];
                 }
-
-                $first = $rows->first();
-
-                $allRows[] = [
-                    'checkTime' => (string) $checkTime,
-                    'remarks' => $header['remarks'][(string) $checkTime] ?? '',
-                    'judgement' => $this->judgementOf($rows),
-                    'specification' => (string) ($first->Specs ?? ''),
-                    'controlLimit' => (string) ($first->CL ?? ''),
-                    'measurements' => $measurements,
-                ];
             }
 
             $context = [
-                'ppf' => $ppf,
-                'partNo' => $partNo,
-                'moldNo' => $header['moldNo'],
-                'machineNo' => $header['machineNo'],
-                'lotNo' => $header['lotNo'],
-                'inspector' => $header['inspector'],
-                'spec' => $allRows[0]['specification'] ?? '',
-                'limit' => $allRows[0]['controlLimit'] ?? '',
+                'partNo'     => $group['partNo'],
+                'basePartNo' => $group['basePartNo'],
+                'moldNo'     => $group['moldNo'],
+                'spec'       => $allRows[0]['specification'] ?? '',
+                'limit'      => $allRows[0]['controlLimit'] ?? '',
             ];
 
             if ($isF00VE) {
@@ -76,27 +71,22 @@ class TightenedGapOffsetRefresher
             Log::error('Tightened Gap-Offset Excel failed', [
                 'PPFNo' => $ppf,
                 'error' => $e->getMessage(),
-                'at' => $e->getFile() . ':' . $e->getLine(),
+                'at'    => $e->getFile() . ':' . $e->getLine(),
             ]);
         }
     }
 
-    /**
-     * ASSUMPTION: tblDimensionMeasure.Set tells the 0 deg (measurements_y)
-     * rows from the 90 deg (measurements) rows. Adjust here if it differs.
-     */
-    private function angleOf($row): string
-    {
-        return in_array(strtoupper(trim((string) $row->Set)), ['0', 'Y'], true) ? '0' : '90';
-    }
-
-    /** Worst judgement wins; otherwise the first non-empty value. */
     private function judgementOf($rows): ?string
     {
-        $judges = $rows->map(fn ($r) => trim((string) $r->Judge))->filter(fn ($j) => $j !== '')->values();
+        $judges = $rows
+            ->map(fn($r) => strtoupper(trim((string) $r->Judge)))
+            ->filter(fn($j) => $j !== '')
+            ->values();
 
-        $bad = $judges->first(fn ($j) => in_array(strtoupper($j), ['X', 'NG'], true));
+        if ($judges->isEmpty()) {
+            return null;
+        }
 
-        return $bad ?? $judges->first();
+        return $judges->contains(fn($j) => in_array($j, ['X', 'NG', '1'], true)) ? 'X' : 'O';
     }
 }
