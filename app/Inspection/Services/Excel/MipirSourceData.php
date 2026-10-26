@@ -164,13 +164,6 @@ class MipirSourceData
             ->unique()
             ->values()
             ->all();
-        Log::info('Tightened group context', [
-            'requestedPpf' => $ppf,
-            'groupPpfs'    => array_keys($headers),
-            'partNos'      => $partNos,
-            'bases'        => array_map(fn($p) => PartNumber::base($p), $partNos),
-            'moldNos'      => $moldNos,
-        ]);
         return [
             'headers'    => $headers,
             'partNos'    => $partNos,
@@ -179,24 +172,4 @@ class MipirSourceData
             'moldNo'     => $moldNos[0] ?? '',
         ];
     }
-
-    public function sairBase(int $ppf): string
-{
-    $partNos = [];
-
-    foreach ($this->groupPpfs($ppf) as $groupPpf) {
-        $header = $this->header($groupPpf);
-
-        if ($header !== null) {
-            $partNos[] = $header['partNo'];
-        }
-    }
-
-    if ($partNos === []) {
-        $header = $this->header($ppf);
-        $partNos = $header !== null ? [$header['partNo']] : [];
-    }
-
-    return PartNumber::sairBase($partNos);
-}
 }
