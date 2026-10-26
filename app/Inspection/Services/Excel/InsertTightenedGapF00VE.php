@@ -12,23 +12,11 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-/**
- * Offset checking sheet for F00VE.
- *
- * Template shape (Sheet1, data rows 8..133):
- *   - one BLOCK = 6 rows = one lot: Machine No. (A), Lot Number (B) and Inspectors (S) are merged over the 6 rows
- *   - a block holds up to 3 CHECKS of 2 rows each: Check time (C, merged over 2 rows),
- *     row 1 = 0° (Y-axis), row 2 = 90° (X-axis), 12 readings in E..P (cavities in row 7)
- *   - Q/R = Ave / max labels and their formulas, Remarks (T) is one cell per row
- *
- * For ExpandsSheet a block is one "record" (rowsPerRecord = 6), so rows are always added a whole
- * block at a time and the A/B/S merges of the last block are copied as they are.
- */
 class InsertTightenedGapF00VE
 {
     use ExpandsSheet, GroupsExcelFiles;
 
-    private const TEMPLATE = 'app/excel-template/tightened-monitoring/F00VE24009 & F00VE2406S-01.xlsx';
+    private const TEMPLATE = 'app/excel-template/tightened-monitoring/F00VE24009 & F00VE24009N AE.xlsx';
 
     private const OUTPUT_ROOT = 'app/exports/tightened-monitoring/Offset-Checking(F00VE)';
 
@@ -39,6 +27,7 @@ class InsertTightenedGapF00VE
 
     private const LOCATIONS = ['0', '90'];
 
+    private const NAME_PREFIX = 'Offset Checking (F00VE) - ';
 
     private const NORMALIZE_LOCATION_LABELS = true;
     private const LOCATION_LABELS = ['0 º(Y-axis)', '90 º(X-axis)'];
@@ -325,32 +314,40 @@ class InsertTightenedGapF00VE
 
     private function fileName(array $context): string
     {
-        return "Offset Checking (F00VE) - {$this->groupStem($context)}.xlsx";
+        return $this->groupFileName(self::NAME_PREFIX, $context);
     }
 
     private function partDirectory(string $partNo): string
     {
-        $folder = trim((string) preg_replace('/[^A-Za-z0-9._ -]+/', '_', $partNo), ' ._');
-        $folder = $folder !== '' ? $folder : 'UNKNOWN';
-
-        $directory = storage_path(self::OUTPUT_ROOT) . DIRECTORY_SEPARATOR . $folder;
+        $directory = $this->familyDirectory(self::OUTPUT_ROOT, $partNo);
         File::ensureDirectoryExists($directory);
 
         return $directory;
     }
 
     private function deleteStaleFiles(array $context): void
-{
-    File::delete(File::glob(storage_path(self::OUTPUT_ROOT) . '/*/' . $this->fileName($context)) ?: []);
-}
+    {
+        File::delete($this->familyFiles(
+            $this->familyDirectory(self::OUTPUT_ROOT, (string) $context['basePartNo']),
+            self::NAME_PREFIX,
+            $context
+        ));
+    }
 
-private function save(Spreadsheet $spreadsheet, array $context): string
-{
-    $path = $this->partDirectory((string) $context['basePartNo']) . DIRECTORY_SEPARATOR . $this->fileName($context);
+    private function save(Spreadsheet $spreadsheet, array $context): string
+    {
+        $dir  = $this->partDirectory((string) $context['basePartNo']);
+        $path = $dir . DIRECTORY_SEPARATOR . $this->fileName($context);
 
-    IOFactory::createWriter($spreadsheet, 'Xlsx')->save($path);
-    $spreadsheet->disconnectWorksheets();
+        IOFactory::createWriter($spreadsheet, 'Xlsx')->save($path);
+        $spreadsheet->disconnectWorksheets();
 
-    return $path;
-}
+        foreach ($this->familyFiles($dir, self::NAME_PREFIX, $context) as $old) {
+            if ($old !== $path) {
+                File::delete($old);
+            }
+        }
+
+        return $path;
+    }
 }

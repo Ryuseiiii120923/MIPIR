@@ -19,6 +19,7 @@ use Livewire\Component;
 use Livewire\WithFileUploads;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use App\Inspection\Services\Excel\MipirRecordRefresher;
+use App\Inspection\Services\Excel\TightenedGapOffsetRefresher;
 
 new class extends Component
 {
@@ -465,7 +466,8 @@ new class extends Component
                 $this->writeCheckTime($time);
             }
         });
-        app(MipirRecordRefresher::class)->refresh($this->ppf);
+        Log::info('here');
+        app(TightenedGapOffsetRefresher::class)->refresh($this->ppf);
         app(PpfLookUpRepository::class)->forgetMainData($this->ppf);
         $this->notifyReload('success', 'Updated Successfully');
 
@@ -493,7 +495,7 @@ new class extends Component
                 app(DeleteInspection::class)->executeGapOffset($this->ppf);
             });
 
-            app(MipirRecordRefresher::class)->refresh($this->ppf);
+           app(TightenedGapOffsetRefresher::class)->refresh($this->ppf);
             app(PpfLookUpRepository::class)->forgetMainData($this->ppf);
 
             $this->notifyReload('success', 'Gap-Offset measurements deleted successfully.');

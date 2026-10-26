@@ -164,13 +164,6 @@ class MipirSourceData
             ->unique()
             ->values()
             ->all();
-        Log::info('Tightened group context', [
-            'requestedPpf' => $ppf,
-            'groupPpfs'    => array_keys($headers),
-            'partNos'      => $partNos,
-            'bases'        => array_map(fn($p) => PartNumber::base($p), $partNos),
-            'moldNos'      => $moldNos,
-        ]);
         return [
             'headers'    => $headers,
             'partNos'    => $partNos,
@@ -178,6 +171,19 @@ class MipirSourceData
             'basePartNo' => PartNumber::base($partNos[0] ?? ''),
             'moldNo'     => $moldNos[0] ?? '',
         ];
+    }
+
+    public function partNoLabel(array $partNos, string $fallback = ''): string
+    {
+        $list = collect($partNos)
+            ->map(fn($p) => trim((string) $p))
+            ->filter()
+            ->unique()
+            ->sort(fn($a, $b) => [strlen($a), $a] <=> [strlen($b), $b])
+            ->values()
+            ->all();
+
+        return $list === [] ? $fallback : implode(' / ', $list);
     }
 
     public function sairBase(int $ppf): string

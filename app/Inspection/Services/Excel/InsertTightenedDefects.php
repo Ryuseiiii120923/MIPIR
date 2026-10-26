@@ -109,6 +109,13 @@ class InsertTightenedDefects
 
             $this->mergePartNo($sheet, $partNo);
 
+            $path = $this->renameFileForPartNumbers(
+                $path,
+                $sheet,
+                $dir,
+                $stem
+            );
+
             $sheet->setCellValue($labelCol . self::LOT_ROW, 'Lot No.: ' . $lotNo);
 
             $confirmedBy = trim((string) ($context['confirmedBy'] ?? ''));
@@ -167,6 +174,42 @@ class InsertTightenedDefects
             flock($lock, LOCK_UN);
             fclose($lock);
         }
+    }
+
+    private function renameFileForPartNumbers(
+        string $path,
+        Worksheet $sheet,
+        string $dir,
+        string $stem
+    ): string {
+        $text = trim((string) $sheet->getCell('I4')->getValue());
+
+        $partNumbers = trim(
+            (string) preg_replace('/^Part Number:?\s*/i', '', $text)
+        );
+
+        $partNumbers = $this->safeName($partNumbers);
+
+        $extension = pathinfo($path, PATHINFO_EXTENSION);
+        $newName = "SAIR_{$stem}_{$partNumbers}_" . now()->format('Y-m-d') . ".{$extension}";
+        $newPath = $dir . DIRECTORY_SEPARATOR . $newName;
+
+        if (realpath($path) === realpath($newPath)) {
+            return $path;
+        }
+
+        if (file_exists($newPath)) {
+            $newPath = $dir . DIRECTORY_SEPARATOR
+                . pathinfo($newName, PATHINFO_FILENAME)
+                . '_' . now()->format('His')
+                . '.' . $extension;
+        }
+
+        if (file_exists($path)) {
+            File::move($path, $newPath);
+        }
+
+        return $newPath;
     }
 
     private function mergePartNo(Worksheet $sheet, string $partNo): void
@@ -257,33 +300,6 @@ class InsertTightenedDefects
         return null;
     }
 
-    private function resolveSlot(Worksheet $sheet, string $lotNo, bool $createIfMissing): ?array
-    {
-        $firstEmpty = null;
-
-        foreach (self::SLOTS as $slot) {
-            $text = trim((string) $sheet->getCell($slot[0] . self::LOT_ROW)->getValue());
-            $existing = trim((string) preg_replace('/^Lot No\.?:?/i', '', $text));
-
-            if ($existing === $lotNo) {
-                return $slot;
-            }
-
-            if ($existing === '' && $firstEmpty === null) {
-                $firstEmpty = $slot;
-            }
-        }
-
-        if (! $createIfMissing) {
-            return null;
-        }
-
-        if ($firstEmpty === null) {
-            throw new RuntimeException('All 9 lot columns of this SAIR file are already used.');
-        }
-
-        return $firstEmpty;
-    }
 
     private function fillHeader(Worksheet $sheet, array $context): void
     {
@@ -295,18 +311,6 @@ class InsertTightenedDefects
     }
 
 
-    private function findExisting(string $dir, string $partNo): ?string
-    {
-        $prefix = "SAIR_{$partNo}_";
-
-        $files = collect(File::files($dir))
-            ->filter(fn($f) => str_starts_with($f->getFilename(), $prefix) && $f->getExtension() === 'xls')
-            ->map(fn($f) => $f->getPathname())
-            ->sort()
-            ->values();
-
-        return $files->first();
-    }
 
     private function safeName(string $value): string
     {

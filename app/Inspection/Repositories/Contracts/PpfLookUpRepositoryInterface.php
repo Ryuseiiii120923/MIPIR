@@ -11,7 +11,7 @@ interface PpfLookUpRepositoryInterface
     public function getCavity(string $partNo): ?int;
     public function getNQR(string $partNo, string $moldNo);
     public function getNQRSeihin(string $partNo, string $moldNo);
-    public function isExist(int $ppf): bool;
+    public function isExist(string $ppf): bool;
 
     public function getMainData(int $ppf): ?array;
 }

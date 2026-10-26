@@ -35,7 +35,7 @@ new class extends Component
         $this->ppfNumber = $ppfno;
         $this->partNo = $partNo;
         $this->moldingDieNo = $moldingDieNo;
-        $this->rows = !empty($loadedRows) ? $loadedRows : [
+        $this->rows = !empty($loadedRows) ? $this->service()->normalizeRows($loadedRows) : [
             [
                 'item' => '',
                 'editable' => true,

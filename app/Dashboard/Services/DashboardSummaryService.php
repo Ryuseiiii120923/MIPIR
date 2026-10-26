@@ -156,11 +156,9 @@ class DashboardSummaryService
         return $values;
     }
 
-    private function number(mixed $value): string
+    private function number(mixed $value, int $decimals = 3): string
     {
-        $s = (string) $value;
-
-        return str_contains($s, '.') ? rtrim(rtrim($s, '0'), '.') : $s;
+        return number_format((float) $value, $decimals, '.', '');
     }
 
     private function overallJudge(Collection $judges): ?string

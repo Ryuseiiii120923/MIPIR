@@ -2,7 +2,6 @@
 
 namespace App\Inspection\Services\Excel;
 
-use App\Inspection\Support\PartNumber;
 use App\Traits\ExpandsSheet;
 use App\Traits\GroupsExcelFiles;
 use Illuminate\Support\Collection;
@@ -20,6 +19,7 @@ class InsertTightenedFlash
     private const FIRST_BLOCK_COLUMN = 4;
     private const READINGS_PER_BLOCK = 5;
     private const SHEET_SIZES = [2, 4, 5, 6, 10, 12];
+    private const NAME_PREFIX = 'Flash Thickness - ';
 
     private const LAYOUTS = [
         2 => [
@@ -66,7 +66,7 @@ class InsertTightenedFlash
         $sheet = $spreadsheet->getActiveSheet();
 
         foreach ($layout as $section) {
-            $this->fillHeader($sheet, $section, $header, app(PartNumber::class)->partNumbers($context,$rows));
+            $this->fillHeader($sheet, $section, $header);
         }
 
         $extra = max(0, $records->count() - $this->pageCapacity($layout));
@@ -181,11 +181,11 @@ class InsertTightenedFlash
         throw new \RuntimeException("No Flash Thickness template supports {$blockCount} blocks (max 12).");
     }
 
-    private function fillHeader(Worksheet $sheet, array $section, array $header, array $partNos): void
+    private function fillHeader(Worksheet $sheet, array $section, array $header): void
     {
         $sheet->setCellValue(
             $section['part'],
-            rtrim((string) $sheet->getCell($section['part'])->getValue()) . ' ' . implode('/', $partNos)
+            rtrim((string) $sheet->getCell($section['part'])->getValue()) . ' ' . $header['partNo']
         );
 
         $sheet->setCellValue(
@@ -206,16 +206,6 @@ class InsertTightenedFlash
         $sheet->setCellValue($section['checkedBy'], $header['confirmedBy'] ?? '');
     }
 
-    private function partNumbers(array $context, array $rows): array
-    {
-        return collect($rows)
-            ->map(fn(array $row) => trim((string) ($row['partNo'] ?? $context['partNo'] ?? '')))
-            ->prepend(trim((string) ($context['partNo'] ?? '')))
-            ->filter(fn($p) => $p !== '')
-            ->unique()
-            ->values()
-            ->all();
-    }
 
     private function fillRows(Worksheet $sheet, array $section, Collection $records): void
     {
@@ -234,15 +224,12 @@ class InsertTightenedFlash
 
     private function fileName(array $context): string
     {
-        return "Flash Thickness - {$this->groupStem($context)}.xlsx";
+        return $this->groupFileName(self::NAME_PREFIX, $context);
     }
 
     private function partDirectory(string $partNo): string
     {
-        $folder = trim((string) preg_replace('/[^A-Za-z0-9._ -]+/', '_', $partNo), ' ._');
-        $folder = $folder !== '' ? $folder : 'UNKNOWN';
-
-        $directory = storage_path(self::OUTPUT_ROOT) . DIRECTORY_SEPARATOR . $folder;
+        $directory = $this->familyDirectory(self::OUTPUT_ROOT, $partNo);
         File::ensureDirectoryExists($directory);
 
         return $directory;
@@ -250,17 +237,26 @@ class InsertTightenedFlash
 
     private function deleteStaleFiles(array $context): void
     {
-        $pattern = storage_path(self::OUTPUT_ROOT) . '/*/' . $this->fileName($context);
-
-        File::delete(File::glob($pattern) ?: []);
+        File::delete($this->familyFiles(
+            $this->familyDirectory(self::OUTPUT_ROOT, (string) $context['basePartNo']),
+            self::NAME_PREFIX,
+            $context
+        ));
     }
 
     private function save(Spreadsheet $spreadsheet, array $context): string
     {
-        $path = $this->partDirectory((string) $context['basePartNo']) . DIRECTORY_SEPARATOR . $this->fileName($context);
+        $dir  = $this->partDirectory((string) $context['basePartNo']);
+        $path = $dir . DIRECTORY_SEPARATOR . $this->fileName($context);
 
         IOFactory::createWriter($spreadsheet, 'Xlsx')->save($path);
         $spreadsheet->disconnectWorksheets();
+
+        foreach ($this->familyFiles($dir, self::NAME_PREFIX, $context) as $old) {
+            if ($old !== $path) {
+                File::delete($old);
+            }
+        }
 
         return $path;
     }
@@ -272,7 +268,6 @@ class InsertTightenedFlash
             : '';
     }
 
-    /** Row offset of an existing (Lot No, Check Time) entry, or null. */
     private function findRowIndex(Worksheet $sheet, array $section, array $record): ?int
     {
         for ($row = $section['firstRow']; $row <= $section['lastRow']; $row++) {
@@ -287,7 +282,6 @@ class InsertTightenedFlash
         return null;
     }
 
-    /** Row offset of the first unused row, or null when the sheet is full. */
     private function firstEmptyIndex(Worksheet $sheet, array $section): ?int
     {
         for ($row = $section['firstRow']; $row <= $section['lastRow']; $row++) {
