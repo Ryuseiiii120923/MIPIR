@@ -466,7 +466,6 @@ new class extends Component
                 $this->writeCheckTime($time);
             }
         });
-        Log::info('here');
         app(TightenedGapOffsetRefresher::class)->refresh($this->ppf);
         app(PpfLookUpRepository::class)->forgetMainData($this->ppf);
         $this->notifyReload('success', 'Updated Successfully');
