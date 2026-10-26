@@ -1,7 +1,9 @@
 <?php
 
+use App\Domain\Master\MoldingPlan;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -15,6 +17,7 @@ new class extends Component
     public string $searchTightened = '';
     public string $searchExports = '';
     public string $exportPath = '';
+    public string $moldingDie = '';
 
     private const PER_PAGE = 5;
 
@@ -32,8 +35,75 @@ new class extends Component
         $this->resetPage('xbarPage');
     }
 
+    public function updatingMoldingDie(): void
+    {
+        $this->resetPage('mipirPage');
+        $this->resetPage('tightenedPage');
+        $this->resetPage('xbarPage');
+        $this->resetPage('exportsPage');
+    }
+
+    /** Lahat ng molding die sa Molding Plan, distinct, naka-cache para hindi mag-query kada type. */
+    private function allMolds(): array
+    {
+        return Cache::remember('reports-browser.molds', now()->addMinutes(30), function () {
+            return MoldingPlan::query()
+                ->whereNotNull('金型NO')
+                ->distinct()
+                ->pluck('金型NO')
+                ->map(fn($v) => trim((string) $v))
+                ->filter()
+                ->unique()
+                ->sort(SORT_NATURAL | SORT_FLAG_CASE)
+                ->values()
+                ->all();
+        });
+    }
+
+    public function getMoldSuggestionsProperty(): array
+    {
+        $needle = $this->normalizeMold($this->moldingDie);
+
+        return collect($this->allMolds())
+            ->when($needle !== '', fn($c) => $c->filter(
+                fn($m) => str_contains($this->normalizeMold($m), $needle)
+            ))
+            ->take(15)
+            ->values()
+            ->all();
+    }
+
+    /** "MD-123" at "md 123" ay parehong "md123" */
+    private function normalizeMold(string $value): string
+    {
+        return strtolower((string) preg_replace('/[^A-Za-z0-9]+/', '', $value));
+    }
+
+    private function matchesMold(string $haystack): bool
+    {
+        $needle = $this->normalizeMold($this->moldingDie);
+
+        return $needle === '' || str_contains($this->normalizeMold($haystack), $needle);
+    }
+
+    /** May file ba sa loob ng folder (kahit anong lalim) na tugma sa molding die? */
+    private function folderHasMold(string $name): bool
+    {
+        $dir = $this->resolveExportDir($this->joinExportPath($name));
+
+        if ($dir === null) {
+            return false;
+        }
+
+        return collect(File::allFiles($dir))
+            ->reject(fn($f) => $this->isHiddenFile($f->getFilename()))
+            ->contains(fn($f) => $this->matchesMold($f->getFilename()));
+    }
+
     public function loadFiles(): void
     {
+        Cache::forget('reports-browser.molds');
+
         $this->resetPage('mipirPage');
         $this->resetPage('tightenedPage');
         $this->resetPage('xbarPage');
@@ -81,6 +151,8 @@ new class extends Component
             $files = $files->filter(fn($f) => str_contains(strtolower($f['name']), strtolower($this->searchMipir)))->values();
         }
 
+        $files = $files->filter(fn($f) => $this->matchesMold($f['name']))->values();
+
         return $this->paginateCollection($files, 'mipirPage');
     }
 
@@ -91,6 +163,8 @@ new class extends Component
         if ($this->searchXbar !== '') {
             $files = $files->filter(fn($f) => str_contains(strtolower($f['name']), strtolower($this->searchXbar)))->values();
         }
+
+        $files = $files->filter(fn($f) => $this->matchesMold($f['name']))->values();
 
         return $this->paginateCollection($files, 'xbarPage');
     }
@@ -108,6 +182,8 @@ new class extends Component
                 ->filter(fn($f) => str_contains(strtolower($f['relative']), strtolower($this->searchTightened)))
                 ->values();
         }
+
+        $files = $files->filter(fn($f) => $this->matchesMold($f['relative']))->values();
 
         return $this->paginateCollection($files, 'tightenedPage');
     }
@@ -300,6 +376,14 @@ new class extends Component
                 ->values();
         }
 
+        if ($this->moldingDie !== '') {
+            $items = $items
+                ->filter(fn($i) => $i['type'] === 'file'
+                    ? $this->matchesMold($i['name'])
+                    : $this->folderHasMold($i['name']))
+                ->values();
+        }
+
         return $this->paginateCollection($items, 'exportsPage');
     }
 };
@@ -311,10 +395,30 @@ new class extends Component
             <h2 class="text-lg font-semibold text-gray-900">Generated Reports</h2>
             <p class="text-sm text-gray-500">MIPIR Excel records, tightened defect sheets, and XBar PDF reports</p>
         </div>
-        <button wire:click="loadFiles" type="button"
-            class="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1">
-            <i class="ti ti-refresh"></i> Refresh
-        </button>
+        <div class="flex items-center gap-4">
+            <div class="relative">
+                <input type="text" wire:model.live.debounce.400ms="moldingDie"
+                    list="mold-suggestions" autocomplete="off"
+                    placeholder="Filter by molding die..."
+                    class="text-sm rounded-lg border border-gray-300 pl-3 pr-8 py-1.5 w-60">
+                <datalist id="mold-suggestions">
+                    @foreach ($this->moldSuggestions as $mold)
+                    <option value="{{ $mold }}"></option>
+                    @endforeach
+                </datalist>
+                @if ($moldingDie !== '')
+                <button type="button" wire:click="$set('moldingDie', '')"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    title="Clear">
+                    <i class="ti ti-x text-sm"></i>
+                </button>
+                @endif
+            </div>
+            <button wire:click="loadFiles" type="button"
+                class="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1">
+                <i class="ti ti-refresh"></i> Refresh
+            </button>
+        </div>
     </div>
 
     {{-- MIPIR Excel Files --}}
