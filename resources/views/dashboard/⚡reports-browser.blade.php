@@ -43,7 +43,6 @@ new class extends Component
         $this->resetPage('exportsPage');
     }
 
-    /** Lahat ng molding die sa Molding Plan, distinct, naka-cache para hindi mag-query kada type. */
     private function allMolds(): array
     {
         return Cache::remember('reports-browser.molds', now()->addMinutes(30), function () {
@@ -73,7 +72,6 @@ new class extends Component
             ->all();
     }
 
-    /** "MD-123" at "md 123" ay parehong "md123" */
     private function normalizeMold(string $value): string
     {
         return strtolower((string) preg_replace('/[^A-Za-z0-9]+/', '', $value));
@@ -86,7 +84,6 @@ new class extends Component
         return $needle === '' || str_contains($this->normalizeMold($haystack), $needle);
     }
 
-    /** May file ba sa loob ng folder (kahit anong lalim) na tugma sa molding die? */
     private function folderHasMold(string $name): bool
     {
         $dir = $this->resolveExportDir($this->joinExportPath($name));

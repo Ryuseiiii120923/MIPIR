@@ -55,6 +55,9 @@ new class extends Component
     public bool $showDeleteModal = false;
     public ?int $deletingId = null;
     public string $deletingLabel = '';
+    public array $selected = [];
+    public bool $showBulkDeleteModal = false;
+    public array $bulkLabels = [];
 
     public function openLimits(int $recNo, DimensionEncodingService $service): void
     {
@@ -165,11 +168,13 @@ new class extends Component
 
     public function updatedSearchPartNo(): void
     {
+        $this->selected = [];
         $this->resetPage();
     }
 
     public function updatedSearchDimension(): void
     {
+        $this->selected = [];
         $this->resetPage();
     }
     protected function rules(): array
@@ -326,7 +331,11 @@ new class extends Component
         }
 
         try {
-            $service->delete($this->deletingId);
+            $deletedId = $this->deletingId;
+
+            $service->delete($deletedId);
+
+            $this->selected = array_values(array_filter($this->selected, fn($s) => (int) $s !== $deletedId));
 
             $this->cancelDelete();
             unset($this->dimensions);
@@ -349,6 +358,119 @@ new class extends Component
 
             $this->cancelDelete();
             $this->notifyFail('Failed', 'Failed to delete dimension. Please try again.');
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Multi-select delete
+    // ------------------------------------------------------------------
+
+    /** Piliin / alisin lahat ng nasa kasalukuyang page. */
+    public function toggleSelectPage(): void
+    {
+        $pageIds = $this->dimensions->getCollection()
+            ->pluck('RecNo')
+            ->map(fn($id) => (string) $id)
+            ->all();
+
+        $allSelected = $pageIds !== [] && array_diff($pageIds, $this->selected) === [];
+
+        $this->selected = $allSelected
+            ? array_values(array_diff($this->selected, $pageIds))
+            : array_values(array_unique(array_merge($this->selected, $pageIds)));
+    }
+
+    public function clearSelection(): void
+    {
+        $this->selected = [];
+    }
+
+    /** @return int[] */
+    private function selectedIds(): array
+    {
+        return array_values(array_unique(array_filter(array_map('intval', $this->selected))));
+    }
+
+    public function confirmBulkDelete(DimensionEncodingService $service): void
+    {
+        $ids = $this->selectedIds();
+
+        if ($ids === []) {
+            return;
+        }
+
+        $labels = [];
+
+        foreach (array_slice($ids, 0, 8) as $id) {
+            $dim = $service->find($id);
+
+            if ($dim !== null) {
+                $labels[] = "{$dim['partNo']} / Dim {$dim['dimensionNo']} - {$dim['dimensionName']}";
+            }
+        }
+
+        if (count($ids) > 8) {
+            $labels[] = '... and ' . (count($ids) - 8) . ' more';
+        }
+
+        $this->bulkLabels = $labels;
+        $this->showBulkDeleteModal = true;
+    }
+
+    public function cancelBulkDelete(): void
+    {
+        $this->showBulkDeleteModal = false;
+        $this->bulkLabels = [];
+    }
+
+    public function deleteSelected(DimensionEncodingService $service): void
+    {
+        $ids = $this->selectedIds();
+
+        if ($ids === []) {
+            $this->cancelBulkDelete();
+            return;
+        }
+
+        $deleted = 0;
+        $failed  = [];
+
+        foreach ($ids as $id) {
+            try {
+                $service->delete($id);
+                $deleted++;
+            } catch (\DomainException $e) {
+                $failed[$id] = $e->getMessage();
+            } catch (\Throwable $e) {
+                Log::error('Dimension encoding bulk delete failed', [
+                    'rec_no' => $id,
+                    'error'  => $e->getMessage(),
+                ]);
+
+                $failed[$id] = 'Unexpected error.';
+            }
+        }
+
+        $this->cancelBulkDelete();
+
+        // ang hindi nabura ay mananatiling naka-select
+        $this->selected = array_map('strval', array_keys($failed));
+        unset($this->dimensions);
+
+        if ($this->dimensions->isEmpty() && $this->getPage() > 1) {
+            $this->previousPage();
+            unset($this->dimensions);
+        }
+
+        if ($deleted > 0) {
+            $this->notifySuccess('Deleted', "{$deleted} dimension(s) removed");
+        }
+
+        if ($failed !== []) {
+            $this->notifyFail(
+                'Some Not Deleted',
+                count($failed) . ' could not be deleted: ' . implode('; ', array_unique($failed))
+            );
         }
     }
 
@@ -433,9 +555,42 @@ new class extends Component
                 </button>
             </div>
 
+            @php
+            $pageIds = $this->dimensions->getCollection()->pluck('RecNo')->map(fn($id) => (string) $id)->all();
+            $allSelected = $pageIds !== [] && array_diff($pageIds, $selected) === [];
+            @endphp
+
+            @if (count($selected) > 0)
+            <div class="px-4 py-2 bg-red-50 border-y border-red-100 flex items-center justify-between">
+                <p class="text-sm text-red-700">
+                    <span class="font-medium">{{ count($selected) }}</span> selected
+                </p>
+                <div class="flex items-center gap-2">
+                    <button type="button" wire:click="clearSelection"
+                        class="px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                        Clear
+                    </button>
+                    <button type="button"
+                        wire:click="confirmBulkDelete"
+                        wire:loading.attr="disabled"
+                        wire:target="confirmBulkDelete"
+                        class="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-1">
+                        <i class="ti ti-trash text-sm"></i> Delete selected
+                    </button>
+                </div>
+            </div>
+            @endif
+
             <table class="w-full text-sm text-left text-gray-700">
                 <thead class="text-sm bg-gray-50 border-b border-t border-gray-200">
                     <tr>
+                        <th scope="col" class="ps-4 pe-2 py-3 w-10">
+                            <label class="sr-only" for="select-page">Select all on this page</label>
+                            <input type="checkbox" id="select-page"
+                                wire:click="toggleSelectPage"
+                                @checked($allSelected)
+                                class="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500">
+                        </th>
                         <th scope="col" class="px-6 py-3 font-medium">Part No</th>
                         <th scope="col" class="px-6 py-3 font-medium">Dim No</th>
                         <th scope="col" class="px-6 py-3 font-medium">Symbol</th>
@@ -452,7 +607,16 @@ new class extends Component
                 </thead>
                 <tbody class="divide-y divide-gray-200">
                     @forelse ($this->dimensions as $dim)
-                    <tr wire:key="dim-{{ $dim->RecNo }}" class="hover:bg-gray-50">
+                    @php $isSelected = in_array((string) $dim->RecNo, $selected, true); @endphp
+                    <tr wire:key="dim-{{ $dim->RecNo }}" class="hover:bg-gray-50 {{ $isSelected ? 'bg-red-50/50' : '' }}">
+                        <td class="ps-4 pe-2 py-3 w-10">
+                            <input type="checkbox"
+                                wire:model.live="selected"
+                                value="{{ $dim->RecNo }}"
+                                @checked($isSelected)
+                                class="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
+                                aria-label="Select dimension {{ $dim->DimensionName }}">
+                        </td>
                         <td class="px-6 py-3">{{ $dim->PartNo }}</td>
                         <td class="px-6 py-3">{{ $dim->DimensionNo }}</td>
                         <td class="px-6 py-3">
@@ -509,7 +673,7 @@ new class extends Component
                     </tr>
                     @empty
                     <tr>
-                        <td colspan="12" class="px-6 py-8 text-center text-sm text-gray-500">
+                        <td colspan="13" class="px-6 py-8 text-center text-sm text-gray-500">
                             No dimensions found.
                         </td>
                     </tr>
@@ -787,6 +951,43 @@ new class extends Component
                     class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">
                     <span wire:loading.remove wire:target="delete">Delete</span>
                     <span wire:loading wire:target="delete">Deleting...</span>
+                </button>
+            </div>
+        </div>
+    </div>
+    @endif
+
+    @if ($showBulkDeleteModal)
+    <div class="fixed inset-0 bg-black/50 flex items-center justify-center p-4"
+        style="z-index: 60;"
+        wire:keydown.escape.window="cancelBulkDelete">
+        <div class="bg-white rounded-xl w-full max-w-md shadow-xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-800">Delete {{ count($selected) }} Dimension(s)</h3>
+            </div>
+
+            <div class="p-6 space-y-2">
+                <p class="text-sm text-gray-700">Are you sure you want to delete the selected dimensions?</p>
+                <ul class="text-sm text-gray-900 list-disc ps-5 space-y-0.5 max-h-48 overflow-y-auto">
+                    @foreach ($bulkLabels as $label)
+                    <li>{{ $label }}</li>
+                    @endforeach
+                </ul>
+                <p class="text-xs text-red-500">This cannot be undone.</p>
+            </div>
+
+            <div class="px-6 py-3 border-t border-gray-200 flex justify-end gap-2">
+                <button type="button" wire:click="cancelBulkDelete"
+                    class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                    Cancel
+                </button>
+                <button type="button"
+                    wire:click="deleteSelected"
+                    wire:loading.attr="disabled"
+                    wire:target="deleteSelected"
+                    class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">
+                    <span wire:loading.remove wire:target="deleteSelected">Delete</span>
+                    <span wire:loading wire:target="deleteSelected">Deleting...</span>
                 </button>
             </div>
         </div>
