@@ -592,7 +592,6 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
     public function getGapOffsetChecktime(int $ppf): array
     {
         return MIPIRDimensionMeasure::where('PPFNo', $ppf)
-            ->whereIn('DimItem', ['Gap-Offset', 'Gap-Offset (Y)'])
             ->distinct()
             ->pluck('Checktime')
             ->all();
