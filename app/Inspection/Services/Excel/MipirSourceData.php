@@ -113,7 +113,7 @@ class MipirSourceData
             ->all();
     }
 
-    private function sameNotationPartNos(string $partNo, string $mdNo): array
+    public function sameNotationPartNos(string $partNo, string $mdNo): array
     {
         $family = app(PartFamily::class);
         $md     = trim($mdNo);

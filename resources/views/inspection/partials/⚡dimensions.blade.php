@@ -723,7 +723,6 @@ new class extends Component
                     </div>
                 </div>
 
-                {{-- X-Bar only: full-width block, no empty grid cell for normal rows --}}
                 @if($isXBar)
                 <div class="mb-4 rounded-xl border border-purple-200 bg-purple-50/40 p-4">
                     <p class="text-sm font-medium text-purple-700 mb-2">X-Bar Control Limits</p>
@@ -734,6 +733,17 @@ new class extends Component
                         :rowIndex="$i"
                         :measurements="$row['measurements'] ?? []"
                         :key="'specs-control-limit-'.$i" />
+
+                    @if(trim($row['item'] ?? '') !== '')
+                    <div class="mt-4 border-t border-purple-200 pt-4">
+                        <p class="text-sm font-medium text-purple-700 mb-2">X-Bar Chart</p>
+                        <livewire:inspection::partials.x-bar-chart
+                            :partNo="$partNo"
+                            :dimItem="$row['item']"
+                            :moldDie="$moldingDieNo"
+                            :key="'x-bar-chart-'.$i.'-'.$row['item'].'-'.$moldingDieNo" />
+                    </div>
+                    @endif
                 </div>
                 @endif
 
@@ -804,22 +814,22 @@ new class extends Component
                 @endfor
             </div>
             @endforeach
-        <hr class="border-gray-200 my-4">
+            <hr class="border-gray-200 my-4">
 
-        {{-- Judgement now INSIDE the card --}}
-        <div class="flex items-center justify-between">
-            <div class="w-40">
-                <label class="text-sm font-medium block mb-1.5">Judgement</label>
-                <input type="text" wire:model="rows.{{ $i }}.judge"
-                    class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2 text-gray-500 text-center"
-                    readonly>
+            {{-- Judgement now INSIDE the card --}}
+            <div class="flex items-center justify-between">
+                <div class="w-40">
+                    <label class="text-sm font-medium block mb-1.5">Judgement</label>
+                    <input type="text" wire:model="rows.{{ $i }}.judge"
+                        class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2 text-gray-500 text-center"
+                        readonly>
+                </div>
+                <button @if($readonly) disabled @endif type="button" class="text-sm text-gray-500 hover:text-gray-700">Clear</button>
             </div>
-            <button @if($readonly) disabled @endif type="button" class="text-sm text-gray-500 hover:text-gray-700">Clear</button>
         </div>
+        @endif
     </div>
-    @endif
-</div>
-@endforeach
+    @endforeach
 </div>
 
 @if($activeModalIndex !== null)
