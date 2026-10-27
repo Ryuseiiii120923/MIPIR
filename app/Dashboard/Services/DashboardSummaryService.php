@@ -11,6 +11,7 @@ use Illuminate\Support\Collection;
 class DashboardSummaryService
 {
     public function __construct(private DashboardSummaryRepository $repo) {}
+    private array $confirmedAt = [];
 
     public function ppfs(string $search, string $mode, string $judge, ?string $plant = null, int $perPage = 10): LengthAwarePaginator
     {
@@ -46,6 +47,7 @@ class DashboardSummaryService
             ->map(fn(Collection $rows, $checkTime) => $this->checkTimeSummary(
                 (string) $checkTime,
                 $rows,
+                (string)$ppf,
                 ...$this->durationFor($durations, (string) $checkTime)
             ))
             ->sortBy('sortKey')
@@ -67,7 +69,7 @@ class DashboardSummaryService
 
         return [
             ...Arr::except(
-                $this->checkTimeSummary($checkTime, $rows, ...$this->durationFor($durations, $checkTime)),
+                $this->checkTimeSummary($checkTime, $rows,(string)$ppf, ...$this->durationFor($durations, $checkTime, (string)$ppf)),
                 'sortKey'
             ),
             'partNo'     => $first->PartNo ?: '-',
@@ -81,6 +83,12 @@ class DashboardSummaryService
         ];
     }
 
+
+
+    private function confirmedAt(string $ppf): ?string
+    {
+        return $this->confirmedAt[$ppf] ??= $this->repo->getTimeConfirm($ppf);
+    }
     // ------------------------------------------------------------------
 
     /**
@@ -90,40 +98,48 @@ class DashboardSummaryService
      *
      * @return array{0: ?string, 1: ?string}
      */
-    private function durationFor(Collection $durations, string $checkTime): array
+    private function durationFor(Collection $durations, string $checkTime, ?string $item = null): array
     {
-        $matches = $durations->filter(
-            fn($d) => property_exists($d, 'Checktime') && trim((string) $d->Checktime) === trim($checkTime)
-        );
+        $matches = $durations->filter(function ($d) use ($checkTime, $item) {
+            if (! property_exists($d, 'Checktime') || trim((string) $d->Checktime) !== trim($checkTime)) {
+                return false;
+            }
+
+            // Only narrow by item when the duration table actually has that column
+            return $item === null
+                || ! property_exists($d, 'DimItem')
+                || trim((string) $d->DimItem) === trim($item);
+        });
 
         return [
             $matches->pluck('StartAt')->filter()->min(),
-            $matches->pluck('EndAt')->filter()->max(),
         ];
     }
 
-    private function checkTimeSummary(string $checkTime, Collection $rows, ?string $start = null, ?string $end = null): array
+    private function checkTimeSummary(string $checkTime, Collection $rows, string $ppf, ?string $start = null, ?string $end = null): array
     {
         $created = $rows->pluck('created_at')->filter()->min();
 
         $start ??= $created;
-        $end   ??= $rows->map(fn($r) => $r->updated_at ?: $r->created_at)->filter()->max();
-        $inspectorsOf = fn($group) => $group->pluck('InspectedBy')->filter()->unique()->implode(', ') ?: '-';
+        $end   ??= $this->confirmedAt($ppf);
 
         return [
             'checkTime' => $checkTime,
             'sortKey'   => (string) $created,
             'dateEnc'   => $this->date($created, 'Y-m-d H:i'),
             'timeStart' => $this->date($start, 'Y-m-d H:i'),
-            'timeEnd'   => $this->date($end, 'Y-m-d H:i'),
+            'timeEnd'   => $this->date((string)$end, 'Y-m-d H:i'),
             'judgement' => $this->overallJudge($rows->pluck('Judge')),
             'mode'      => $this->overallMode($rows->pluck('Mode')),
         ];
     }
 
-    private function dimension(string $item, Collection $rows): array
+    private function dimension(string $item, Collection $rows, ?string $start = null, ?string $end = null): array
     {
         $first = $rows->first();
+        $start ??= $rows->pluck('created_at')->filter()->min();
+        $end   ??= $rows->map(fn($r) => $r->updated_at ?: $r->created_at)->filter()->max();
+
 
         return [
             'item'          => $item,
@@ -132,6 +148,8 @@ class DashboardSummaryService
             'forXBar'       => (bool) $first->ForXBar,
             'mode'          => $this->overallMode($rows->pluck('Mode')),
             'judgement'     => $this->overallJudge($rows->pluck('Judge')),
+            'timeStart'     => $this->date($start, 'Y-m-d H:i'),
+            'timeEnd'       => $this->date($end, 'Y-m-d H:i'),
             'inspector' => $rows->pluck('InspectedBy')->filter()->unique()->implode(', ') ?: '-',
             'sets'          => $rows->sortBy('Set')->map(fn($r) => [
                 'set'       => (int) $r->Set,

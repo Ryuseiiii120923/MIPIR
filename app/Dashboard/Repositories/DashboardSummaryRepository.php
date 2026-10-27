@@ -2,6 +2,7 @@
 
 namespace App\Dashboard\Repositories;
 
+use App\Inspection\Models\GroupLeader\LotConfirmation;
 use App\Inspection\Models\MIPIRDimensionMeasure;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Builder;
@@ -227,5 +228,12 @@ class DashboardSummaryRepository
             ->table(self::DURATION_TABLE)
             ->where(self::DURATION_PPF, $ppf)
             ->get($columns);
+    }
+
+    public function getTimeConfirm(string $ppf): ?string
+    {
+        return LotConfirmation::where('PPFNo', $ppf)
+            ->orderByDesc('RequestedAt')
+            ->value('RequestedAt');
     }
 }

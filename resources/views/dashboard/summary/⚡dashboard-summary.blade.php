@@ -267,6 +267,7 @@ $modeBadge = [
                             </p>
                             <p class="text-xs text-gray-500">Specification: {{ $dim['specification'] }}</p>
                             <p class="text-xs text-gray-500">Control Limit: {{ $dim['cl'] }}</p>
+                            <p class="text-xs text-gray-500">Duration: {{ $dim['timeStart'] }} → {{ $dim['timeEnd'] }}</p>
                         </div>
                         <div class="flex items-center gap-1">
                             <span class="text-xs font-medium px-2 py-0.5 rounded-full {{ $modeBadge[$dim['mode']] }}">{{ ucfirst($dim['mode']) }}</span>

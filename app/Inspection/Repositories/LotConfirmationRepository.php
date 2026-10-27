@@ -281,6 +281,7 @@ class LotConfirmationRepository
             'Plant'        => $plant,
             'Status'       => LotConfirmation::PENDING,
             'RequestedAt'  => now(),
+            'PPFNo'        => $ppf,
             'ConfirmedBy'  => null,
             'ConfirmedAt'  => null,
             'RejectedBy'   => null,   // resubmit pagkatapos ma-reject
