@@ -28,8 +28,8 @@ class DashboardSummaryService
 
             $row->dateStart   = $this->date($row->DateStart, 'Y/m/d');
             $row->dateEnd     = $this->date($row->DateEnd, 'Y/m/d');
-            $row->requestedAt = $this->date($c?->RequestedAt, 'Y/m/d H:i');
-            $row->confirmedAt = $this->date($c?->ConfirmedAt, 'Y/m/d H:i');
+            $row->requestedAt = $this->date($c?->RequestedAt, 'Y/m/d H:i:s');
+            $row->confirmedAt = $this->date($c?->ConfirmedAt, 'Y/m/d H:i:s');
             $row->confirmedBy = $c?->ConfirmedBy ?: '-';
             $row->checkTimes  = (int) ($s->check_times ?? 0);
             $row->mode        = $total === 0 ? null : ((int) $s->tightened > 0 ? 'tightened' : 'normal');
