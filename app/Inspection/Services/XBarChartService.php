@@ -39,9 +39,16 @@ class XBarChartService
         private XBarRecordRepository $repository
     ) {}
 
-    public function build(string $partNumber, ?string $dimension, int|string $moldDie = 0, int $limit = 25): array
+    public function build(string $partNumber, ?string $dimension, int|string $moldDie = 0, int $limit = 25, array $draft = []): array
     {
-        $subgroups = $this->repository->getSubgroups($partNumber, $dimension, $moldDie, $limit);
+        $subgroups  = $this->repository->getSubgroups($partNumber, $dimension, $moldDie, $limit);
+        $draftIndex = null;
+
+        if ($draft && $d = $this->repository->draftSubgroup($partNumber, $draft)) {
+            $subgroups  = $subgroups->reject(fn($g) => $g->key === $d->key)
+                ->push($d)->take(-$limit)->values();
+            $draftIndex = $subgroups->count() - 1;
+        }
 
         if ($subgroups->isEmpty()) {
             return $this->empty();
@@ -52,8 +59,8 @@ class XBarChartService
         foreach ($subgroups as $group) {
             $values   = collect($group->measurements);
             $labels[] = $group->label;
-            $means[]  = round($values->avg(), 4);         
-            $ranges[] = round($values->max() - $values->min(), 4); 
+            $means[]  = round($values->avg(), 4);
+            $ranges[] = round($values->max() - $values->min(), 4);
         }
 
         $count = count($means);
@@ -61,8 +68,8 @@ class XBarChartService
         $n       = (int) $subgroups->first()->subgroup_size;
         $factors = $n >= 2 ? self::FACTORS[min($n, 25)] : null;
 
-        $nonZeroMeans  = array_filter($means, fn ($v) => $v != 0);
-        $nonZeroRanges = array_filter($ranges, fn ($v) => $v != 0);
+        $nonZeroMeans  = array_filter($means, fn($v) => $v != 0);
+        $nonZeroRanges = array_filter($ranges, fn($v) => $v != 0);
 
         $grandMean = $nonZeroMeans ? array_sum($nonZeroMeans) / count($nonZeroMeans) : 0.0;
         $rbar      = $nonZeroRanges ? array_sum($nonZeroRanges) / count($nonZeroRanges) : 0.0;
@@ -91,7 +98,7 @@ class XBarChartService
         $cp  = ($sigma && $usl !== null && $lsl !== null) ? ($usl - $lsl) / (6 * $sigma) : null;
         $cpu = ($sigma && $usl !== null) ? ($usl - $grandMean) / (3 * $sigma) : null;
         $cpl = ($sigma && $lsl !== null) ? ($grandMean - $lsl) / (3 * $sigma) : null;
-        $cpk = collect([$cpu, $cpl])->filter(fn ($v) => $v !== null)->min();
+        $cpk = collect([$cpu, $cpl])->filter(fn($v) => $v !== null)->min();
 
         return [
             'labels' => $labels,
@@ -125,6 +132,7 @@ class XBarChartService
                 'judge'       => $cpk === null ? null : ($cpk < self::CPK_REQUIRED ? 'NG' : 'OK'),
                 'limitSource' => $limits->xControl ? 'stored' : 'computed',
             ],
+            'draftIndex' => $draftIndex,
         ];
     }
 
@@ -137,17 +145,22 @@ class XBarChartService
     {
         return array_keys(array_filter(
             $values,
-            fn ($v) => ($ucl !== null && $v > $ucl) || ($lcl !== null && $v < $lcl)
+            fn($v) => ($ucl !== null && $v > $ucl) || ($lcl !== null && $v < $lcl)
         ));
     }
 
     private function empty(): array
     {
         return [
-            'labels' => [], 'means' => [], 'ranges' => [],
-            'x' => [], 'r' => [],
-            'outOfControl' => [], 'outOfControlR' => [],
+            'labels' => [],
+            'means' => [],
+            'ranges' => [],
+            'x' => [],
+            'r' => [],
+            'outOfControl' => [],
+            'outOfControlR' => [],
             'stats' => [],
+            'draftIndex' => null
         ];
     }
 }

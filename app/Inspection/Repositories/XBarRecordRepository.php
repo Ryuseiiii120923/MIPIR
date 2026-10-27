@@ -35,7 +35,6 @@ class XBarRecordRepository
             ->when($dimension, fn($q) => $q->where('DimItem', $dimension))
             ->where('ForXBar', 1);
 
-        // Lahat ng (PPFNo + Checktime) at ang unang RECNO ng bawat isa
         $keys = $base()
             ->select('PPFNo', 'Checktime')
             ->selectRaw('MIN(RECNO) as first_recno')
@@ -46,12 +45,10 @@ class XBarRecordRepository
             return collect();
         }
 
-        // Unang RECNO ng bawat PPF, para magkakasama ang check times ng iisang PPF
         $ppfFirst = $keys
             ->groupBy(fn($k) => trim((string) $k->PPFNo))
             ->map(fn($group) => (int) $group->min('first_recno'));
 
-        // PPF muna, tapos check time, tapos pinakabagong N
         $selected = $keys
             ->sortBy(fn($k) => [
                 $ppfFirst->get(trim((string) $k->PPFNo)),
@@ -97,11 +94,39 @@ class XBarRecordRepository
                     'subgroup_size' => count($values),
                     'label'         => $multiPart ? trim((string) $first->PartNo) . ' | ' . $label : $label,
                     'order'         => $order->get($key),
+                    'key'           => $key,
                 ];
             })
             ->filter(fn($g) => $g->subgroup_size > 0)
             ->sortBy('order')
             ->values();
+    }
+
+    public function draftSubgroup(string $partNumber, array $draft): ?object
+    {
+        $max    = self::MAX_VALUES_BY_PART[trim($partNumber)] ?? 5;
+        $values = collect(array_chunk(array_values($draft['values'] ?? []), 5))
+            ->flatMap(fn($set) => collect($set)
+                ->filter(fn($v) => is_numeric($v))
+                ->map(fn($v) => (float) $v)
+                ->take($max))
+            ->values()
+            ->all();
+
+        if (count($values) < 2) {
+            return null;  
+        }
+
+        $ppf  = trim((string) ($draft['ppf'] ?? ''));
+        $time = trim((string) ($draft['checkTime'] ?? ''));
+
+        return (object) [
+            'measurements'  => $values,
+            'subgroup_size' => count($values),
+            'label'         => trim(($ppf !== '' ? $ppf . ' · ' : '') . $time) . ' (draft)',
+            'key'           => $this->key($ppf, $time),
+            'order'         => PHP_INT_MAX,
+        ];
     }
 
     public function getLimits(string $partNumber, ?string $dimension, int|string $moldDie = 0): object

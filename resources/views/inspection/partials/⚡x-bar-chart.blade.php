@@ -2,29 +2,65 @@
 
 use App\Inspection\Services\XBarChartService;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\On;
 use Livewire\Component;
 
 new class extends Component {
     public string $partNo = '';
     public string $dimItem = '';
     public int|string $moldDie = 0;
+    public int|string $ppfNo = '';
     public int $limit = 25;
 
-    public function mount(string $partNo, string $dimItem, int|string $moldDie = 0): void
+    /** Hindi pa naka-save na values galing sa dimensions input: ['ppf', 'checkTime', 'values'] */
+    public array $draft = [];
+
+    public function mount(string $partNo, string $dimItem, int|string $moldDie = 0, int|string $ppfNo = ''): void
     {
         $this->partNo  = $partNo;
         $this->dimItem = $dimItem;
         $this->moldDie = $moldDie;
+        $this->ppfNo   = $ppfNo;
     }
 
     #[Computed]
     public function chart(): array
     {
         return app(XBarChartService::class)
-            ->build($this->partNo, $this->dimItem, $this->moldDie, $this->limit);
+            ->build($this->partNo, $this->dimItem, $this->moldDie, $this->limit, $this->draft);
+    }
+
+    /** Habang nagta-type ang user sa dimensions blade */
+    #[On('xbar-draft')]
+    public function onDraft(string $dimItem, string $checkTime, array $measurements): void
+    {
+        if (trim($dimItem) !== trim($this->dimItem)) {
+            return;
+        }
+
+        $this->draft = [
+            'ppf'       => $this->ppfNo,
+            'checkTime' => $checkTime,
+            'values'    => $measurements,
+        ];
+
+        $this->refresh();
+    }
+
+    /** Pagkatapos mag-save ng parent: nasa DB na ang data, kaya burahin ang draft */
+    #[On('mipir-saved')]
+    public function onSaved(): void
+    {
+        $this->draft = [];
+        $this->refresh();
     }
 
     public function updatedLimit(): void
+    {
+        $this->refresh();
+    }
+
+    private function refresh(): void
     {
         unset($this->chart);
 
@@ -43,7 +79,8 @@ new class extends Component {
             this.$nextTick(() => this.draw(this.data));
             $wire.$on('xbar-updated', ({ data }) => {
                 this.data = data;
-                this.draw(data);
+                // $nextTick: baka wala pa ang <canvas> kapag galing sa 'no data yet'
+                this.$nextTick(() => this.draw(data));
             });
         },
 
@@ -67,15 +104,22 @@ new class extends Component {
         draw(d) {
             const canvas = this.$refs.canvasX;
 
-            if (canvas) Chart.getChart(canvas)?.destroy();
-            if (!d || !d.means.length || !canvas) return;
+            if (!canvas) return;
+
+            if (!d || !d.means || !d.means.length) {
+                Chart.getChart(canvas)?.destroy();
+                return;
+            }
 
             const ooc    = new Set(d.outOfControl);
-            const colors = d.means.map((_, i) => ooc.has(i) ? '#dc2626' : '#006400');
+            const draft  = d.draftIndex ?? null;
+            const colors = d.means.map((_, i) => ooc.has(i) ? '#dc2626' : (i === draft ? '#f59e0b' : '#006400'));
+            const radius = d.means.map((_, i) => i === draft ? 6 : 4);
             const range  = this.range([...d.means, ...d.x.ucl, ...d.x.lcl, ...d.x.cl]);
+            const yScale = range && !this.fitSpec ? { min: range.min, max: range.max } : {};
 
             const datasets = [
-                { label: 'X-bar', data: d.means, borderColor: '#006400', backgroundColor: '#006400', tension: 0, pointRadius: 4, pointBackgroundColor: colors },
+                { label: 'X-bar', data: d.means, borderColor: '#006400', backgroundColor: '#006400', tension: 0, pointRadius: radius, pointBackgroundColor: colors },
                 this.line('CSLx', d.x.csl, '#0033CC', []),
                 this.line('USLx', d.x.usl, '#FF0000', []),
                 this.line('LSLx', d.x.lsl, '#FF0000', [10, 4]),
@@ -84,6 +128,16 @@ new class extends Component {
                 this.line('LCLx', d.x.lcl, '#0000FF', [2, 2]),
             ].filter(ds => ds.data.some(v => v !== null));
 
+            // In-place update para walang flicker habang nagta-type
+            const existing = Chart.getChart(canvas);
+            if (existing) {
+                existing.data.labels   = d.labels;
+                existing.data.datasets = datasets;
+                existing.options.scales.y = yScale;
+                existing.update('none');
+                return;
+            }
+
             new Chart(canvas, {
                 type: 'line',
                 data: { labels: d.labels, datasets },
@@ -91,7 +145,7 @@ new class extends Component {
                     responsive: true,
                     maintainAspectRatio: false,
                     interaction: { mode: 'index', intersect: false },
-                    scales: { y: range && !this.fitSpec ? { min: range.min, max: range.max } : {} },
+                    scales: { y: yScale },
                     plugins: {
                         title: { display: true, text: 'X-bar chart' },
                         legend: { labels: { usePointStyle: true, boxWidth: 30, font: { size: 10 } } },
@@ -102,11 +156,18 @@ new class extends Component {
     }"
 >
     @if (empty($this->chart['means']))
-        <p class="text-sm text-gray-500">There is no saved X-bar data for this dimension yet.</p>
+        <p class="text-sm text-gray-500">There is no X-bar data for this dimension yet.</p>
     @else
         @php $s = $this->chart['stats']; @endphp
 
         <div class="mb-2 flex items-center justify-end gap-4">
+            @if ($this->chart['draftIndex'] !== null)
+                <span class="flex items-center gap-1.5 text-xs text-amber-600">
+                    <span class="inline-block h-2.5 w-2.5 rounded-full bg-amber-500"></span>
+                    Draft (not saved yet)
+                </span>
+            @endif
+
             <label class="flex items-center gap-1.5 text-xs text-gray-600">
                 <input type="checkbox" x-model="fitSpec" x-on:change="$nextTick(() => draw(data))" class="rounded border-gray-300">
                 Include spec limits in scale
