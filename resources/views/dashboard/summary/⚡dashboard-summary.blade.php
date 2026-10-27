@@ -151,7 +151,6 @@ $modeBadge = [
                     <th class="px-4 py-3 font-medium">Confirmed</th>
                     <th class="px-4 py-3 font-medium">Confirmed By</th>
                     <th class="px-4 py-3 font-medium">Check Times</th>
-                    <th class="px-4 py-3 font-medium">Inspection</th>
                     <th class="px-4 py-3 font-medium">Action</th>
                 </tr>
             </thead>
@@ -166,11 +165,6 @@ $modeBadge = [
                     <td class="px-4 py-3">{{ $ppf->confirmedAt }}</td>
                     <td class="px-4 py-3">{{ $ppf->confirmedBy }}</td>
                     <td class="px-4 py-3">{{ $ppf->checkTimes ?: '-' }}</td>
-                    <td class="px-4 py-3">
-                        @if ($ppf->mode)
-                        <span class="text-xs font-medium px-2 py-0.5 rounded-full {{ $modeBadge[$ppf->mode] }}">{{ ucfirst($ppf->mode) }}</span>
-                        @else - @endif
-                    </td>
                     <td class="px-4 py-3">
                         <button type="button" wire:click="checkPpf({{ $ppf->PPFNo }})"
                             wire:loading.attr="disabled" wire:target="checkPpf({{ $ppf->PPFNo }})"
@@ -197,7 +191,6 @@ $modeBadge = [
                         <th class="px-4 py-3 font-medium">Check Time</th>
                         <th class="px-4 py-3 font-medium">Date Encode</th>
                         <th class="px-4 py-3 font-medium">Inspection</th>
-                        <th class="px-4 py-3 font-medium">Judgement</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200">
@@ -208,11 +201,6 @@ $modeBadge = [
                         <td class="px-4 py-3">{{ $ct['dateEnc'] }}</td>
                         <td class="px-4 py-3">
                             <span class="text-xs font-medium px-2 py-0.5 rounded-full {{ $modeBadge[$ct['mode']] ?? $modeBadge['normal'] }}">{{ ucfirst($ct['mode']) }}</span>
-                        </td>
-                        <td class="px-4 py-3">
-                            @if ($ct['judgement'])
-                            <span class="text-xs font-medium px-2 py-0.5 rounded-full {{ $judgeBadge[$ct['judgement']] }}">{{ $ct['judgement'] }}</span>
-                            @else - @endif
                         </td>
                     </tr>
                     @empty
