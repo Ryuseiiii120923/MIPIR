@@ -1,6 +1,7 @@
 <?php
 
 use App\Domain\Master\MoldingPlan;
+use Carbon\Carbon;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -96,6 +97,11 @@ new class extends Component
             ->reject(fn($f) => $this->isHiddenFile($f->getFilename()))
             ->contains(fn($f) => $this->matchesMold($f->getFilename()));
     }
+
+    public function formatTime(int $timestamp): string
+{
+    return Carbon::createFromTimestamp($timestamp, config('app.timezone'))->format('Y-m-d H:i');
+}
 
     public function loadFiles(): void
     {
@@ -432,7 +438,7 @@ new class extends Component
                     <p class="text-sm font-medium text-gray-800">{{ $file['name'] }}</p>
                     <p class="text-xs text-gray-400">
                         {{ $this->formatSize($file['size']) }} &middot;
-                        {{ \Illuminate\Support\Carbon::createFromTimestamp($file['modified'])->format('Y-m-d H:i') }}
+                        {{ $this->formatTime($file['modified']) }}
                     </p>
                 </div>
                 <button wire:click="download('{{ $file['name'] }}', 'mipir')" type="button"
@@ -466,7 +472,7 @@ new class extends Component
                     <p class="text-sm font-medium text-gray-800">{{ $file['name'] }}</p>
                     <p class="text-xs text-gray-400">
                         {{ $this->formatSize($file['size']) }} &middot;
-                        {{ \Illuminate\Support\Carbon::createFromTimestamp($file['modified'])->format('Y-m-d H:i') }}
+                        {{ $this->formatTime($file['modified']) }}
                     </p>
                 </div>
                 <button wire:click="download('{{ $file['name'] }}', 'xbar')" type="button"
@@ -502,7 +508,7 @@ new class extends Component
                     </div>
                     <p class="text-xs text-gray-400">
                         {{ $this->formatSize($file['size']) }} &middot;
-                        {{ \Illuminate\Support\Carbon::createFromTimestamp($file['modified'])->format('Y-m-d H:i') }}
+                        {{ $this->formatTime($file['modified']) }}
                     </p>
                 </div>
                 <button wire:click="download(@js($file['relative']), 'tightened')" type="button"
@@ -569,7 +575,7 @@ new class extends Component
                             {{ $item['folders'] }} {{ \Illuminate\Support\Str::plural('folder', $item['folders']) }} &middot;
                             @endif
                             {{ $item['files'] }} {{ \Illuminate\Support\Str::plural('file', $item['files']) }} &middot;
-                            {{ \Illuminate\Support\Carbon::createFromTimestamp($item['modified'])->format('Y-m-d H:i') }}
+                            {{ $this->formatTime($item['modified']) }}
                         </p>
                     </div>
                 </div>
@@ -586,7 +592,7 @@ new class extends Component
                         <p class="text-sm font-medium text-gray-800 truncate">{{ $item['name'] }}</p>
                         <p class="text-xs text-gray-400">
                             {{ $this->formatSize($item['size']) }} &middot;
-                            {{ \Illuminate\Support\Carbon::createFromTimestamp($item['modified'])->format('Y-m-d H:i') }}
+                            {{ $this->formatTime($item['modified']) }}
                         </p>
                     </div>
                 </div>
