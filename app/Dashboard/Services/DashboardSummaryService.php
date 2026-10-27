@@ -15,22 +15,29 @@ class DashboardSummaryService
 
     public function ppfs(string $search, string $mode, string $judge, ?string $plant = null, int $perPage = 10): LengthAwarePaginator
     {
-        $page      = $this->repo->paginatePpfs(trim($search), $mode, $judge, $perPage, $plant);
-        $summaries = $this->repo->summaryForPpfs($page->getCollection()->pluck('PPFNo')->all());
+        $page = $this->repo->paginatePpfs(trim($search), $mode, $judge, $perPage, $plant);
+        $ids  = $page->getCollection()->pluck('PPFNo')->all();
 
-        return $page->through(function ($row) use ($summaries) {
+        $summaries     = $this->repo->summaryForPpfs($ids);
+        $confirmations = $this->repo->confirmationsForPpfs($ids);
+
+        return $page->through(function ($row) use ($summaries, $confirmations) {
             $s     = $summaries->get($row->PPFNo);
+            $c     = $confirmations->get($row->PPFNo);
             $total = (int) ($s->total ?? 0);
 
-            $row->dateStart = $this->date($row->DateStart, 'Y/m/d');
-            $row->dateEnd    = $this->date($row->DateEnd, 'Y/m/d');
-            $row->checkTimes = (int) ($s->check_times ?? 0);
-            $row->mode       = $total === 0 ? null : ((int) $s->tightened > 0 ? 'tightened' : 'normal');
-            $row->judgement  = match (true) {
+            $row->dateStart   = $this->date($row->DateStart, 'Y/m/d');
+            $row->dateEnd     = $this->date($row->DateEnd, 'Y/m/d');
+            $row->requestedAt = $this->date($c?->RequestedAt, 'Y/m/d H:i');
+            $row->confirmedAt = $this->date($c?->ConfirmedAt, 'Y/m/d H:i');
+            $row->confirmedBy = $c?->ConfirmedBy ?: '-';
+            $row->checkTimes  = (int) ($s->check_times ?? 0);
+            $row->mode        = $total === 0 ? null : ((int) $s->tightened > 0 ? 'tightened' : 'normal');
+            $row->judgement   = match (true) {
                 $total === 0            => null,
                 (int) $s->ng > 0        => 'NG',
                 (int) $s->ok === $total => 'OK',
-                default                 => null, // some rows not judged yet
+                default                 => null,
             };
 
             return $row;
@@ -69,7 +76,7 @@ class DashboardSummaryService
 
         return [
             ...Arr::except(
-                $this->checkTimeSummary($checkTime, $rows,(string)$ppf, ...$this->durationFor($durations, $checkTime, (string)$ppf)),
+                $this->checkTimeSummary($checkTime, $rows, (string)$ppf, ...$this->durationFor($durations, $checkTime, (string)$ppf)),
                 'sortKey'
             ),
             'partNo'     => $first->PartNo ?: '-',
@@ -84,11 +91,6 @@ class DashboardSummaryService
     }
 
 
-
-    private function confirmedAt(string $ppf): ?string
-    {
-        return $this->confirmedAt[$ppf] ??= $this->repo->getTimeConfirm($ppf);
-    }
     // ------------------------------------------------------------------
 
     /**
@@ -113,6 +115,7 @@ class DashboardSummaryService
 
         return [
             $matches->pluck('StartAt')->filter()->min(),
+            $matches->pluck('EndAt')->filter()->max(),
         ];
     }
 
@@ -121,14 +124,14 @@ class DashboardSummaryService
         $created = $rows->pluck('created_at')->filter()->min();
 
         $start ??= $created;
-        $end   ??= $this->confirmedAt($ppf);
+        $end   ??= $rows->map(fn($r) => $r->updated_at ?: $r->created_at)->filter()->max();
 
         return [
             'checkTime' => $checkTime,
             'sortKey'   => (string) $created,
-            'dateEnc'   => $this->date($created, 'Y-m-d H:i'),
-            'timeStart' => $this->date($start, 'Y-m-d H:i'),
-            'timeEnd'   => $this->date((string)$end, 'Y-m-d H:i'),
+            'dateEnc'   => $this->date($created, 'Y-m-d H:i:s'),
+            'timeStart' => $this->date($start, 'Y-m-d H:i:s'),
+            'timeEnd'   => $this->date((string)$end, 'Y-m-d H:i:s'),
             'judgement' => $this->overallJudge($rows->pluck('Judge')),
             'mode'      => $this->overallMode($rows->pluck('Mode')),
         ];
@@ -140,7 +143,6 @@ class DashboardSummaryService
         $start ??= $rows->pluck('created_at')->filter()->min();
         $end   ??= $rows->map(fn($r) => $r->updated_at ?: $r->created_at)->filter()->max();
 
-
         return [
             'item'          => $item,
             'specification' => $first->Specs ?: '-',
@@ -148,8 +150,8 @@ class DashboardSummaryService
             'forXBar'       => (bool) $first->ForXBar,
             'mode'          => $this->overallMode($rows->pluck('Mode')),
             'judgement'     => $this->overallJudge($rows->pluck('Judge')),
-            'timeStart'     => $this->date($start, 'Y-m-d H:i'),
-            'timeEnd'       => $this->date($end, 'Y-m-d H:i'),
+            'timeStart'     => $this->date($start, 'Y-m-d H:i:s'),
+            'timeEnd'       => $this->date($end, 'Y-m-d H:i:s'),
             'inspector' => $rows->pluck('InspectedBy')->filter()->unique()->implode(', ') ?: '-',
             'sets'          => $rows->sortBy('Set')->map(fn($r) => [
                 'set'       => (int) $r->Set,

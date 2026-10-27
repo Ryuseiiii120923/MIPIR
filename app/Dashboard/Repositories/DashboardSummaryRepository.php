@@ -230,10 +230,18 @@ class DashboardSummaryRepository
             ->get($columns);
     }
 
-    public function getTimeConfirm(string $ppf): ?string
+    public function confirmationsForPpfs(array $ppfs): Collection
     {
-        return LotConfirmation::where('PPFNo', $ppf)
+        if ($ppfs === []) {
+            return collect();
+        }
+
+        return LotConfirmation::query()
+            ->toBase()
+            ->whereIn('PPFNo', $ppfs)
             ->orderByDesc('RequestedAt')
-            ->value('RequestedAt');
+            ->get(['PPFNo', 'RequestedAt', 'ConfirmedAt', 'ConfirmedBy'])
+            ->unique('PPFNo')   
+            ->keyBy('PPFNo');
     }
 }
