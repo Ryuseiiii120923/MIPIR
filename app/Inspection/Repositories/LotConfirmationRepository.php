@@ -252,7 +252,7 @@ class LotConfirmationRepository
             ->paginate($perPage, ['*'], 'confirmationPage');
     }
 
-    public function requestForPpf(int $ppf, string $employeeId): ?string
+    public function requestForPpf(int $ppf, string $employeeId, ?string $remarks = ''): ?string
     {
         $record = MIPIRInspectionRecord::where('PPFNo', $ppf)
             ->where('InspectBy', $employeeId)
@@ -284,10 +284,25 @@ class LotConfirmationRepository
             'PPFNo'        => $ppf,
             'ConfirmedBy'  => null,
             'ConfirmedAt'  => null,
-            'RejectedBy'   => null,   // resubmit pagkatapos ma-reject
+            'RejectedBy'   => null, 
             'RejectReason' => null,
+            'XBarRemarks' => $remarks
         ]);
 
         return null;
     }
+
+    public function xbarCheckTimes(int $ppf): array
+{
+    return MIPIRDimensionMeasure::query()
+        ->where('PPFNo', $ppf)
+        ->where('ForXBar', 1)
+        ->distinct()
+        ->pluck('Checktime')
+        ->map(fn ($c) => strtoupper(trim((string) $c)))
+        ->filter()
+        ->unique()
+        ->values()
+        ->all();
+}
 }

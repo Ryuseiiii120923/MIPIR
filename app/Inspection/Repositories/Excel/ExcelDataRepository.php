@@ -6,10 +6,11 @@ use App\Domain\Master\SEIHIN;
 use App\Inspection\Models\CheckTime;
 use App\Inspection\Models\Dimensions\DimensionMaster;
 use App\Inspection\Models\Dimensions\DimensionMasterForXBar;
+use App\Inspection\Models\GroupLeader\LotConfirmation;
 use App\Inspection\Models\MIPIRDimensionMeasure;
 use App\Inspection\Models\MIPIRInspectionRecord;
 use App\Inspection\Models\XBar\ControlSpecsLimit;
-use App\Inspection\Repositories\SpecsControlRepository;
+use Illuminate\Support\Collection;
 
 class ExcelDataRepository
 {
@@ -89,8 +90,8 @@ class ExcelDataRepository
             ->where('DimItem', $dimension)
             ->where('xbarTransaction', $transactionId)
             ->select([
-                'RecNo',   
-                'PartNo',    
+                'RecNo',
+                'PartNo',
                 'PPFNo',
                 'ProdLotNo',
                 'MachineNo',
@@ -103,7 +104,7 @@ class ExcelDataRepository
                 'Value5',
                 'InspectedBy'
             ])
-            ->orderBy('RecNo')  
+            ->orderBy('RecNo')
             ->orderBy('Set')
             ->get();
     }
@@ -129,5 +130,21 @@ class ExcelDataRepository
     public function getHeaderforRec(string $ppf)
     {
         return MIPIRInspectionRecord::where('PPFNo', $ppf);
+    }
+
+    public function getRequestRemarks(array $ppfs): Collection
+    {
+        if ($ppfs === []) {
+            return collect();
+        }
+
+        return LotConfirmation::query()
+            ->toBase()
+            ->whereIn('PPFNo', $ppfs)
+            ->orderByDesc('RequestedAt')
+            ->get(['PPFNo', 'XBarRemarks'])
+            ->unique('PPFNo')                  
+            ->pluck('XBarRemarks', 'PPFNo')
+            ->filter(fn($r) => trim((string) $r) !== '');
     }
 }

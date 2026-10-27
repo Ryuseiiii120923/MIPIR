@@ -10,6 +10,8 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use ZipArchive;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;     
+use PhpOffice\PhpSpreadsheet\Style\Alignment;  
 
 class InspectionXBarService
 {
@@ -17,6 +19,7 @@ class InspectionXBarService
     private const CHECKTIME_RANK  = ['F' => 0, 'MI' => 1, 'E' => 2];
     private const CHECKTIME_SLOTS = 3;
     private const POINTS_PER_SUBGROUP = 5;
+    private const FIRST_DATA_COLUMN = 3;  
 
     private const POINT_LIMITS = [
         '7W0706-0500A' => 2,
@@ -75,6 +78,22 @@ class InspectionXBarService
         return self::POINT_LIMITS[$key] ?? self::POINTS_PER_SUBGROUP;
     }
 
+    /**
+     * NEW (optional): rank ng check time sa pamamagitan ng prefix, para mabilang
+     * ang mga alias (hal. FMDW = F). Ibalik sa dating
+     * "self::CHECKTIME_RANK[$ct] ?? 99" kung ayaw mo ng ganito.
+     */
+    private function rank(string $checkTime): int
+    {
+        foreach (self::CHECKTIME_RANK as $prefix => $rank) {
+            if (str_starts_with($checkTime, $prefix)) {
+                return $rank;
+            }
+        }
+
+        return 99;
+    }
+
     private function assignColumns($groups, int $startColumn): array
     {
         $blocks = [];
@@ -109,10 +128,10 @@ class InspectionXBarService
             $items = $block['items'];
 
             usort($items, fn($a, $b) => [
-                self::CHECKTIME_RANK[$a['ct']] ?? 99,
+                $this->rank($a['ct']),               // CHANGED
                 $a['at'],
             ] <=> [
-                self::CHECKTIME_RANK[$b['ct']] ?? 99,
+                $this->rank($b['ct']),               // CHANGED
                 $b['at'],
             ]);
 
@@ -171,7 +190,7 @@ class InspectionXBarService
             return $measurement->PPFNo . '|' . $measurement->Checktime;
         });
 
-        $columns = $this->assignColumns($groups, 3);
+        $columns = $this->assignColumns($groups, self::FIRST_DATA_COLUMN);   // CHANGED
 
         foreach ($groups as $key => $group) {
             $column = $columns[$key];
@@ -219,6 +238,66 @@ class InspectionXBarService
 
             $sheet->setCellValue("{$column}92", $trendChartResult);
         }
+
+        $this->insertRemarks($sheet, $groups, $columns);                     // NEW
+    }
+
+    /**
+     * NEW: isulat ang remarks (LotConfirmation.RequestRemarks) ng bawat PPF sa
+     * Comments cell ng subgroup kung saan nakalagay ang UNANG check time niya
+     * sa workbook na ito (ang pinakakaliwang column ng PPF).
+     */
+    private function insertRemarks($sheet, $groups, array $columns): void
+    {
+        $firstColumn = [];
+
+        foreach ($groups as $key => $group) {
+            $ppf   = (string) $group->first()->PPFNo;
+            $index = Coordinate::columnIndexFromString($columns[$key]);
+
+            $firstColumn[$ppf] = min($firstColumn[$ppf] ?? PHP_INT_MAX, $index);
+        }
+
+        if ($firstColumn === []) {
+            return;
+        }
+
+        $remarks = app(ExcelDataRepository::class)->getRequestRemarks(array_keys($firstColumn));
+
+        foreach ($firstColumn as $ppf => $index) {
+            $text = trim((string) ($remarks[$ppf] ?? ''));
+
+            if ($text === '') {
+                continue;
+            }
+
+            $cell = $this->commentCell($index - self::FIRST_DATA_COLUMN + 1);
+
+            if ($cell === null) {
+                continue;
+            }
+
+            // Explicit string: para hindi ma-treat na formula ang text na nagsisimula sa "="
+            $sheet->setCellValueExplicit($cell, $text, DataType::TYPE_STRING);
+
+            $range = $sheet->getCell($cell)->getMergeRange() ?: $cell;
+            $sheet->getStyle($range)->getAlignment()
+                ->setWrapText(true)
+                ->setVertical(Alignment::VERTICAL_TOP);
+        }
+    }
+
+    /**
+     * NEW: Comment cell ng subgroup sa template.
+     * Subgroup 1-24 ay nasa row 9 + 2n; ang subgroup 25 ay nasa row 58.
+     */
+    private function commentCell(int $subgroup): ?string
+    {
+        return match (true) {
+            $subgroup >= 1 && $subgroup <= 24 => 'AC' . (9 + 2 * $subgroup),
+            $subgroup === 25                  => 'AC58',
+            default                           => null,
+        };
     }
 
     public function insertLimit(string $dimension, $sheet)

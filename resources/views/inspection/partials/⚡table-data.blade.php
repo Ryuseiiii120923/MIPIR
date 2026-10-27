@@ -11,6 +11,9 @@ use App\Traits\HasNotifications;
 use App\Traits\WithLoading;
 use App\Inspection\Repositories\LotConfirmationRepository;
 use App\Inspection\Services\Excel\MipirRecordRefresher;
+use App\Inspection\Services\Excel\XBarRecordRefresher;
+use App\Inspection\Services\XBarCheckTimeCoverage;
+use Livewire\Attributes\Locked;
 
 new class extends Component
 {
@@ -26,6 +29,13 @@ new class extends Component
     public string $confirmSearch = '';
     public ?int $rejectingId = null;
     public string $rejectReason = '';
+
+    public bool $showRemarksModal = false;
+    #[Locked]
+    public ?int $remarksPpf = null;
+    public array $missingCheckTimes = [];
+    public string $remarks = '';
+
 
 
     public function mount()
@@ -87,8 +97,45 @@ new class extends Component
 
     public function requestConfirmation(int $ppf): void
     {
+        $missing = app(XBarCheckTimeCoverage::class)->missing($ppf);
+
+        if ($missing !== []) {
+            $this->remarksPpf        = $ppf;
+            $this->missingCheckTimes = $missing;
+            $this->remarks           = '';
+            $this->resetErrorBag();
+            $this->showRemarksModal  = true;
+
+            return;
+        }
+
+        $this->sendConfirmation($ppf);
+    }
+
+    public function submitRemarks(): void
+    {
+        $this->validate([
+            'remarks' => ['required', 'string', 'max:500'],
+        ], [
+            'remarks.required' => 'Please enter a remark.',
+        ]);
+
+        $this->sendConfirmation($this->remarksPpf, trim($this->remarks));
+        $this->closeRemarks();
+    }
+
+    public function closeRemarks(): void
+    {
+        $this->reset('showRemarksModal', 'remarksPpf', 'missingCheckTimes', 'remarks');
+        $this->resetErrorBag();
+    }
+
+    private function sendConfirmation(int $ppf, ?string $remarks = null): void
+    {
         $error = app(LotConfirmationRepository::class)
-            ->requestForPpf($ppf, (string) $this->encoder);
+            ->requestForPpf($ppf, (string) $this->encoder, $remarks);
+
+        
 
         if ($error !== null) {
             $this->notifyFail('Cannot confirm', $error);
@@ -97,6 +144,7 @@ new class extends Component
         }
 
         app(MipirRecordRefresher::class)->refresh($ppf);
+        app(XBarRecordRefresher::class)->refresh($ppf, app(CurrentActor::class)->plant(), null);
 
         unset($this->forConfirmation);
     }
@@ -239,6 +287,32 @@ new class extends Component
 
         <div class="w-full">
             {{ $this->forConfirmation->links() }}
+        </div>
+    </div>
+    @endif
+
+    @if($showRemarksModal)
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+        x-data @keydown.escape.window="$wire.closeRemarks()">
+        <div class="w-full max-w-md rounded-xl bg-gray-800 p-6 text-white shadow-xl">
+            <h3 class="text-lg font-semibold">Missing check time</h3>
+            <p class="mt-2 text-sm text-gray-300">
+                PPF {{ $remarksPpf }} has no X-Bar record for
+                <span class="font-medium text-amber-400">{{ implode(', ', $missingCheckTimes) }}</span>.
+                Add a remark before sending it to your GL.
+            </p>
+
+            <textarea wire:model="remarks" rows="4" placeholder="Reason for the missing check time..."
+                class="mt-3 w-full rounded-md border border-gray-600 bg-gray-700 px-3 py-2 text-sm focus:outline-none focus:ring focus:border-blue-300"></textarea>
+            @error('remarks')
+            <p class="mt-1 text-xs text-red-400">{{ $message }}</p>
+            @enderror
+
+            <div class="mt-4 flex justify-end gap-2">
+                <button type="button" wire:click="closeRemarks" class="rounded bg-gray-500 px-3 py-2 text-sm">Cancel</button>
+                <button type="button" wire:click="submitRemarks" wire:loading.attr="disabled"
+                    class="rounded bg-green-600 px-3 py-2 text-sm">Send to GL</button>
+            </div>
         </div>
     </div>
     @endif
