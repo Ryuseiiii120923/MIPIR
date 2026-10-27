@@ -10,15 +10,37 @@ new class extends Component
     use WithPagination;
 
     public string $search = '';
-    public string $mode = '';   // '' | normal | tightened
-    public string $judge = '';  // '' | OK | NG
+    public string $mode = '';
+    public string $judge = '';
     public ?int $selectedPpf = null;
     public ?string $selectedCheckTime = null;
+    public ?string $plant = null;
+
+    public const PLANTS = [
+        'P1A' => 'P1A',
+        'P2'  => 'P2',
+    ];
+
 
     #[Computed]
     public function ppfs()
     {
-        return app(DashboardSummaryService::class)->ppfs($this->search, $this->mode, $this->judge);
+        $plant = array_key_exists($this->plant, self::PLANTS) ? $this->plant : null;
+
+        return app(DashboardSummaryService::class)
+            ->ppfs($this->search, $this->mode, $this->judge, $plant);
+    }
+
+    #[Computed]
+    public function plants(): array
+    {
+        return self::PLANTS;
+    }
+
+    public function updatedPlant(): void
+    {
+        $this->resetPage();
+        $this->reset('selectedPpf', 'selectedCheckTime');
     }
 
     #[Computed]
@@ -103,6 +125,17 @@ $modeBadge = [
             </div>
         </div>
 
+        <div>
+            <label for="ppf-plant" class="block text-sm font-medium text-gray-700 mb-1">Plant</label>
+            <select id="ppf-plant" wire:model.live="plant"
+                class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-600 focus:border-indigo-500 focus:ring-indigo-500">
+                <option value="">All plants</option>
+                @foreach ($this->plants as $value => $label)
+                <option value="{{ $value }}">{{ $label }}</option>
+                @endforeach
+            </select>
+        </div>
+
     </div>
 
     {{-- PPF table --}}
@@ -112,6 +145,7 @@ $modeBadge = [
                 <tr>
                     <th class="px-4 py-3 font-medium">PPF</th>
                     <th class="px-4 py-3 font-medium">Part No</th>
+                    <th class="px-4 py-3 font-medium">Plant</th>
                     <th class="px-4 py-3 font-medium">Date Start</th>
                     <th class="px-4 py-3 font-medium">Check Times</th>
                     <th class="px-4 py-3 font-medium">Inspection</th>
@@ -123,6 +157,7 @@ $modeBadge = [
                 <tr wire:key="ppf-{{ $ppf->PPFNo }}" @class(['hover:bg-gray-50', 'bg-indigo-50/60'=> $selectedPpf === (int) $ppf->PPFNo])>
                     <td class="px-4 py-3 font-medium text-gray-900">{{ $ppf->PPFNo }}</td>
                     <td class="px-4 py-3">{{ $ppf->PartNo }}</td>
+                    <td class="px-4 py-3">{{ $ppf->Plant ?: '-' }}</td>
                     <td class="px-4 py-3">{{ $ppf->dateStart }}</td>
                     <td class="px-4 py-3">{{ $ppf->checkTimes ?: '-' }}</td>
                     <td class="px-4 py-3">
@@ -140,7 +175,7 @@ $modeBadge = [
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="8" class="px-4 py-8 text-center text-gray-500">No PPF found.</td>
+                    <td colspan="7" class="px-4 py-8 text-center text-gray-500">No PPF found.</td>
                 </tr>
                 @endforelse
             </tbody>
@@ -205,10 +240,6 @@ $modeBadge = [
                     <dd class="font-medium text-gray-800">{{ $d['timeEnd'] }}</dd>
                 </div>
                 <div>
-                    <dt class="text-gray-400">Inspected By</dt>
-                    <dd class="font-medium text-gray-800">{{ $d['inspector'] }}</dd>
-                </div>
-                <div>
                     <dt class="text-gray-400">Part No</dt>
                     <dd class="font-medium text-gray-800">{{ $d['partNo'] }}</dd>
                 </div>
@@ -227,6 +258,7 @@ $modeBadge = [
                 <div wire:key="dim-{{ $loop->index }}" class="rounded-lg border border-gray-200 p-3">
                     <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
                         <div>
+                            <p class="text-xs text-gray-500">Inspected by: {{ $dim['inspector'] }}</p>
                             <p class="text-sm font-medium text-gray-800">
                                 {{ $dim['item'] }}
                                 @if ($dim['forXBar'])

@@ -17,9 +17,13 @@ class DashboardSummaryRepository
 
     private const DURATION_TABLE     = 'EncodingDuration';
     private const DURATION_PPF       = 'PPFNo';
-    private const DURATION_CHECKTIME = 'Checktime'; 
+    private const DURATION_CHECKTIME = 'Checktime';
     private const DURATION_START     = 'StartDateTime';
     private const DURATION_END       = 'EndDateTime';
+    private const INSPECTOR_TABLE = 'tblUser';
+    private const INSPECTOR_KEY   = 'InspectedBy';
+    private const INSPECTOR_CODE  = 'InspectorNo';
+    private const INSPECTOR_PLANT = 'Plant';
 
     private function tableName(): string
     {
@@ -44,7 +48,7 @@ class DashboardSummaryRepository
     private function sqlList(array $values): string
     {
         return implode(', ', array_map(
-            fn ($v) => "'" . str_replace("'", "''", (string) $v) . "'",
+            fn($v) => "'" . str_replace("'", "''", (string) $v) . "'",
             $values
         ));
     }
@@ -72,53 +76,66 @@ class DashboardSummaryRepository
      * One row per PPF, newest first. Start/End come from EncodingDuration.
      * Grouped aggregates aren't model records, so the query goes through toBase().
      */
-    public function paginatePpfs(string $search, string $mode, string $judge, int $perPage): LengthAwarePaginator
+    public function paginatePpfs(string $search, string $mode, string $judge, int $perPage, ?string $plant = null): LengthAwarePaginator
     {
         $table = $this->tableName();
         $d     = self::DURATION_TABLE;
         $p     = self::DURATION_PPF;
         $s     = self::DURATION_START;
         $e     = self::DURATION_END;
+        $it    = self::INSPECTOR_TABLE;
+        $ik    = self::INSPECTOR_KEY;
+        $ic    = self::INSPECTOR_CODE;
+        $ip    = self::INSPECTOR_PLANT;
 
         $judgeValues = ['OK' => self::JUDGE_OK, 'NG' => self::JUDGE_NG][$judge] ?? null;
 
         return $this->query('m')
             ->toBase()
+            ->leftJoin("{$it} as i", "i.{$ic}", '=', "m.{$ik}")
             ->selectRaw("
-                m.PPFNo,
-                MAX(m.PartNo)    AS PartNo,
-                MAX(m.MachineNo) AS MachineNo,
-                MAX(m.ProdLotNo) AS ProdLotNo,
-                COALESCE(
-                    (SELECT MIN(d.{$s}) FROM {$d} AS d WHERE d.{$p} = m.PPFNo),
-                    MIN(m.created_at)
-                ) AS DateStart,
-                COALESCE(
-                    (SELECT MAX(d.{$e}) FROM {$d} AS d WHERE d.{$p} = m.PPFNo),
-                    MAX(COALESCE(m.updated_at, m.created_at))
-                ) AS DateEnd
-            ")
-            ->when($search !== '', fn ($q) => $q->where(
-                fn ($w) => $w->where('m.PPFNo', 'like', "%{$search}%")
+            m.PPFNo,
+            MAX(m.PartNo)    AS PartNo,
+            MAX(m.MachineNo) AS MachineNo,
+            MAX(m.ProdLotNo) AS ProdLotNo,
+            MAX(i.{$ip})     AS Plant,
+            COALESCE(
+                (SELECT MIN(d.{$s}) FROM {$d} AS d WHERE d.{$p} = m.PPFNo),
+                MIN(m.created_at)
+            ) AS DateStart,
+            COALESCE(
+                (SELECT MAX(d.{$e}) FROM {$d} AS d WHERE d.{$p} = m.PPFNo),
+                MAX(COALESCE(m.updated_at, m.created_at))
+            ) AS DateEnd
+        ")
+            ->when($search !== '', fn($q) => $q->where(
+                fn($w) => $w->where('m.PPFNo', 'like', "%{$search}%")
                     ->orWhere('m.PartNo', 'like', "%{$search}%")
             ))
-            ->when($mode === 'tightened', fn ($q) => $q->whereExists(
-                fn ($sub) => $sub->selectRaw('1')
+            ->when($mode === 'tightened', fn($q) => $q->whereExists(
+                fn($sub) => $sub->selectRaw('1')
                     ->from("{$table} as x")
                     ->whereColumn('x.PPFNo', 'm.PPFNo')
                     ->whereRaw($this->tightenedSql('x.Mode'))
             ))
-            ->when($mode === 'normal', fn ($q) => $q->whereExists(
-                fn ($sub) => $sub->selectRaw('1')
+            ->when($mode === 'normal', fn($q) => $q->whereExists(
+                fn($sub) => $sub->selectRaw('1')
                     ->from("{$table} as x")
                     ->whereColumn('x.PPFNo', 'm.PPFNo')
                     ->whereRaw('(x.Mode IS NULL OR NOT ' . $this->tightenedSql('x.Mode') . ')')
             ))
-            ->when($judgeValues !== null, fn ($q) => $q->whereExists(
-                fn ($sub) => $sub->selectRaw('1')
+            ->when($judgeValues !== null, fn($q) => $q->whereExists(
+                fn($sub) => $sub->selectRaw('1')
                     ->from("{$table} as x")
                     ->whereColumn('x.PPFNo', 'm.PPFNo')
                     ->whereRaw($this->judgeSql('x.Judge', $judgeValues))
+            ))
+            ->when($plant, fn($q) => $q->whereExists(
+                fn($sub) => $sub->selectRaw('1')
+                    ->from("{$table} as x")
+                    ->join("{$it} as xi", "xi.{$ic}", '=', "x.{$ik}")
+                    ->whereColumn('x.PPFNo', 'm.PPFNo')
+                    ->where("xi.{$ip}", $plant)
             ))
             ->groupBy('m.PPFNo')
             ->orderByRaw('MIN(m.created_at) DESC')
@@ -169,10 +186,27 @@ class DashboardSummaryRepository
             ->where('Checktime', $checkTime)
             ->orderBy('RECNO')
             ->get([
-                'RECNO', 'PartNo', 'MDNo', 'ProdLotNo', 'MachineNo', 'Checktime',
-                'Mode', 'Set', 'DimItem', 'Specs', 'CL', 'Judge',
-                'Value1', 'Value2', 'Value3', 'Value4', 'Value5',
-                'ForXBar', 'InspectedBy', 'created_at', 'updated_at',
+                'RECNO',
+                'PartNo',
+                'MDNo',
+                'ProdLotNo',
+                'MachineNo',
+                'Checktime',
+                'Mode',
+                'Set',
+                'DimItem',
+                'Specs',
+                'CL',
+                'Judge',
+                'Value1',
+                'Value2',
+                'Value3',
+                'Value4',
+                'Value5',
+                'ForXBar',
+                'InspectedBy',
+                'created_at',
+                'updated_at',
             ])
             ->toBase();
     }

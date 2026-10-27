@@ -12,9 +12,9 @@ class DashboardSummaryService
 {
     public function __construct(private DashboardSummaryRepository $repo) {}
 
-    public function ppfs(string $search, string $mode, string $judge, int $perPage = 10): LengthAwarePaginator
+    public function ppfs(string $search, string $mode, string $judge, ?string $plant = null, int $perPage = 10): LengthAwarePaginator
     {
-        $page      = $this->repo->paginatePpfs(trim($search), $mode, $judge, $perPage);
+        $page      = $this->repo->paginatePpfs(trim($search), $mode, $judge, $perPage, $plant);
         $summaries = $this->repo->summaryForPpfs($page->getCollection()->pluck('PPFNo')->all());
 
         return $page->through(function ($row) use ($summaries) {
@@ -108,6 +108,7 @@ class DashboardSummaryService
 
         $start ??= $created;
         $end   ??= $rows->map(fn($r) => $r->updated_at ?: $r->created_at)->filter()->max();
+        $inspectorsOf = fn($group) => $group->pluck('InspectedBy')->filter()->unique()->implode(', ') ?: '-';
 
         return [
             'checkTime' => $checkTime,
@@ -115,7 +116,6 @@ class DashboardSummaryService
             'dateEnc'   => $this->date($created, 'Y-m-d H:i'),
             'timeStart' => $this->date($start, 'Y-m-d H:i'),
             'timeEnd'   => $this->date($end, 'Y-m-d H:i'),
-            'inspector' => $rows->pluck('InspectedBy')->filter()->unique()->implode(', ') ?: '-',
             'judgement' => $this->overallJudge($rows->pluck('Judge')),
             'mode'      => $this->overallMode($rows->pluck('Mode')),
         ];
@@ -132,6 +132,7 @@ class DashboardSummaryService
             'forXBar'       => (bool) $first->ForXBar,
             'mode'          => $this->overallMode($rows->pluck('Mode')),
             'judgement'     => $this->overallJudge($rows->pluck('Judge')),
+            'inspector' => $rows->pluck('InspectedBy')->filter()->unique()->implode(', ') ?: '-',
             'sets'          => $rows->sortBy('Set')->map(fn($r) => [
                 'set'       => (int) $r->Set,
                 'judgement' => $this->judge($r->Judge),

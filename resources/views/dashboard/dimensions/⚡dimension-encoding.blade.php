@@ -23,8 +23,7 @@ new class extends Component
     public string $searchDimension = '';
 
     public bool $showModal = false;
-    public ?int $editingId = null; // RecNo
-
+    public ?int $editingId = null; 
     public string $partNo = '';
     public string $dimensionNo = '';
     public string $symbol = '';
@@ -180,11 +179,9 @@ new class extends Component
     protected function rules(): array
     {
         $upperRules = ['nullable', 'numeric'];
-
-        // An attached image needs a real symbol number to be named after
         $symbolRules = $this->symbolFile !== null
             ? ['required', 'integer', 'min:0']
-            : ['nullable', 'integer']; // negative = no symbol
+            : ['nullable', 'integer'];
 
         return [
             'partNo'         => ['required', 'string', 'max:50'],
@@ -254,12 +251,11 @@ new class extends Component
         try {
             $data = $this->validate();
         } catch (ValidationException $e) {
-            $this->resetValidation(); // toast only, no inline @error
+            $this->resetValidation(); 
             $this->notifyFail('Validation Error', implode(', ', $e->validator->errors()->all()));
             return;
         }
 
-        // Not a DimensionMaster column
         unset($data['symbolFile']);
 
         try {
@@ -340,7 +336,6 @@ new class extends Component
             $this->cancelDelete();
             unset($this->dimensions);
 
-            // Deleted the last row on the last page -> step back one page
             if ($this->dimensions->isEmpty() && $this->getPage() > 1) {
                 $this->previousPage();
                 unset($this->dimensions);
@@ -361,11 +356,6 @@ new class extends Component
         }
     }
 
-    // ------------------------------------------------------------------
-    // Multi-select delete
-    // ------------------------------------------------------------------
-
-    /** Piliin / alisin lahat ng nasa kasalukuyang page. */
     public function toggleSelectPage(): void
     {
         $pageIds = $this->dimensions->getCollection()
