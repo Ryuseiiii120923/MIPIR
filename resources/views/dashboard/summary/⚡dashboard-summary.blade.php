@@ -112,19 +112,6 @@ $modeBadge = [
                 class="w-80 rounded-full border border-gray-300 bg-gray-100 px-4 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500"
                 placeholder="PPF or part no">
         </div>
-
-        <div>
-            <span class="block text-sm font-medium text-gray-700 mb-1">Inspection</span>
-            <div class="inline-flex rounded-lg border border-gray-300 overflow-hidden text-sm">
-                @foreach (['' => 'All', 'normal' => 'Normal', 'tightened' => 'Tightened'] as $value => $label)
-                <button type="button" wire:click="$set('mode', '{{ $value }}')"
-                    @class(['px-3 py-2', 'bg-indigo-600 text-white'=> $mode === $value, 'bg-white text-gray-600 hover:bg-gray-50' => $mode !== $value])>
-                    {{ $label }}
-                </button>
-                @endforeach
-            </div>
-        </div>
-
         <div>
             <label for="ppf-plant" class="block text-sm font-medium text-gray-700 mb-1">Plant</label>
             <select id="ppf-plant" wire:model.live="plant"
