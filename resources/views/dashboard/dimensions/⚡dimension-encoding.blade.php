@@ -759,18 +759,18 @@ new class extends Component
                         <label for="specification" class="block text-sm font-medium text-gray-700 mb-1">Specification</label>
                         <input type="text" id="specification" wire:model="specification"
                             class="w-full rounded-lg border border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            placeholder="e.g. 1.20 ± 0.10">
+                            placeholder="e.g. 1.20">
                     </div>
 
                     <div>
-                        <label for="upperLimit" class="block text-sm font-medium text-gray-700 mb-1">Upper Limit</label>
+                        <label for="upperLimit" class="block text-sm font-medium text-gray-700 mb-1">Upper Limit (MAX)</label>
                         <input type="text" id="upperLimit" wire:model="upperLimit"
                             class="w-full rounded-lg border border-gray-300 text-sm text-center focus:border-indigo-500 focus:ring-indigo-500"
                             placeholder="1.30">
                     </div>
 
                     <div>
-                        <label for="lowerLimit" class="block text-sm font-medium text-gray-700 mb-1">Lower Limit</label>
+                        <label for="lowerLimit" class="block text-sm font-medium text-gray-700 mb-1">Lower Limit (MIN)</label>
                         <input type="text" id="lowerLimit" wire:model="lowerLimit"
                             class="w-full rounded-lg border border-gray-300 text-sm text-center focus:border-indigo-500 focus:ring-indigo-500"
                             placeholder="1.10">

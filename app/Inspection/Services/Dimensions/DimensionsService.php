@@ -87,25 +87,27 @@ class DimensionsService
         $lower   = (float) $master['LowerLimit'];
         $device = $master['Device'];
 
-        if ($lower === 0.00 && $upper === $nominal) {
+        $isZero = fn(float $v): bool => abs($v) < 1e-9;
+
+        if ($isZero($lower) && ! $isZero($upper)) {
             return [
                 'specType'      => 'max',
                 'specNominal'   => (string) $nominal,
                 'specTolerance' => '',
-                'specUpper'     => '',
+                'specUpper'     => (string) $upper,
                 'specLower'     => '',
-                'device'         => $device,
+                'device'        => $device,
             ];
         }
 
-        if ($upper === 0.00 && $lower === $nominal) {
+        if ($isZero($upper) && ! $isZero($lower)) {
             return [
                 'specType'      => 'min',
                 'specNominal'   => (string) $nominal,
                 'specTolerance' => '',
                 'specUpper'     => '',
-                'specLower'     => '',
-                'device'         => $device,
+                'specLower'     => (string) $lower,
+                'device'        => $device,
             ];
         }
 
@@ -140,22 +142,36 @@ class DimensionsService
         }
 
         return match ($type) {
-            'max' => [
-                'upperLimit'        => $nominal,
-                'lowerLimit'        => 0.000,
-                'judgingUpperLimit' => $nominal,
-                'judgingLowerLimit' => 0.000,
-            ],
-            'min' => [
-                'upperLimit'        => 0.000,
-                'lowerLimit'        => $nominal,
-                'judgingUpperLimit' => 0.000,
-                'judgingLowerLimit' => $nominal,
-            ],
+            'max' => $this->maxLimits($row, $nominal),
+            'min' => $this->minLimits($row, $nominal),
             'tolerance' => $this->toleranceLimits($row, $nominal),
             'tolerance_diff' => $this->toleranceDiffLimits($row),
             default => null,
         };
+    }
+
+    private function maxLimits(array $row, float $nominal): array
+    {
+        $max = is_numeric($row['specUpper'] ?? null) ? (float) $row['specUpper'] : $nominal;
+
+        return [
+            'upperLimit'        => $max,
+            'lowerLimit'        => 0.000,
+            'judgingUpperLimit' => $max,
+            'judgingLowerLimit' => 0.000,
+        ];
+    }
+
+    private function minLimits(array $row, float $nominal): array
+    {
+        $min = is_numeric($row['specLower'] ?? null) ? (float) $row['specLower'] : $nominal;
+
+        return [
+            'upperLimit'        => 0.000,
+            'lowerLimit'        => $min,
+            'judgingUpperLimit' => 0.000,
+            'judgingLowerLimit' => $min,
+        ];
     }
 
     private function toleranceLimits(array $row, float $nominal): ?array
@@ -211,8 +227,8 @@ class DimensionsService
             }
 
             $ok = match ($row['specType']) {
-                'max'            => (float) $val <= (float) $row['specNominal'],
-                'min'            => (float) $val >= (float) $row['specNominal'],
+                'max' => (float) $val <= $limits['judgingUpperLimit'],
+                'min' => (float) $val >= $limits['judgingLowerLimit'],
                 'tolerance'      => (float) $val >= $limits['judgingLowerLimit'] && (float) $val <= $limits['judgingUpperLimit'],
                 'tolerance_diff' => (float) $val >= $limits['judgingLowerLimit'] && (float) $val <= $limits['judgingUpperLimit'],
                 default          => true,
@@ -269,8 +285,8 @@ class DimensionsService
         $nominal = $this->trimNumber((float) $row['specNominal']);
 
         return match ($row['specType']) {
-            'max'            => "MAX {$nominal}",
-            'min'            => "MIN {$nominal}",
+            'max' => "{$nominal} MAX " . $this->trimNumber($limits['judgingUpperLimit']),
+            'min' => "{$nominal} MIN " . $this->trimNumber($limits['judgingLowerLimit']),
             'tolerance'      => "{$nominal} ± " . $this->trimNumber((float) $row['specTolerance']),
             'tolerance_diff' => "{$nominal} ("
                 . $this->trimNumber($limits['judgingLowerLimit'])

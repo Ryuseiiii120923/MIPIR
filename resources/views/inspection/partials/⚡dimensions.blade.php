@@ -709,16 +709,22 @@ new class extends Component
                         </div>
                         <div class="flex flex-wrap items-center gap-2">
                             @if(($row['specType'] ?? '') === 'max')
-                            <span class="text-sm text-gray-500 font-medium">MAX</span>
                             <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.specNominal"
                                 class="w-24 bg-gray-50 border-0 rounded-lg px-3 py-2 text-center"
                                 placeholder="1.20" @if($readonly) disabled @endif>
+                            <span class="text-sm text-gray-500 font-medium">MAX</span>
+                            <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.specUpper"
+                                class="w-24 bg-gray-50 border-0 rounded-lg px-3 py-2 text-center"
+                                placeholder="0.30" @if($readonly) disabled @endif>
 
                             @elseif(($row['specType'] ?? '') === 'min')
-                            <span class="text-sm text-gray-500 font-medium">MIN</span>
                             <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.specNominal"
                                 class="w-24 bg-gray-50 border-0 rounded-lg px-3 py-2 text-center"
                                 placeholder="1.20" @if($readonly) disabled @endif>
+                            <span class="text-sm text-gray-500 font-medium">MIN</span>
+                            <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.specLower"
+                                class="w-24 bg-gray-50 border-0 rounded-lg px-3 py-2 text-center"
+                                placeholder="0.30" @if($readonly) disabled @endif>
 
                             @elseif(($row['specType'] ?? '') === 'tolerance')
                             <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.specNominal"
