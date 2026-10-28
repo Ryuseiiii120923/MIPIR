@@ -172,4 +172,36 @@ class MipirSourceData
             'moldNo'     => $moldNos[0] ?? '',
         ];
     }
+
+    public function partNoLabel(array $usedPartNos, string $fallback = ''): string
+    {
+        $partNos = collect($usedPartNos)
+            ->map(fn($v) => trim((string) $v))
+            ->filter()
+            ->unique()
+            ->sort(fn($a, $b) => [strlen($a), $a] <=> [strlen($b), $b])
+            ->values()
+            ->all();
+
+        return $partNos === [] ? $fallback : implode(' / ', $partNos);
+    }
+    public function sairBase(int $ppf): string
+{
+    $partNos = [];
+
+    foreach ($this->groupPpfs($ppf) as $groupPpf) {
+        $header = $this->header($groupPpf);
+
+        if ($header !== null) {
+            $partNos[] = $header['partNo'];
+        }
+    }
+
+    if ($partNos === []) {
+        $header = $this->header($ppf);
+        $partNos = $header !== null ? [$header['partNo']] : [];
+    }
+
+    return PartNumber::sairBase($partNos);
+}
 }
