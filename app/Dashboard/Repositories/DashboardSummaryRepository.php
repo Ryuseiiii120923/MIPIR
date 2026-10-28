@@ -241,7 +241,97 @@ class DashboardSummaryRepository
             ->whereIn('PPFNo', $ppfs)
             ->orderByDesc('RequestedAt')
             ->get(['PPFNo', 'RequestedAt', 'ConfirmedAt', 'ConfirmedBy'])
-            ->unique('PPFNo')   
+            ->unique('PPFNo')
             ->keyBy('PPFNo');
+    }
+
+    public function allPpfs(
+        string $search,
+        string $mode,
+        string $judge,
+        ?string $plant = null,
+        ?string $from = null,
+        ?string $to = null
+    ): Collection {
+        return $this->ppfQuery($search, $mode, $judge, $plant, $from, $to)->get();
+    }
+
+    private function ppfQuery(
+        string $search,
+        string $mode,
+        string $judge,
+        ?string $plant,
+        ?string $from,
+        ?string $to
+    ): \Illuminate\Database\Query\Builder {
+        $table = $this->tableName();
+        $d     = self::DURATION_TABLE;
+        $p     = self::DURATION_PPF;
+        $s     = self::DURATION_START;
+        $e     = self::DURATION_END;
+        $it    = self::INSPECTOR_TABLE;
+        $ik    = self::INSPECTOR_KEY;
+        $ic    = self::INSPECTOR_CODE;
+        $ip    = self::INSPECTOR_PLANT;
+
+        $judgeValues = ['OK' => self::JUDGE_OK, 'NG' => self::JUDGE_NG][$judge] ?? null;
+
+        // Same expression as the DateStart column; SQL Server can't use the alias in HAVING
+        $dateStartSql = "COALESCE((SELECT MIN(d.{$s}) FROM {$d} AS d WHERE d.{$p} = m.PPFNo), MIN(m.created_at))";
+
+        return $this->query('m')
+            ->toBase()
+            ->leftJoin("{$it} as i", "i.{$ic}", '=', "m.{$ik}")
+            ->selectRaw("
+            m.PPFNo,
+            MAX(m.PartNo)    AS PartNo,
+            MAX(m.MachineNo) AS MachineNo,
+            MAX(m.ProdLotNo) AS ProdLotNo,
+            MAX(i.{$ip})     AS Plant,
+            {$dateStartSql} AS DateStart,
+            COALESCE(
+                (SELECT MAX(d.{$e}) FROM {$d} AS d WHERE d.{$p} = m.PPFNo),
+                MAX(COALESCE(m.updated_at, m.created_at))
+            ) AS DateEnd
+        ")
+            ->when($search !== '', fn($q) => $q->where(
+                fn($w) => $w->where('m.PPFNo', 'like', "%{$search}%")
+                    ->orWhere('m.PartNo', 'like', "%{$search}%")
+            ))
+            ->when($mode === 'tightened', fn($q) => $q->whereExists(
+                fn($sub) => $sub->selectRaw('1')
+                    ->from("{$table} as x")
+                    ->whereColumn('x.PPFNo', 'm.PPFNo')
+                    ->whereRaw($this->tightenedSql('x.Mode'))
+            ))
+            ->when($mode === 'normal', fn($q) => $q->whereExists(
+                fn($sub) => $sub->selectRaw('1')
+                    ->from("{$table} as x")
+                    ->whereColumn('x.PPFNo', 'm.PPFNo')
+                    ->whereRaw('(x.Mode IS NULL OR NOT ' . $this->tightenedSql('x.Mode') . ')')
+            ))
+            ->when($judgeValues !== null, fn($q) => $q->whereExists(
+                fn($sub) => $sub->selectRaw('1')
+                    ->from("{$table} as x")
+                    ->whereColumn('x.PPFNo', 'm.PPFNo')
+                    ->whereRaw($this->judgeSql('x.Judge', $judgeValues))
+            ))
+            ->when($plant, fn($q) => $q->whereExists(
+                fn($sub) => $sub->selectRaw('1')
+                    ->from("{$table} as x")
+                    ->join("{$it} as xi", "xi.{$ic}", '=', "x.{$ik}")
+                    ->whereColumn('x.PPFNo', 'm.PPFNo')
+                    ->where("xi.{$ip}", $plant)
+            ))
+            ->groupBy('m.PPFNo')
+            ->when($from, fn($q) => $q->havingRaw(
+                "{$dateStartSql} >= ?",
+                [\Illuminate\Support\Carbon::parse($from)->startOfDay()->toDateTimeString()]
+            ))
+            ->when($to, fn($q) => $q->havingRaw(
+                "{$dateStartSql} <= ?",
+                [\Illuminate\Support\Carbon::parse($to)->endOfDay()->toDateTimeString()]
+            ))
+            ->orderByRaw('MIN(m.created_at) DESC');
     }
 }

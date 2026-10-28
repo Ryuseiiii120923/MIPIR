@@ -13,15 +13,43 @@ class DashboardSummaryService
     public function __construct(private DashboardSummaryRepository $repo) {}
     private array $confirmedAt = [];
 
-    public function ppfs(string $search, string $mode, string $judge, ?string $plant = null, int $perPage = 10): LengthAwarePaginator
-    {
-        $page = $this->repo->paginatePpfs(trim($search), $mode, $judge, $perPage, $plant);
-        $ids  = $page->getCollection()->pluck('PPFNo')->all();
+    public function ppfs(
+        string $search,
+        string $mode,
+        string $judge,
+        ?string $plant = null,
+        ?string $from = null,
+        ?string $to = null,
+        int $perPage = 10
+    ): LengthAwarePaginator {
+        $page = $this->repo->paginatePpfs(trim($search), $mode, $judge, $perPage, $plant, $from, $to);
 
+        $page->setCollection($this->decorate($page->getCollection()));
+
+        return $page;
+    }
+
+    /** Every PPF matching the filters (no pagination) — used by the Excel export. */
+    public function allPpfs(
+        string $search,
+        string $mode,
+        string $judge,
+        ?string $plant = null,
+        ?string $from = null,
+        ?string $to = null
+    ): Collection {
+        return $this->decorate(
+            $this->repo->allPpfs(trim($search), $mode, $judge, $plant, $from, $to)
+        );
+    }
+
+    private function decorate(Collection $rows): Collection
+    {
+        $ids           = $rows->pluck('PPFNo')->all();
         $summaries     = $this->repo->summaryForPpfs($ids);
         $confirmations = $this->repo->confirmationsForPpfs($ids);
 
-        return $page->through(function ($row) use ($summaries, $confirmations) {
+        return $rows->map(function ($row) use ($summaries, $confirmations) {
             $s     = $summaries->get($row->PPFNo);
             $c     = $confirmations->get($row->PPFNo);
             $total = (int) ($s->total ?? 0);

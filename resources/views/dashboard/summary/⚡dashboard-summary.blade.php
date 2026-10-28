@@ -4,6 +4,8 @@ use App\Dashboard\Services\DashboardSummaryService;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 use Livewire\WithPagination;
+use App\Dashboard\Services\DashboardSummaryExportService;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 new class extends Component
 {
@@ -15,6 +17,8 @@ new class extends Component
     public ?int $selectedPpf = null;
     public ?string $selectedCheckTime = null;
     public ?string $plant = null;
+    public ?string $dateFrom = null;
+    public ?string $dateTo = null;
 
     public const PLANTS = [
         'P1A' => 'P1A',
@@ -25,10 +29,10 @@ new class extends Component
     #[Computed]
     public function ppfs()
     {
-        $plant = array_key_exists($this->plant, self::PLANTS) ? $this->plant : null;
+        $plant = array_key_exists((string) $this->plant, self::PLANTS) ? $this->plant : null;
 
         return app(DashboardSummaryService::class)
-            ->ppfs($this->search, $this->mode, $this->judge, $plant);
+            ->ppfs($this->search, $this->mode, $this->judge, $plant, $this->dateFrom, $this->dateTo);
     }
 
     #[Computed]
@@ -84,6 +88,43 @@ new class extends Component
     {
         $this->selectedCheckTime = $checkTime;
     }
+
+    public function updatedDateFrom(): void
+    {
+        $this->resetPage();
+        $this->reset('selectedPpf', 'selectedCheckTime');
+    }
+
+    public function updatedDateTo(): void
+    {
+        $this->resetPage();
+        $this->reset('selectedPpf', 'selectedCheckTime');
+    }
+
+    public function exportExcel(): ?StreamedResponse
+    {
+        $this->validate([
+            'dateFrom' => ['nullable', 'date'],
+            'dateTo'   => ['nullable', 'date', 'after_or_equal:dateFrom'],
+        ]);
+
+        $plant = array_key_exists((string) $this->plant, self::PLANTS) ? $this->plant : null;
+
+        $export = app(DashboardSummaryExportService::class);
+
+        return response()->streamDownload(
+            fn() => $export->write(
+                $this->search,
+                $this->mode,
+                $this->judge,
+                $plant,
+                $this->dateFrom,
+                $this->dateTo
+            ),
+            $export->fileName($this->dateFrom, $this->dateTo),
+            ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
+        );
+    }
 };
 ?>
 
@@ -123,6 +164,25 @@ $modeBadge = [
             </select>
         </div>
 
+        <div>
+            <label for="ppf-from" class="block text-sm font-medium text-gray-700 mb-1">Date Start (from)</label>
+            <input type="date" id="ppf-from" wire:model.live="dateFrom"
+                class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-600 focus:border-indigo-500 focus:ring-indigo-500">
+            @error('dateFrom') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+        </div>
+        <div>
+            <label for="ppf-to" class="block text-sm font-medium text-gray-700 mb-1">Date Start (to)</label>
+            <input type="date" id="ppf-to" wire:model.live="dateTo"
+                class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-600 focus:border-indigo-500 focus:ring-indigo-500">
+            @error('dateTo') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+        </div>
+        <div>
+            <button type="button" wire:click="exportExcel" wire:loading.attr="disabled" wire:target="exportExcel"
+                class="px-4 py-2 text-sm font-medium text-white bg-green-700 rounded-full hover:bg-green-600 disabled:opacity-50">
+                <span wire:loading.remove wire:target="exportExcel">Export Excel</span>
+                <span wire:loading wire:target="exportExcel">Exporting...</span>
+            </button>
+        </div>
     </div>
 
     {{-- PPF table --}}
