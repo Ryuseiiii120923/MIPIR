@@ -22,6 +22,35 @@ $isStaffMenu = auth('web')->check() && session('access') !== 'gl';
         </x-slot:icon>
     </x-ui.sidebar-button>
 
+    <x-ui.sidebar-button
+        page="cycle-time-report"
+        title="Cycle Time / Man-hr"
+        @click.stop="desktopExpanded = false; mobileOpen = false">
+        <x-slot:icon>
+            <svg xmlns="http://www.w3.org/2000/svg"
+                class="w-5 h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2">
+
+                <!-- Clock face (cycle time) -->
+                <circle cx="9.5" cy="11" r="7" />
+
+                <!-- Clock hands -->
+                <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M9.5 7v4l2.5 1.5" />
+
+                <!-- Person (man-hr): head -->
+                <circle cx="19" cy="14" r="1.8" />
+
+                <!-- Person: shoulders -->
+                <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M16 21c0-2 1.3-3.5 3-3.5s3 1.5 3 3.5" />
+            </svg>
+        </x-slot:icon>
+    </x-ui.sidebar-button>
+
     @if ($isStaffMenu)
     <x-ui.sidebar-button
         page="dimension-encoding"
@@ -193,9 +222,9 @@ $isStaffMenu = auth('web')->check() && session('access') !== 'gl';
                     stroke-linejoin="round"
                     d="M9.5 14.5L12 17l2.5-2.5" />
 
-            <path stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0h6" />
+                <path stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0h6" />
             </svg>
         </x-slot:icon>
     </x-ui.sidebar-button>
