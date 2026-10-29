@@ -38,6 +38,7 @@ new class extends Component
 
         foreach ($this->rows as $i => $row) {
             $this->rows[$i]['forXBar'] ??= false;
+            $this->rows[$i]['rowNo'] ??= $i + 1;
 
             if (!array_key_exists('revealed', $row)) {
                 $count = count($row['measurements'] ?? []);
@@ -83,6 +84,9 @@ new class extends Component
         }
         if (str_starts_with($property, 'rows.')) {
             $this->syncToParent();
+        }
+        if (preg_match('/^rows\.(\d+)\.(measurements|measurements_y)(\..+)?$/', $property, $m)) {
+            $this->stampEnd((int) $m[1]);
         }
     }
 
@@ -165,17 +169,6 @@ new class extends Component
         $this->syncToParent();
     }
 
-    public function revealRow(int $index): void
-    {
-        if ($this->readonly || ! array_key_exists($index, $this->rows)) {
-            return;
-        }
-
-        $this->initItem($index);
-        $this->rows[$index]['revealed'] = true;
-
-        $this->syncToParent();
-    }
 
     private function applyMeasurementCount(int $index, int $count): void
     {
@@ -249,7 +242,7 @@ new class extends Component
         $this->rows[$i]['mode']     = $count <= 5 ? 'normal' : 'tightened';
         $this->rows[$i]['sets']     = $sets;
         $this->rows[$i]['revealed'] = true;
-
+        $this->stampEnd($i);
         $this->evaluateRow($i);
         $this->syncToParent();
 
@@ -290,6 +283,11 @@ new class extends Component
         $this->evaluateRow($i);
     }
 
+    private function nextRowNo(): int
+    {
+        return (int) max(0, ...array_column($this->rows, 'rowNo')) + 1;
+    }
+
     public function AddNewDimension()
     {
         $this->rows[] = [
@@ -308,7 +306,8 @@ new class extends Component
             'specTolerance' => '',
             'specUpper' => '',
             'specLower' => '',
-            'device' => ''
+            'device' => '',
+            'rowNo' => $this->nextRowNo(),
         ];
     }
 
@@ -328,6 +327,39 @@ new class extends Component
 
         unset($this->rows[$index]);
         $this->rows = array_values($this->rows);
+
+        $this->syncToParent();
+    }
+    private function stampStart(int $i): void
+    {
+        if ($this->readonly || ! isset($this->rows[$i])) {
+            return;
+        }
+
+        if (empty($this->rows[$i]['startedAt'])) {
+            $this->rows[$i]['startedAt'] = now()->toDateTimeString();
+        }
+    }
+
+    private function stampEnd(int $i): void
+    {
+        if ($this->readonly || ! isset($this->rows[$i])) {
+            return;
+        }
+
+        $this->stampStart($i);
+        $this->rows[$i]['endedAt'] = now()->toDateTimeString();
+    }
+
+    public function revealRow(int $index): void
+    {
+        if ($this->readonly || ! array_key_exists($index, $this->rows)) {
+            return;
+        }
+
+        $this->stampStart($index);
+        $this->initItem($index);
+        $this->rows[$index]['revealed'] = true;
 
         $this->syncToParent();
     }

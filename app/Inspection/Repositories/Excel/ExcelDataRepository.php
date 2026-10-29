@@ -109,9 +109,9 @@ class ExcelDataRepository
             ->get();
     }
 
-    public function getLimit(string $dimension)
+    public function getLimit(string $dimension, string $partNo)
     {
-        return ControlSpecsLimit::where('DimItem', $dimension)->first();
+        return ControlSpecsLimit::where('DimItem', $dimension)->where('PartNo', $partNo)->first();
     }
 
     public function getSpecs(string $dimension, string $partNo)

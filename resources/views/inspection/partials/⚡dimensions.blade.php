@@ -152,6 +152,24 @@ new class extends Component
         if (preg_match('/^rows\.(\d+)\.measurements(\..+)?$/', $property, $m)) {
             $this->dispatchXBarDraft((int) $m[1]);
         }
+        if (preg_match('/^rows\.(\d+)\.(measurements|measurements_y)(\..+)?$/', $property, $m)) {
+            $this->stampDuration((int) $m[1]);
+        }
+    }
+
+    private function stampDuration(int $i): void
+    {
+        if ($this->readonly || ! isset($this->rows[$i])) {
+            return;
+        }
+
+        $now = now()->toDateTimeString();
+
+        if (empty($this->rows[$i]['startedAt'])) {
+            $this->rows[$i]['startedAt'] = $now;
+        }
+
+        $this->rows[$i]['endedAt'] = $now;
     }
 
     private function resolveFixedSpecifications(): void

@@ -60,6 +60,8 @@ class DeleteInspection
                 })
                 ->delete();
 
+            EncodingDuration::where('PPFNo', $ppfno)->where('RowNo', 0)->delete();
+
             return true;
         });
     }

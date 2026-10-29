@@ -1,11 +1,12 @@
 <?php
 
 use App\Inspection\Actions\DeleteInspection;
+use App\Inspection\Models\EncodingDuration;
 use App\Inspection\Models\MIPIRDimensionMeasure;
 use App\Inspection\Repositories\Contracts\DimensionMasterRepositoryInterface;
 use App\Inspection\Repositories\PPFLookUp\PpfLookUpRepository;
 use App\Inspection\Services\Dimensions\DimensionsService;
-use App\Inspection\Services\Excel\MIPIRRecordCycleTracker;
+use App\Inspection\Services\EncodingDurationRecorder;
 use App\Inspection\Services\PPFLookUp\PpfLookUpService;
 use App\Inspection\Services\Saving\CreateInspectionService;
 use App\Traits\HasNotifications;
@@ -65,6 +66,7 @@ new class extends Component
     public string $action = '';
 
     public string $controlLimit = '';
+    public array $durationByTime = [];
 
     #[On('ppf-checked')]
     public function onPpfChecked(int $ppf): void
@@ -117,7 +119,7 @@ new class extends Component
             'tolerance_diff' => ! $blank($this->specNominal)
                 && ! $blank($this->specUpper)
                 && ! $blank($this->specLower),
-            default          => false, 
+            default          => false,
         };
 
         if (! $specComplete) {
@@ -156,7 +158,7 @@ new class extends Component
             ]);
         }
         $this->action = $action;
-         $this->reportValidity();
+        $this->reportValidity();
 
         $this->dispatch('gap-offset-action', action: $action, mode: 'gap-offset');
     }
@@ -175,7 +177,7 @@ new class extends Component
 
         $this->checkTimes[] = $newCheckTime;
         $this->dateEncodeByTime[$newCheckTime] = now()->toDateTimeString();
-
+        $this->durationByTime[$newCheckTime]['startedAt'] = now()->toDateTimeString();
         $this->sortCheckTimesByDateEncode();
 
         $this->selectedCheckTime = $newCheckTime;
@@ -221,6 +223,7 @@ new class extends Component
         unset($this->judgeByTime[$time]);
         unset($this->modeByTime[$time]);
         unset($this->setsByTime[$time]);
+        unset($this->durationByTime[$time]);
 
         if ($this->selectedCheckTime === $time) {
             $this->selectedCheckTime = null;
@@ -257,7 +260,9 @@ new class extends Component
 
         $this->resolveSpecification();
         $this->evaluateJudge($time);
-
+        $now = now()->toDateTimeString();
+        $this->durationByTime[$time]['startedAt'] ??= $now;
+        $this->durationByTime[$time]['endedAt'] = $now;
         $this->reset('excelFile');
     }
 
@@ -465,7 +470,26 @@ new class extends Component
             foreach ($this->checkTimes as $time) {
                 $this->writeCheckTime($time);
             }
+
+            $recorder = app(EncodingDurationRecorder::class);
+
+            foreach ($this->durationByTime as $time => $stamp) {
+                if (! in_array($time, $this->checkTimes, true) || empty($this->measurementsXByTime[$time])) {
+                    continue;
+                }
+
+                $recorder->record(
+                    $this->ppf,
+                    (string) $time,
+                    0,
+                    'Gap-Offset',
+                    ['partNo' => $this->partNo, 'machineNo' => $this->machineNo],
+                    $stamp['startedAt'] ?? null,
+                    $stamp['endedAt'] ?? null,
+                );
+            }
         });
+
         app(TightenedGapOffsetRefresher::class)->refresh($this->ppf);
         app(PpfLookUpRepository::class)->forgetMainData($this->ppf);
         $this->notifyReload('success', 'Updated Successfully');
@@ -479,6 +503,7 @@ new class extends Component
             'judgeByTime',
             'modeByTime',
             'setsByTime',
+            'durationByTime',
         ]);
     }
 
@@ -493,9 +518,10 @@ new class extends Component
             DB::transaction(function () {
                 app(DeleteInspection::class)->executeGapOffset($this->ppf);
             });
-
-           app(TightenedGapOffsetRefresher::class)->refresh($this->ppf);
+          
+            app(TightenedGapOffsetRefresher::class)->refresh($this->ppf);
             app(PpfLookUpRepository::class)->forgetMainData($this->ppf);
+
 
             $this->notifyReload('success', 'Gap-Offset measurements deleted successfully.');
         } catch (\Throwable $e) {

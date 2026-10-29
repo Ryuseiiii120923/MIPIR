@@ -163,7 +163,7 @@ new class extends Component
                     <th class="px-4 py-3 font-medium">PPF End</th>
                     <th class="px-4 py-3 font-medium">Check Times</th>
                     <th class="px-4 py-3 font-medium">Inspectors</th>
-                    <th class="px-4 py-3 font-medium">Cycle Time</th>
+                    <th class="px-4 py-3 font-medium">Cycle Time(PER PPF)</th>
                     <th class="px-4 py-3 font-medium">Man-hr</th>
                 </tr>
                 @endif

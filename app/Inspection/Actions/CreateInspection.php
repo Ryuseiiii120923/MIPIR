@@ -14,6 +14,7 @@ use App\Inspection\Models\MIPIRInspectionRecord;
 use App\Inspection\Models\SmallDefect;
 use App\Inspection\Models\XBarCycleLog;
 use App\Inspection\Repositories\MIPIRInspectionReporsitory;
+use App\Inspection\Services\EncodingDurationRecorder;
 use App\Inspection\Services\Excel\InsertTightenedDefects;
 use App\Inspection\Services\Excel\InsertTightenedFlash;
 use App\Inspection\Services\Excel\InsertTightenedGapF00VE;
@@ -344,24 +345,54 @@ class CreateInspection
         app(XBarRecordRefresher::class)->refresh($ppf, app(CurrentActor::class)->plant(), null, array_values($xbarJobs));
 
         if ($recordDuration) {
+            $recorder = app(EncodingDurationRecorder::class);
+
             foreach ($touchedCheckTimes as $checkTime) {
-                $existing = EncodingDuration::where('PPFNo', $ppf)
+                $legacy = EncodingDuration::where('PPFNo', $ppf)
                     ->where('Checktime', $checkTime)
+                    ->whereNull('RowNo')
                     ->first();
 
-                $record = EncodingDuration::updateOrCreate(
-                    [
-                        'PPFNo'     => $ppf,
-                        'Checktime' => $checkTime,
-                    ],
-                    [
-                        'PartNo'        => $ppfLookUp['partNo'] ?? null,
-                        'MachineNo'     => $ppfLookUp['machineNo'] ?? null,
-                        'Encoder'       => Auth::user()->EmployeeID ?? null,
-                        'StartDatetime' => $existing->StartDatetime ?? ($startTimeByTime[$checkTime] ?? now()),
-                        'EndDatetime'   => $endTimeByTime[$checkTime] ?? now(),
-                    ]
-                );
+                $fallbackStart = $legacy->StartDatetime ?? ($startTimeByTime[$checkTime] ?? now()->toDateTimeString());
+                $fallbackEnd   = $endTimeByTime[$checkTime] ?? now()->toDateTimeString();
+
+                $keptRowNos = [];
+
+                foreach ($dimensions[$checkTime] ?? [] as $row) {
+                    $item  = trim((string) ($row['item'] ?? ''));
+                    $rowNo = isset($row['rowNo']) ? (int) $row['rowNo'] : 0;
+
+                    if ($item === '' || $rowNo < 1) {
+                        continue;
+                    }
+
+                    $keptRowNos[] = $rowNo;
+
+                    $recorder->record(
+                        $ppf,
+                        $checkTime,
+                        $rowNo,
+                        $item,
+                        ['partNo' => $ppfLookUp['partNo'] ?? null, 'machineNo' => $ppfLookUp['machineNo'] ?? null],
+                        $row['startedAt'] ?? $fallbackStart,
+                        $row['endedAt'] ?? $fallbackEnd,
+                    );
+                }
+
+                // Tanggalin ang lumang per-checktime row at ang rows ng tinanggal na dimensions.
+                // Hindi ginagalaw ang RowNo = 0 (Gap-Offset).
+                EncodingDuration::where('PPFNo', $ppf)
+                    ->where('Checktime', $checkTime)
+                    ->where(function ($q) use ($keptRowNos) {
+                        $q->whereNull('RowNo')
+                            ->orWhere(function ($w) use ($keptRowNos) {
+                                $w->where('RowNo', '>', 0);
+                                if (! empty($keptRowNos)) {
+                                    $w->whereNotIn('RowNo', $keptRowNos);
+                                }
+                            });
+                    })
+                    ->delete();
             }
         } else {
             Log::info('EncodingDuration: skipped, recordDuration is false', ['PPFNo' => $ppf]);
@@ -533,5 +564,4 @@ class CreateInspection
             ]);
         }
     }
-
 }

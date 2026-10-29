@@ -36,7 +36,7 @@ class InspectionXBarService
 
         $this->insertHeader($partNos, $dimension, $sheet, $cycleStart, $cycleEnd);
         $this->insertMeasurement($partNos, $dimension, $sheet, $transactionId, $confirmedBy);
-        $this->insertLimit($dimension, $sheet);
+        $this->insertLimit($dimension, $sheet, $partNos[0]);
 
 
 
@@ -182,7 +182,7 @@ class InspectionXBarService
             ->getMeasurement($partNos, $dimension, $transactionId)
             ->where('Set', 1);
 
-        $limit = $repository->getLimit($dimension);
+        $limit = $repository->getLimit($dimension, $partNos[0]);
         $ucl = (float) $limit->UCLx;
         $lcl = (float) $limit->LCLx;
 
@@ -300,9 +300,9 @@ class InspectionXBarService
         };
     }
 
-    public function insertLimit(string $dimension, $sheet)
+    public function insertLimit(string $dimension, $sheet, string $partNo)
     {
-        $result = app(ExcelDataRepository::class)->getLimit($dimension);
+        $result = app(ExcelDataRepository::class)->getLimit($dimension, $partNo);
 
         $sheet->setCellValue('T5', $result->CSLx);
         $sheet->setCellValue('W5', $result->USLx);
