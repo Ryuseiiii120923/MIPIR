@@ -6,11 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Molding In Process</title>
     <link rel="icon" href="{{ asset('images/fuji_logo.ico') }}?v={{ filemtime(public_path('images/fuji_logo.ico')) }}" type="image/x-icon">
-    <script src="https://unpkg.com/@zxing/library@latest"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/flowbite/2.2.1/flowbite.min.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @livewireStyles
     <script>
