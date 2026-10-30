@@ -787,94 +787,92 @@ new class extends Component
                         :moldDie="$moldingDieNo"
                         :ppfNo="$ppfNumber"
                         :key="'x-bar-chart-'.$i.'-'.$row['item'].'-'.$moldingDieNo" />
+                    @endif
                 </div>
                 @endif
-            </div>
-            @endif
+                <div class="mb-4">
+                    <label class="text-sm font-medium block mb-1.5">Control Limit</label>
+                    <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.CL"
+                        class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2 text-gray-500"
+                        placeholder="Refer to parts WI" @if($readonly) disabled @endif>
+                </div>
 
-            <div class="mb-4">
-                <label class="text-sm font-medium block mb-1.5">Control Limit</label>
-                <input type="text" wire:model.live.debounce.400ms="rows.{{ $i }}.CL"
-                    class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2 text-gray-500"
-                    placeholder="Refer to parts WI" @if($readonly) disabled @endif>
-            </div>
+                <hr class="border-gray-200 my-4">
 
+                {{-- Measurements --}}
+                @php
+                $hasY = array_key_exists('measurements_y', $row);
+                $axes = $hasY ? ['measurements' => 'X', 'measurements_y' => 'Y'] : ['measurements' => null];
+                @endphp
+
+                @foreach ($axes as $field => $axisLabel)
+                @php
+                $values = $row[$field] ?? [];
+                $total = count($values);
+                $setsCount = (int) ceil($total / 5);
+                @endphp
+
+                <div class="mb-1 {{ $axisLabel === 'Y' ? 'mt-4' : '' }}">
+                    <label class="text-sm font-medium block mb-1.5">
+                        @if ($axisLabel)
+                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-teal-100 text-teal-700 mr-1">{{ $axisLabel }}</span>
+                        @endif
+                        Measurements
+                        <span class="text-gray-400 font-normal">({{ $total }} total)</span>
+                    </label>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
+                    @for ($s = 0; $s < $setsCount; $s++)
+                        <div wire:key="dim-{{ $i }}-{{ $field }}-mset-{{ $s }}" class="flex flex-col gap-1.5">
+                        @if ($setsCount > 1)
+                        <p class="text-xs text-gray-400">Set {{ $s + 1 }}</p>
+                        @endif
+                        <div class="flex flex-wrap gap-2">
+                            @for ($k = 0; $k < 5; $k++)
+                                @php $j=$s * 5 + $k; @endphp
+                                @if ($j < $total)
+                                <input @if($readonly) disabled @endif type="text"
+                                wire:model.live.debounce.400ms="rows.{{ $i }}.{{ $field }}.{{ $j }}"
+                                wire:key="dim-{{ $i }}-{{ $field }}-m-{{ $j }}"
+                                @if ($hasY)
+                                @if ($axisLabel==='X' )
+                                @keydown.enter.prevent="focusY({{ $i }}, {{ $j }})"
+                                data-x-index="{{ $j }}"
+                                @else
+                                @keydown.enter.prevent="afterY({{ $i }}, {{ $j }})"
+                                data-y-index="{{ $j }}"
+                                @endif
+                                @else
+                                @keydown.enter.prevent="nextMeasurement({{ $i }}, {{ $j }})"
+                                data-measurement-index="{{ $j }}"
+                                @endif
+                                @if ($j===0 && $axisLabel !=='Y' ) data-first-measurement @endif
+                                class="w-16 bg-gray-50 border-0 rounded-lg text-center py-2"
+                                placeholder="{{ $j + 1 }}">
+                                @endif
+                                @endfor
+                        </div>
+                </div>
+                @endfor
+            </div>
+            @endforeach
             <hr class="border-gray-200 my-4">
 
-            {{-- Measurements --}}
-            @php
-            $hasY = array_key_exists('measurements_y', $row);
-            $axes = $hasY ? ['measurements' => 'X', 'measurements_y' => 'Y'] : ['measurements' => null];
-            @endphp
-
-            @foreach ($axes as $field => $axisLabel)
-            @php
-            $values = $row[$field] ?? [];
-            $total = count($values);
-            $setsCount = (int) ceil($total / 5);
-            @endphp
-
-            <div class="mb-1 {{ $axisLabel === 'Y' ? 'mt-4' : '' }}">
-                <label class="text-sm font-medium block mb-1.5">
-                    @if ($axisLabel)
-                    <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-teal-100 text-teal-700 mr-1">{{ $axisLabel }}</span>
-                    @endif
-                    Measurements
-                    <span class="text-gray-400 font-normal">({{ $total }} total)</span>
-                </label>
+            {{-- Judgement now INSIDE the card --}}
+            <div class="flex items-center justify-between">
+                <div class="w-40">
+                    <label class="text-sm font-medium block mb-1.5">Judgement</label>
+                    <input type="text" wire:model="rows.{{ $i }}.judge"
+                        class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2 text-gray-500 text-center"
+                        readonly>
+                </div>
+                <button @if($readonly) disabled @endif type="button" class="text-sm text-gray-500 hover:text-gray-700">Clear</button>
             </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
-                @for ($s = 0; $s < $setsCount; $s++)
-                    <div wire:key="dim-{{ $i }}-{{ $field }}-mset-{{ $s }}" class="flex flex-col gap-1.5">
-                    @if ($setsCount > 1)
-                    <p class="text-xs text-gray-400">Set {{ $s + 1 }}</p>
-                    @endif
-                    <div class="flex flex-wrap gap-2">
-                        @for ($k = 0; $k < 5; $k++)
-                            @php $j=$s * 5 + $k; @endphp
-                            @if ($j < $total)
-                            <input @if($readonly) disabled @endif type="text"
-                            wire:model.live.debounce.400ms="rows.{{ $i }}.{{ $field }}.{{ $j }}"
-                            wire:key="dim-{{ $i }}-{{ $field }}-m-{{ $j }}"
-                            @if ($hasY)
-                            @if ($axisLabel==='X' )
-                            @keydown.enter.prevent="focusY({{ $i }}, {{ $j }})"
-                            data-x-index="{{ $j }}"
-                            @else
-                            @keydown.enter.prevent="afterY({{ $i }}, {{ $j }})"
-                            data-y-index="{{ $j }}"
-                            @endif
-                            @else
-                            @keydown.enter.prevent="nextMeasurement({{ $i }}, {{ $j }})"
-                            data-measurement-index="{{ $j }}"
-                            @endif
-                            @if ($j===0 && $axisLabel !=='Y' ) data-first-measurement @endif
-                            class="w-16 bg-gray-50 border-0 rounded-lg text-center py-2"
-                            placeholder="{{ $j + 1 }}">
-                            @endif
-                            @endfor
-                    </div>
-            </div>
-            @endfor
         </div>
-        @endforeach
-        <hr class="border-gray-200 my-4">
-
-        {{-- Judgement now INSIDE the card --}}
-        <div class="flex items-center justify-between">
-            <div class="w-40">
-                <label class="text-sm font-medium block mb-1.5">Judgement</label>
-                <input type="text" wire:model="rows.{{ $i }}.judge"
-                    class="w-full bg-gray-50 border-0 rounded-lg px-3 py-2 text-gray-500 text-center"
-                    readonly>
-            </div>
-            <button @if($readonly) disabled @endif type="button" class="text-sm text-gray-500 hover:text-gray-700">Clear</button>
-        </div>
+        @endif
     </div>
-    @endif
-</div>
-@endforeach
+    @endforeach
 </div>
 
 @if($activeModalIndex !== null)

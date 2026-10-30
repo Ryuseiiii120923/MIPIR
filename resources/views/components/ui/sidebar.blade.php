@@ -22,7 +22,10 @@ $isStaffMenu = auth('web')->check() && session('access') !== 'gl';
         </x-slot:icon>
     </x-ui.sidebar-button>
 
-    <x-ui.sidebar-button
+
+
+    @if ($isStaffMenu)
+        <x-ui.sidebar-button
         page="cycle-time-report"
         title="Cycle Time / Man-hr"
         @click.stop="desktopExpanded = false; mobileOpen = false">
@@ -50,8 +53,6 @@ $isStaffMenu = auth('web')->check() && session('access') !== 'gl';
             </svg>
         </x-slot:icon>
     </x-ui.sidebar-button>
-
-    @if ($isStaffMenu)
     <x-ui.sidebar-button
         page="dimension-encoding"
         title="Dimension Encoding"

@@ -22,6 +22,8 @@ class DimensionMasterRepository implements DimensionMasterRepositoryInterface
     {
         $query = DimensionMaster::query()->where('PartNo', $partNo);
         $row = (clone $query)->where('DimensionName', $item)->first();
+
+        // dd($row, $partNo, $item);
         if ($row === null) {
             $wanted = $this->normalizeDimensionName($item);
 
@@ -29,6 +31,7 @@ class DimensionMasterRepository implements DimensionMasterRepositoryInterface
                 fn($r) => $this->normalizeDimensionName((string) $r->DimensionName) === $wanted
             );
         }
+        // dd($row);
 
         if ($row === null) {
             return null;
