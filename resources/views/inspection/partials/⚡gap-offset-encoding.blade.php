@@ -744,7 +744,7 @@ new class extends Component
         {{-- Upload zone — only active once a check time is selected --}}
         @if($selectedCheckTime)
         <div
-            x-data="{ uploading: false, progress: 0 }"
+            x-data="{ uploading: false, dragging: false, progress: 0 }"
             x-on:livewire-upload-start="uploading = true; progress = 0"
             x-on:livewire-upload-progress="progress = $event.detail.progress"
             x-on:livewire-upload-finish="uploading = false"

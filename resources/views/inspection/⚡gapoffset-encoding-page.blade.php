@@ -85,6 +85,11 @@ new class extends Component
     {
         $this->selectedPpf = $ppf;
     }
+
+    public function updatedSearch(): void
+    {
+        $this->resetPage('ppfPage');
+    }
 };
 ?>
 

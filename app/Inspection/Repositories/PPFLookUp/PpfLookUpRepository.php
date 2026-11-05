@@ -125,7 +125,8 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
         string $search,
         string $plant,
         int $perPage = 5,
-        bool $excludeConfirmed = true
+        bool $excludeConfirmed = true,
+        string $pageName = 'lookupPage',
     ) {
         $record = (new MIPIRInspectionRecord())->getTable();
         $plantEmployees = $this->plantEmployeeIds($plant);
@@ -160,7 +161,7 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
                 });
             })
             ->orderByDesc('DateJudge')
-            ->paginate($perPage);
+            ->paginate($perPage, pageName: $pageName);
     }
 
     private function plantEmployeeIds(string $plant)
@@ -184,10 +185,11 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
 
     public function getDataforSearchGapOffset(
         string $search,
-        int|string $encoder, // EmployeeID ng encoder
+        int|string $encoder,
         string $plant,
         int $perPage = 5,
-        bool $excludeGenerated = false
+        bool $excludeGenerated = false,
+        string $pageName = 'ppfPage',
     ) {
         $conn = MIPIRInspectionRecord::query()->getConnection();
 
@@ -248,7 +250,7 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
             )
             ->orderByDesc('tblInspectionRecord.DateJudge')
             ->orderByDesc('tblInspectionRecord.PPFNo')
-            ->paginate($perPage);
+            ->paginate($perPage, pageName: $pageName);
     }
 
     public static function cacheKey(int $ppf): string

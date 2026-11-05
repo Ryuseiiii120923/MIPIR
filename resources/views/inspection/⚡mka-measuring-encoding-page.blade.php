@@ -37,7 +37,7 @@ new class extends Component
         } else {
             $this->isHideTable = false;
         }
-       $this->dispatch('mka-encoding-action', action: $action, mode: 'mka-measuring');
+        $this->dispatch('mka-encoding-action', action: $action, mode: 'mka-measuring');
     }
 
     #[On('ppf-checked')]
@@ -45,9 +45,9 @@ new class extends Component
     {
         $this->selectedPpf = $ppf;
     }
-     public function mount(CurrentActor $actor)
+    public function mount(CurrentActor $actor)
     {
-         $this->encoder = $actor->id();
+        $this->encoder = $actor->id();
     }
 
     public function submit(): void
@@ -129,7 +129,7 @@ new class extends Component
         }
     }
 
-    
+
     public function confirm_ppf(int $ppf)
     {
         $this->startLoading('Loading PPF...', 'Please wait while we load the record');
@@ -153,6 +153,10 @@ new class extends Component
         );
     }
 
+    public function updatedSearch(): void
+    {
+        $this->resetPage('ppfPage');
+    }
 };
 ?>
 

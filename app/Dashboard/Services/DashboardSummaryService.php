@@ -104,7 +104,7 @@ class DashboardSummaryService
 
         return [
             ...Arr::except(
-                $this->checkTimeSummary($checkTime, $rows, (string)$ppf, ...$this->durationFor($durations, $checkTime, (string)$ppf)),
+                $this->checkTimeSummary($checkTime, $rows, (string)$ppf, ...$this->durationFor($durations, $checkTime)),
                 'sortKey'
             ),
             'partNo'     => $first->PartNo ?: '-',

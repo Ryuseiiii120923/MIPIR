@@ -63,6 +63,11 @@ new class extends Component
         $this->resetPage('confirmationPage');
     }
 
+    public function updatedSearch(): void
+{
+    $this->resetPage('ppflookupPage');
+}
+
     #[Computed]
     public function data()
     {

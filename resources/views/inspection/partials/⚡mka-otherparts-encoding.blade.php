@@ -552,6 +552,7 @@ new class extends Component
                 {{-- Drop zone: Excel / CSV --}}
                 @unless($readonly)
                 <div
+                    wire:key="dropzone-mka-{{ $i }}"
                     x-data="{ uploading: false, parsing: false, progress: 0, dragging: false }"
                     x-on:livewire-upload-start="uploading = true; progress = 0"
                     x-on:livewire-upload-progress="progress = $event.detail.progress"
