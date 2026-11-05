@@ -285,7 +285,9 @@ new class extends Component
 
     private function nextRowNo(): int
     {
-        return (int) max(0, ...array_column($this->rows, 'rowNo')) + 1;
+        $rowNos = array_map('intval', array_column($this->rows, 'rowNo'));
+
+        return ($rowNos === [] ? 0 : max($rowNos)) + 1;
     }
 
     public function AddNewDimension()
@@ -327,7 +329,9 @@ new class extends Component
 
         unset($this->rows[$index]);
         $this->rows = array_values($this->rows);
-
+        foreach ($this->rows as $i => $row) {
+            $this->rows[$i]['rowNo'] = $i + 1;
+        }
         $this->syncToParent();
     }
     private function stampStart(int $i): void

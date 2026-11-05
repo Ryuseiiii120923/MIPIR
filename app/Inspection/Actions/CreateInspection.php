@@ -32,6 +32,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 class CreateInspection
 {
@@ -74,6 +75,11 @@ class CreateInspection
             throw new \InvalidArgumentException('At least one check time is required to create an inspection.');
         }
 
+        if (empty($checkTimes)) {
+            throw new \InvalidArgumentException('At least one check time is required to create an inspection.');
+        }
+
+        $this->assertMeasurementsAreSane($dimensions, $touchedCheckTimes);
 
 
         DB::transaction(function () use ($composedRemarks, $dateEncodeCheck, $defectBatches, $defectJudge, $inspectorNo, $ngpercent, $ppf, $ppfLookUp, $touchedCheckTimes, $dimensions, $dateJudge, $remarks, &$xbarJobs, &$fullCycles) {
@@ -563,5 +569,57 @@ class CreateInspection
                 'error' => $e->getMessage(),
             ]);
         }
+    }
+
+    private function assertMeasurementsAreSane(array $dimensions, array $checkTimes): void
+    {
+        $columnMax = 999.999; // decimal(6,3)
+        $errors = [];
+
+        foreach ($checkTimes as $checkTime) {
+            foreach ($dimensions[$checkTime] ?? [] as $row) {
+                $item = $row['item'] ?? 'Unknown';
+                [$nominal, $tol] = $this->parseSpecs($row['specification'] ?? null);
+
+                foreach (['measurements' => '', 'measurements_y' => ' (Y)'] as $key => $suffix) {
+                    foreach (array_values($row[$key] ?? []) as $i => $raw) {
+                        if ($raw === null || $raw === '') {
+                            continue;
+                        }
+
+                        $label = "Check time {$checkTime} - {$item}{$suffix} #" . ($i + 1);
+
+                        if (! is_numeric($raw)) {
+                            $errors[] = "{$label}: '{$raw}' is not a number.";
+                            continue;
+                        }
+
+                        $value = (float) $raw;
+
+                        if (abs($value) > $columnMax) {
+                            $errors[] = "{$label}: {$raw} is out of range (max {$columnMax}). Check for typo.";
+                            continue;
+                        }
+
+                        if ($nominal !== null && $tol > 0 && abs($value - $nominal) > $tol * 10) {
+                            $errors[] = "{$label}: {$raw} is too far from spec ({$nominal} ± {$tol}). Check for typo.";
+                        }
+                    }
+                }
+            }
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages(['measurements' => $errors]);
+        }
+    }
+
+    private function parseSpecs(?string $specs): array
+    {
+        if ($specs && preg_match('/([\d.]+)\s*±\s*([\d.]+)/u', $specs, $m)) {
+            return [(float) $m[1], (float) $m[2]];
+        }
+
+        return [null, null];
     }
 }

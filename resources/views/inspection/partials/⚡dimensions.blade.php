@@ -99,8 +99,11 @@ new class extends Component
 
     private function nextRowNo(): int
     {
-        return (int) max(0, ...array_column($this->rows, 'rowNo')) + 1;
+        $rowNos = array_map('intval', array_column($this->rows, 'rowNo'));
+
+        return ($rowNos === [] ? 0 : max($rowNos)) + 1;
     }
+
     private function service(): DimensionsService
     {
         return app(DimensionsService::class);

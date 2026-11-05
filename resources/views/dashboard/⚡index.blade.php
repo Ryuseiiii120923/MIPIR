@@ -8,7 +8,7 @@ new class extends Component
 {
     use HasNotifications;
 
-    public function goToLink()
+    public function goToLink(string $plant)
     {
         try {
             $response = Http::post('http://192.168.3.11:8989/api/teams-notify', [
@@ -16,7 +16,7 @@ new class extends Component
                 'message' => 'Please go to this URL',
                 'url' => 'https://192.168.3.11:8585',
                 'button_text' => 'Go to Molding In Process',
-                'channels' => ['default', 'mondi'],
+                'channels' => [$plant],
             ]);
 
             if ($response->successful()) {
