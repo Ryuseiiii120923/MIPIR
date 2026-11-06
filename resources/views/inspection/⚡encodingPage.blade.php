@@ -12,6 +12,7 @@ use Livewire\Attributes\On;
 use Livewire\Component;
 use Livewire\Attributes\Computed;
 use App\Inspection\Services\Dimensions\DimensionsService;
+use Illuminate\Validation\ValidationException;
 
 new class extends Component
 {
@@ -103,14 +104,24 @@ new class extends Component
                 $result = app(UpdateInspection::class)->execute($this->selectedPpf);
                 PpfLookUpRepository::forgetMainData($this->selectedPpf);
                 $this->notifyReload('success', 'Updated Successfully.' . $this->xbarFullNote($result));
-                return;
+            } catch (ValidationException $e) {
+                Log::warning('DashboardUpdate: validation error', [
+                    'ppf'     => $this->selectedPpf,
+                    'message' => $this->validationMessage($e),
+                ]);
+                $this->notifyFail('Validation error', $this->validationMessage($e));
             } catch (\InvalidArgumentException $e) {
                 $this->notifyFail('Validation error', $e->getMessage());
-                return;
+            } catch (\Throwable $e) {
+                Log::error('DashboardUpdate: unexpected error', [
+                    'ppf'       => $this->selectedPpf,
+                    'exception' => $e->getMessage(),
+                    'trace'     => $e->getTraceAsString(),
+                ]);
+                $this->notifyFail('Update failed', 'Something went wrong while updating. Please try again.');
             }
+            return;
         }
-
-
 
         $draft = app(DraftAction::class)->get($this->selectedPpf);
         foreach (['ppfLookup', 'check-time'] as $component) {
@@ -121,17 +132,16 @@ new class extends Component
         }
 
         if (empty($draft['ppfLookup']['productionLotNo'])) {
-
             $this->dispatch('field-error', field: 'productionLotNo', message: 'Production lot number is required.');
             $this->notifyFail('Validation error', 'Production lot number is required.');
             return;
         }
 
         if (empty($draft['ppfLookup']['machineNo'])) {
-
             $this->notifyFail('Validation error', 'Machine number is required.');
             return;
         }
+
         if (empty($draft['check-time']['check-time'])) {
             $this->notifyFail('Validation error', 'At least one check time is required.');
             return;
@@ -148,21 +158,32 @@ new class extends Component
 
             PpfLookUpRepository::forgetMainData($this->selectedPpf);
             $this->notifyReload('success', 'Inspection record saved.' . $this->xbarFullNote($result));
+        } catch (ValidationException $e) {
+            Log::warning('DashboardSave: validation error', [
+                'ppf'     => $this->selectedPpf,
+                'message' => $this->validationMessage($e),
+            ]);
+            $this->notifyFail('Validation error', $this->validationMessage($e));
         } catch (\InvalidArgumentException $e) {
             Log::warning('DashboardSave: validation error', [
-                'ppf' => $this->selectedPpf,
+                'ppf'     => $this->selectedPpf,
                 'message' => $e->getMessage(),
                 'at'      => $e->getFile() . ':' . $e->getLine(),
             ]);
             $this->notifyFail('Validation error', $e->getMessage());
         } catch (\Throwable $e) {
             Log::error('DashboardSave: unexpected error', [
-                'ppf' => $this->selectedPpf,
+                'ppf'       => $this->selectedPpf,
                 'exception' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
+                'trace'     => $e->getTraceAsString(),
             ]);
             $this->notifyFail('Save failed', 'Something went wrong while saving. Please try again.');
         }
+    }
+
+    private function validationMessage(ValidationException $e): string
+    {
+        return collect($e->errors())->flatten()->implode(' ');
     }
     private function xbarFullNote(?array $result): string
     {
