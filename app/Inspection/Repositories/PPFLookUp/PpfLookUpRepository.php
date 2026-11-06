@@ -17,7 +17,8 @@ use App\Inspection\Repositories\Contracts\PpfLookUpRepositoryInterface;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-
+use Illuminate\Support\Facades\Log;
+use Throwable;
 class PpfLookUpRepository implements PpfLookUpRepositoryInterface
 {
     public function getPartNoMoldNo(int $ppf): ?MoldingPlan
@@ -27,66 +28,79 @@ class PpfLookUpRepository implements PpfLookUpRepositoryInterface
 
     public function getProdLotNo(int $ppf, string $operator)
     {
-        $result = MoldingPlan::select(
-            '班 as Shift',
-            '成形日 as MoldingDate'
-        )
-            ->where('流動NO', $ppf)
-            ->first();
+        try {
+            $result = MoldingPlan::select(
+                '班 as Shift',
+                '成形日 as MoldingDate'
+            )
+                ->where('流動NO', $ppf)
+                ->first();
 
-        if (!$result) {
+            if (!$result) {
+                return null;
+            }
+
+            $shift = $result->Shift;
+            $moldingDate = Carbon::parse($result->MoldingDate);
+
+            $year = $moldingDate->format('Y');
+            $month = (int) $moldingDate->format('m');
+            $day = $moldingDate->format('d');
+
+            if ($month >= 10) {
+                $romanMonths = [
+                    10 => 'X',
+                    11 => 'XI',
+                    12 => 'XII',
+                ];
+
+                $monthCode = $romanMonths[$month];
+            } else {
+                $monthCode = $month;
+            }
+
+            if (substr($year, 2, 1) == '2') {
+                $yearCode = substr(
+                    'ABCDEFGHIJ',
+                    (int) substr($year, 3, 1),
+                    1
+                );
+            } elseif (substr($year, 2, 1) == '3') {
+                $yearCode = substr(
+                    'KLMNOPQRST',
+                    (int) substr($year, 3, 1),
+                    1
+                );
+            } elseif (substr($year, 2, 1) == '4') {
+                $yearCode = substr(
+                    'UVWXYZ',
+                    (int) substr($year, 3, 1),
+                    1
+                );
+            } else {
+                $yearCode = substr($year, 3, 1);
+            }
+
+            $prodLotNo = '20'
+                . $yearCode
+                . $monthCode
+                . $day
+                . '-'
+                . $shift
+                . $operator;
+
+            return $prodLotNo;
+        } catch (Throwable $e) {
+            Log::error('getProdLotNo failed', [
+                'ppf'      => $ppf,
+                'operator' => $operator,
+                'message'  => $e->getMessage(),
+                'file'     => $e->getFile(),
+                'line'     => $e->getLine(),
+            ]);
+
             return null;
         }
-
-        $shift = $result->Shift;
-        $moldingDate = Carbon::parse($result->MoldingDate);
-
-        $year = $moldingDate->format('Y');
-        $month = (int) $moldingDate->format('m');
-        $day = $moldingDate->format('d');
-
-        if ($month >= 10) {
-            $romanMonths = [
-                10 => 'X',
-                11 => 'XI',
-                12 => 'XII',
-            ];
-
-            $monthCode = $romanMonths[$month];
-        } else {
-            $monthCode = $month;
-        }
-
-        if (substr($year, 2, 1) == '2') {
-            $yearCode = substr(
-                'ABCDEFGHIJ',
-                (int) substr($year, 3, 1),
-                1
-            );
-        } elseif (substr($year, 2, 1) == '3') {
-            $yearCode = substr(
-                'KLMNOPQRST',
-                (int) substr($year, 3, 1),
-                1
-            );
-        } elseif (substr($year, 2, 1) == '4') {
-            $yearCode = substr(
-                'UVWXYZ',
-                (int) substr($year, 3, 1),
-                1
-            );
-        } else {
-            $yearCode = substr($year, 3, 1);
-        }
-        $prodLotNo = '20'
-            . $yearCode
-            . $monthCode
-            . $day
-            . '-'
-            . $shift
-            . $operator;
-
-        return $prodLotNo;
     }
 
     public function getCavity(string|null $partNo): ?int
