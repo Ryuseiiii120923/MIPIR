@@ -12,7 +12,17 @@ class NotifyStaffXBarFull
 {
     public function handle(XBarCycleFull $event): void
     {
-        $config = config('services.teams_notify');
+        $config   = config('services.teams_notify');
+        $channels = $this->resolveChannels($event->plant, $config);
+
+        if (empty($channels)) {
+            Log::warning('X-Bar full: no Teams channel mapped for plant, notification skipped', [
+                'plant'       => $event->plant,
+                'dimension'   => $event->dimension,
+                'transaction' => $event->transactionId,
+            ]);
+            return;
+        }
 
         $filePath = XBarCycleLog::where('TransactionId', $event->transactionId)->value('FilePath');
         $hasFile  = $filePath && is_file($filePath);
@@ -27,7 +37,7 @@ class NotifyStaffXBarFull
                 'message'     => "X-Bar for {$event->dimension} is full (25 subgroups). Plant {$event->plant}, PPF {$event->ppf}.",
                 'url'         => $url,
                 'button_text' => $hasFile ? 'Download X-Bar' : 'Open X-Bar Generation',
-                'channels'    => $config['channels'],
+                'channels'    => $channels,
             ]);
 
             if (! $response->successful()) {
@@ -37,13 +47,23 @@ class NotifyStaffXBarFull
                     'body'        => mb_substr($response->body(), 0, 500),
                     'dimension'   => $event->dimension,
                     'transaction' => $event->transactionId,
+                    'channels'    => $channels,
                 ]);
             }
         } catch (\Throwable $e) {
             Log::warning('X-Bar full Teams notification failed', [
                 'dimension' => $event->dimension,
+                'channels'  => $channels,
                 'error'     => $e->getMessage(),
             ]);
         }
+    }
+
+    private function resolveChannels(?string $plant, array $config): array
+    {
+        $key      = strtoupper(trim((string) $plant));
+        $plantMap = array_change_key_case($config['plant_channels'] ?? [], CASE_UPPER);
+
+        return isset($plantMap[$key]) ? [$plantMap[$key]] : [];
     }
 }

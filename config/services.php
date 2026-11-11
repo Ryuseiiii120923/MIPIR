@@ -36,9 +36,12 @@ return [
     ],
 
     'teams_notify' => [
-        'url'           => env('TEAMS_NOTIFY_URL', 'http://192.168.3.11:9090/api/teams-notify'),
-        'dashboard_url' => env('DASHBOARD_URL', 'https://192.168.3.11:8585'),
-        'channels'      => ['default', 'mondi'],
+        'url'            => env('TEAMS_NOTIFY_URL', 'http://192.168.3.102:9090/api/teams-notify'),
+        'dashboard_url'  => env('DASHBOARD_URL', 'https://192.168.3.102:8585'),
+        'plant_channels' => [
+            'P1A' => 'plant1',
+            'P2' => 'plant2',
+        ],
     ],
 
 ];
