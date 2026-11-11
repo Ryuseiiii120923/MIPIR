@@ -14,6 +14,7 @@ class XBarCycleFull implements ShouldDispatchAfterCommit
         public string $plant,
         public string $dimension,
         public string $transactionId,
+        public array $partNumbers = [],
         public ?string $cycleStart = null,
         public ?string $cycleEnd = null,
     ) {}

@@ -31,10 +31,16 @@ class NotifyStaffXBarFull
             ? URL::temporarySignedRoute('xbar.download', now()->addDays(7), ['transaction' => $event->transactionId])
             : rtrim($config['dashboard_url'], '/') . '#x-bar-generation';
 
+        $partNumbers = collect($event->partNumbers)->filter()->unique()->values();
+
+        $partLabel = $partNumbers->count() > 3
+            ? $partNumbers->take(3)->implode(', ') . ' +' . ($partNumbers->count() - 3) . ' more'
+            : $partNumbers->implode(', ');
+
         try {
             $response = Http::timeout(5)->post($config['url'], [
                 'title'       => '📊 X-Bar Full',
-                'message'     => "X-Bar for {$event->dimension} is full (25 subgroups). Plant {$event->plant}, PPF {$event->ppf}.",
+                'message'     => "X-Bar for {$event->dimension} is full (25 subgroups). Plant {$event->plant}, Part Number(s): {$partLabel}.",
                 'url'         => $url,
                 'button_text' => $hasFile ? 'Download X-Bar' : 'Open X-Bar Generation',
                 'channels'    => $channels,

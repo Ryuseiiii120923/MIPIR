@@ -405,11 +405,25 @@ class CreateInspection
         }
 
         foreach ($fullCycles as $cycle) {
+            $partNumbers = MIPIRDimensionMeasure::where('xbarTransaction', $cycle['transactionId'])
+                ->distinct()
+                ->pluck('PartNo')
+                ->map(fn($p) => trim((string) $p))
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+            if ($partNumbers === []) {
+                $partNumbers = array_filter([trim((string) ($ppfLookUp['partNo'] ?? ''))]);
+            }
+
             event(new XBarCycleFull(
                 ppf: $ppf,
                 plant: (string) $cycle['plant'],
                 dimension: $cycle['dimension'],
                 transactionId: (string) $cycle['transactionId'],
+                partNumbers: $partNumbers,
                 cycleStart: $cycle['cycleStart'],
                 cycleEnd: $cycle['cycleEnd'],
             ));
